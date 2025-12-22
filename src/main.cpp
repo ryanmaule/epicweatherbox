@@ -33,8 +33,8 @@ extern "C" {
 // Local includes
 #include "config.h"
 #include "ota.h"
-// #include "display.h"  // TODO: Phase 2
-// #include "weather.h"  // TODO: Phase 5
+#include "weather.h"
+// #include "display.h"  // TODO: Phase C
 
 // Note: FIRMWARE_VERSION and DEVICE_NAME are defined in config.h
 
@@ -112,6 +112,14 @@ void setup() {
 
         // Initialize web OTA (add /update endpoint)
         initWebOTA(&server);
+
+        // Initialize weather system
+        Serial.println(F("[BOOT] Initializing weather..."));
+        initWeather();
+
+        // Fetch initial weather data
+        Serial.println(F("[BOOT] Fetching initial weather..."));
+        forceWeatherUpdate();
     }
 
     feedWatchdog();
@@ -149,11 +157,11 @@ void loop() {
     // Update NTP (library handles update interval internally)
     timeClient.update();
 
-    // TODO: Phase 2 - Update display
-    // updateDisplay();
+    // Update weather data (checks interval internally)
+    updateWeather();
 
-    // TODO: Phase 5 - Check weather update interval
-    // updateWeather();
+    // TODO: Phase C - Update display
+    // updateDisplay();
 
     // Small yield to prevent watchdog issues
     yield();
@@ -267,6 +275,46 @@ void setupWebServer() {
         String response;
         serializeJson(doc, response);
         server.send(200, "application/json", response);
+    });
+
+    // Weather API endpoint
+    server.on("/api/weather", HTTP_GET, []() {
+        JsonDocument doc;
+
+        // Primary location weather
+        JsonObject primary = doc["primary"].to<JsonObject>();
+        JsonDocument primaryDoc;
+        weatherToJson(getPrimaryWeather(), primaryDoc);
+        primary.set(primaryDoc.as<JsonObject>());
+
+        // Secondary location (if enabled)
+        if (isSecondaryLocationEnabled()) {
+            JsonObject secondary = doc["secondary"].to<JsonObject>();
+            JsonDocument secondaryDoc;
+            weatherToJson(getSecondaryWeather(), secondaryDoc);
+            secondary.set(secondaryDoc.as<JsonObject>());
+        }
+
+        // Add metadata
+        doc["nextUpdateIn"] = getNextUpdateIn() / 1000;  // seconds
+        doc["updateInterval"] = WEATHER_UPDATE_INTERVAL_MS / 1000;  // seconds
+
+        String response;
+        serializeJson(doc, response);
+        server.send(200, "application/json", response);
+    });
+
+    // Force weather refresh endpoint
+    server.on("/api/weather/refresh", HTTP_GET, []() {
+        bool success = forceWeatherUpdate();
+
+        JsonDocument doc;
+        doc["success"] = success;
+        doc["message"] = success ? "Weather updated" : "Update failed";
+
+        String response;
+        serializeJson(doc, response);
+        server.send(success ? 200 : 500, "application/json", response);
     });
 
     // Version endpoint (original firmware compatibility)
