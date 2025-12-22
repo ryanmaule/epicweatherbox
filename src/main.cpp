@@ -986,7 +986,7 @@ void handleDisplayPreview() {
         // Format temp
         "function fmtTemp(t,c){if(!c)t=t*9/5+32;return Math.round(t)+'°';}"
 
-        // Draw current weather screen - 2 column layout
+        // Draw current weather screen - 2 column layout (vertically centered)
         "function drawCurrent(){"
         "const locs=weatherData?.locations||[];"
         "if(!locs.length){ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
@@ -995,33 +995,36 @@ void handleDisplayPreview() {
         "const loc=locs[currentLoc]||locs[0],w=loc.current||{};"
         "const isDay=w.isDay!==false,useC=weatherData.useCelsius!==false;"
         "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
-        // Time + AM/PM
+        // Time + AM/PM (shifted down 15px for vertical centering)
         "const t=fmtTime();"
         "ctx.fillStyle=C.CYAN;ctx.font='bold 48px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText(t.time,100,44);"
-        "ctx.font='18px sans-serif';ctx.fillText(t.ampm,178,44);"
+        "ctx.fillText(t.time,100,58);"
+        "ctx.font='18px sans-serif';ctx.fillText(t.ampm,178,58);"
         // Date + Location row
         "ctx.fillStyle=C.GRAY;ctx.font='14px sans-serif';"
-        "ctx.fillText(fmtDate()+' • '+(loc.location||'Unknown'),120,68);"
-        // 2-column layout: left=icon+condition, right=temp+hi/lo
-        // Left column: icon (80x80) + condition below (shifted right for better balance)
+        "ctx.fillText(fmtDate()+' • '+(loc.location||'Unknown'),120,82);"
+        // 2-column layout: left=icon+condition, right=temp+hi/lo+precip
+        // Left column: icon (80x80) + condition directly below
         "const ico=getIco(w.condition,isDay);"
-        "drawIco(ico.ico,15,90,80,ico.col);"
-        // Condition text closer under icon
+        "drawIco(ico.ico,15,100,80,ico.col);"
+        // Condition text tight under icon (just a few px gap)
         "ctx.fillStyle=C.WHITE;ctx.font='14px sans-serif';ctx.textAlign='center';"
         "const cond=w.condition||'Unknown';"
-        "ctx.fillText(cond.length>12?cond.substring(0,12):cond,55,180);"
-        // Right column: temp + hi/lo (shifted left for better visual balance)
+        "ctx.fillText(cond.length>12?cond.substring(0,12):cond,55,190);"
+        // Right column: temp centered, hi/lo below, precip at bottom
         "const temp=w.temperature||0;"
-        // Temperature - large and bold, left-aligned visually
         "ctx.fillStyle=tempCol(temp);ctx.font='bold 56px sans-serif';"
-        "ctx.fillText(fmtTemp(temp,useC),158,140);"
-        // Hi/Lo from forecast day 0 (today)
+        "ctx.fillText(fmtTemp(temp,useC),170,145);"
+        // Hi/Lo centered below temp
         "const fc=loc.forecast||[];if(fc.length>0){"
         "const today=fc[0];"
         "ctx.font='14px sans-serif';"
-        "ctx.fillStyle=C.ORANGE;ctx.fillText('↑'+fmtTemp(today.tempMax||0,useC),133,170);"
-        "ctx.fillStyle=C.BLUE;ctx.fillText('↓'+fmtTemp(today.tempMin||0,useC),183,170);}"
+        "ctx.fillStyle=C.ORANGE;ctx.fillText('↑'+fmtTemp(today.tempMax||0,useC),145,173);"
+        "ctx.fillStyle=C.BLUE;ctx.fillText('↓'+fmtTemp(today.tempMin||0,useC),195,173);"
+        // Precipitation below hi/lo
+        "const pp=today.precipProbability||today.precipitationProb||0;"
+        "ctx.fillStyle=pp>0?C.BLUE:C.GRAY;ctx.font='12px sans-serif';"
+        "ctx.fillText((pp>0?'💧':'')+Math.round(pp)+'%',170,195);}"
         // Screen dots
         "drawDots();}"
 
