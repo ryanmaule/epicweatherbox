@@ -986,7 +986,7 @@ void handleDisplayPreview() {
         // Format temp
         "function fmtTemp(t,c){if(!c)t=t*9/5+32;return Math.round(t)+'°';}"
 
-        // Draw current weather screen
+        // Draw current weather screen - 2 column layout
         "function drawCurrent(){"
         "const locs=weatherData?.locations||[];"
         "if(!locs.length){ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
@@ -995,26 +995,34 @@ void handleDisplayPreview() {
         "const loc=locs[currentLoc]||locs[0],w=loc.current||{};"
         "const isDay=w.isDay!==false,useC=weatherData.useCelsius!==false;"
         "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
-        // Time + AM/PM + Date
+        // Time + AM/PM
         "const t=fmtTime();"
-        "ctx.fillStyle=C.CYAN;ctx.font='bold 44px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText(t.time,100,42);"
-        "ctx.font='16px sans-serif';ctx.fillText(t.ampm,175,42);"
+        "ctx.fillStyle=C.CYAN;ctx.font='bold 48px sans-serif';ctx.textAlign='center';"
+        "ctx.fillText(t.time,100,44);"
+        "ctx.font='18px sans-serif';ctx.fillText(t.ampm,178,44);"
+        // Date + Location row
         "ctx.fillStyle=C.GRAY;ctx.font='14px sans-serif';"
-        "ctx.fillText(fmtDate(),120,62);"
-        // Location
-        "ctx.fillStyle=C.WHITE;ctx.font='16px sans-serif';"
-        "ctx.fillText(loc.location||'Unknown',120,85);"
-        // Icon
+        "ctx.fillText(fmtDate()+' • '+(loc.location||'Unknown'),120,68);"
+        // 2-column layout: left=icon, right=temp+condition
+        // Left column: large icon (80x80)
         "const ico=getIco(w.condition,isDay);"
-        "drawIco(ico.ico,88,95,64,ico.col);"
-        // Temp
+        "drawIco(ico.ico,20,90,80,ico.col);"
+        // Right column: temp + condition
         "const temp=w.temperature||0;"
-        "ctx.fillStyle=tempCol(temp);ctx.font='bold 42px sans-serif';"
-        "ctx.fillText(fmtTemp(temp,useC),120,190);"
-        // Condition
-        "ctx.fillStyle=C.WHITE;ctx.font='14px sans-serif';"
-        "ctx.fillText(w.condition||'Unknown',120,212);"
+        "ctx.textAlign='center';"
+        // Temperature - large and bold
+        "ctx.fillStyle=tempCol(temp);ctx.font='bold 52px sans-serif';"
+        "ctx.fillText(fmtTemp(temp,useC),165,145);"
+        // Condition text - below temp
+        "ctx.fillStyle=C.WHITE;ctx.font='16px sans-serif';"
+        "const cond=w.condition||'Unknown';"
+        "ctx.fillText(cond.length>12?cond.substring(0,12):cond,165,175);"
+        // Hi/Lo from forecast day 0 (today)
+        "const fc=loc.forecast||[];if(fc.length>0){"
+        "const today=fc[0];"
+        "ctx.font='13px sans-serif';"
+        "ctx.fillStyle=C.ORANGE;ctx.fillText('↑'+fmtTemp(today.tempMax||0,useC),140,200);"
+        "ctx.fillStyle=C.BLUE;ctx.fillText('↓'+fmtTemp(today.tempMin||0,useC),190,200);}"
         // Screen dots
         "drawDots();}"
 
@@ -1025,42 +1033,40 @@ void handleDisplayPreview() {
         "const loc=locs[currentLoc]||locs[0],fc=loc.forecast||[];"
         "const useC=weatherData.useCelsius!==false;"
         "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
-        // Time + date header
+        // Compact header with time and location
         "const t=fmtTime();"
-        "ctx.fillStyle=C.CYAN;ctx.font='bold 24px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText(t.time+' '+t.ampm,120,24);"
-        "ctx.fillStyle=C.GRAY;ctx.font='12px sans-serif';"
-        "ctx.fillText((loc.location||'Unknown')+' • '+fmtDate(),120,42);"
+        "ctx.fillStyle=C.CYAN;ctx.font='bold 20px sans-serif';ctx.textAlign='center';"
+        "ctx.fillText(t.time+' '+t.ampm+' • '+(loc.location||'?'),120,20);"
         // 3 forecast cards (skip day 0 which is today, so startIdx+1)
-        "const cw=74,ch=175,sp=4,sx=(240-3*cw-2*sp)/2;"
+        "const cw=76,ch=195,sp=4,sx=(240-3*cw-2*sp)/2;"
         "for(let i=0;i<3;i++){"
         "const fi=startIdx+i+1;"  // +1 to skip today
         "if(fi>=fc.length)continue;"
         "const day=fc[fi],cx=sx+i*(cw+sp);"
         "ctx.fillStyle=C.CARD;"
-        "ctx.beginPath();ctx.roundRect(cx,52,cw,ch,6);ctx.fill();"
+        "ctx.beginPath();ctx.roundRect(cx,30,cw,ch,6);ctx.fill();"
         // Day name + date
         "const tm=getTomorrow(startIdx+i);"
-        "ctx.fillStyle=C.CYAN;ctx.font='bold 13px sans-serif';"
-        "ctx.fillText(day.day||tm.day,cx+cw/2,70);"
-        "ctx.fillStyle=C.GRAY;ctx.font='11px sans-serif';"
-        "ctx.fillText(tm.date,cx+cw/2,85);"
-        // Icon
+        "ctx.fillStyle=C.CYAN;ctx.font='bold 14px sans-serif';"
+        "ctx.fillText(day.day||tm.day,cx+cw/2,48);"
+        "ctx.fillStyle=C.GRAY;ctx.font='12px sans-serif';"
+        "ctx.fillText(tm.date,cx+cw/2,64);"
+        // Icon - larger 48x48
         "const ico=getIco(day.condition,true);"
-        "drawIco(ico.ico,cx+(cw-32)/2,92,32,ico.col);"
+        "drawIco(ico.ico,cx+(cw-48)/2,70,48,ico.col);"
         // High/Low temps
-        "ctx.fillStyle=C.ORANGE;ctx.font='bold 14px sans-serif';"
-        "ctx.fillText('↑'+fmtTemp(day.tempMax||0,useC),cx+cw/2,145);"
-        "ctx.fillStyle=C.BLUE;ctx.font='13px sans-serif';"
-        "ctx.fillText('↓'+fmtTemp(day.tempMin||0,useC),cx+cw/2,162);"
+        "ctx.fillStyle=C.ORANGE;ctx.font='bold 16px sans-serif';"
+        "ctx.fillText('↑'+fmtTemp(day.tempMax||0,useC),cx+cw/2,140);"
+        "ctx.fillStyle=C.BLUE;ctx.font='14px sans-serif';"
+        "ctx.fillText('↓'+fmtTemp(day.tempMin||0,useC),cx+cw/2,160);"
         // Precip
         "const pp=day.precipProbability||day.precipitationProb||0;"
-        "ctx.fillStyle=pp>0?C.BLUE:C.GRAY;ctx.font='11px sans-serif';"
+        "ctx.fillStyle=pp>0?C.BLUE:C.GRAY;ctx.font='12px sans-serif';"
         "ctx.fillText((pp>0?'💧':'')+Math.round(pp)+'%',cx+cw/2,180);"
         // Condition
-        "ctx.fillStyle=C.GRAY;ctx.font='10px sans-serif';"
+        "ctx.fillStyle=C.GRAY;ctx.font='11px sans-serif';"
         "const cond=day.condition||'?';"
-        "ctx.fillText(cond.length>8?cond.substring(0,8):cond,cx+cw/2,198);}"
+        "ctx.fillText(cond.length>9?cond.substring(0,9):cond,cx+cw/2,198);}"
         // Screen dots
         "drawDots();}"
 
