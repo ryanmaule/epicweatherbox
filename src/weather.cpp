@@ -39,6 +39,7 @@ static int nightModeEndHour = 7;     // 7 AM
 static int nightModeBrightness = 20;
 static bool mainScreenOnly = false;  // false = cycle all, true = main only
 static int themeMode = 0;  // 0=auto, 1=dark, 2=light
+static bool gifScreenEnabled = false;  // Show GIF screen in rotation
 
 // Timing
 static unsigned long lastUpdateTime = 0;
@@ -608,6 +609,9 @@ void setMainScreenOnly(bool mainOnly) { mainScreenOnly = mainOnly; }
 int getThemeMode() { return themeMode; }
 void setThemeMode(int mode) { themeMode = constrain(mode, 0, 2); }
 
+bool getGifScreenEnabled() { return gifScreenEnabled; }
+void setGifScreenEnabled(bool enabled) { gifScreenEnabled = enabled; }
+
 /**
  * Check if currently in night mode based on hour
  */
@@ -651,6 +655,7 @@ bool saveWeatherConfig() {
     doc["nightModeBrightness"] = nightModeBrightness;
     doc["mainScreenOnly"] = mainScreenOnly;
     doc["themeMode"] = themeMode;
+    doc["gifScreenEnabled"] = gifScreenEnabled;
 
     File file = LittleFS.open(WEATHER_CONFIG_FILE, "w");
     if (!file) {
@@ -773,6 +778,7 @@ bool loadWeatherConfig() {
     nightModeBrightness = doc["nightModeBrightness"] | 20;
     mainScreenOnly = doc["mainScreenOnly"] | false;
     themeMode = doc["themeMode"] | 0;
+    gifScreenEnabled = doc["gifScreenEnabled"] | false;
 
     // Log loaded locations
     for (int i = 0; i < locationCount; i++) {

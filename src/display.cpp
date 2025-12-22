@@ -8,6 +8,7 @@
 #include "display.h"
 #include "config.h"
 #include <NTPClient.h>
+#include <LittleFS.h>
 
 // External NTP client (from main.cpp)
 extern NTPClient timeClient;
@@ -260,6 +261,13 @@ void initDisplay() {
     Serial.println(F("[DISPLAY] TFT initialized"));
     Serial.printf("[DISPLAY] Resolution: %dx%d\n", SCREEN_WIDTH, SCREEN_HEIGHT);
 
+    // Show boot screen
+    drawBootScreen();
+    delay(2500);  // Display boot screen for 2.5 seconds
+
+    // Try to play boot GIF if uploaded
+    playBootGif();
+
     // Draw initial screen
     needsRedraw = true;
     lastScreenChange = millis();
@@ -279,14 +287,34 @@ void updateDisplay() {
         lastScreenChange = now;
         needsRedraw = true;
 
-        // Advance to next screen
-        currentScreen = (ScreenType)((currentScreen + 1) % SCREEN_TYPE_COUNT);
+        // Determine how many screens to cycle through
+        bool gifEnabled = getGifScreenEnabled() && gifFileExists("/screen.gif");
+        bool mainOnly = getMainScreenOnly();
 
-        // If we completed all screens for this location, move to next location
-        if (currentScreen == SCREEN_CURRENT_WEATHER) {
+        if (mainOnly) {
+            // Main screen only mode - stay on current weather
+            currentScreen = SCREEN_CURRENT_WEATHER;
+            // Cycle through locations
             int locationCount = getLocationCount();
-            if (locationCount > 0) {
+            if (locationCount > 1) {
                 currentLocationIndex = (currentLocationIndex + 1) % locationCount;
+            }
+        } else {
+            // Normal cycling mode
+            // Advance to next screen
+            currentScreen = (ScreenType)((currentScreen + 1) % SCREEN_TYPE_COUNT);
+
+            // Skip GIF screen if not enabled
+            if (currentScreen == SCREEN_GIF_ANIMATION && !gifEnabled) {
+                currentScreen = SCREEN_CURRENT_WEATHER;
+            }
+
+            // If we looped back to current weather, move to next location
+            if (currentScreen == SCREEN_CURRENT_WEATHER) {
+                int locationCount = getLocationCount();
+                if (locationCount > 0) {
+                    currentLocationIndex = (currentLocationIndex + 1) % locationCount;
+                }
             }
         }
 
@@ -313,6 +341,9 @@ void updateDisplay() {
             case SCREEN_FORECAST_4_6:
                 drawForecastScreen(currentLocationIndex, 3);
                 break;
+            case SCREEN_GIF_ANIMATION:
+                drawGifScreen();
+                return;  // drawGifScreen pushes to display itself
         }
 
         // Push sprite to display
@@ -554,4 +585,121 @@ String formatTemp(float temp) {
 void drawCard(int x, int y, int w, int h, uint16_t color) {
     // Draw rounded rectangle (pixel art style - just use regular rect)
     sprite.fillRoundRect(x, y, w, h, 4, color);
+}
+
+// =============================================================================
+// BOOT SCREEN
+// =============================================================================
+
+void drawBootScreen() {
+    Serial.println(F("[DISPLAY] Drawing boot screen..."));
+
+    // Clear to dark background
+    tft.fillScreen(0x0841);  // Very dark blue-gray
+
+    // Draw "EpicWeatherBox" title centered
+    tft.setTextColor(0x07FF);  // Cyan
+    tft.setTextDatum(MC_DATUM);  // Middle-center
+    tft.setFreeFont(&FreeSansBold18pt7b);
+    tft.drawString("Epic", SCREEN_WIDTH / 2, 85);
+
+    tft.setTextColor(0xFFFF);  // White
+    tft.drawString("WeatherBox", SCREEN_WIDTH / 2, 125);
+
+    // Draw version below
+    tft.setFreeFont(&FreeSans9pt7b);
+    tft.setTextColor(0x8410);  // Gray
+    tft.drawString("v" FIRMWARE_VERSION, SCREEN_WIDTH / 2, 165);
+
+    // Small credit/loading text at bottom
+    tft.setFreeFont(NULL);  // Default font
+    tft.setTextSize(1);
+    tft.setTextColor(0x4208);  // Dark gray
+    tft.drawString("Starting...", SCREEN_WIDTH / 2, 220);
+
+    Serial.println(F("[DISPLAY] Boot screen displayed"));
+}
+
+// =============================================================================
+// GIF FILE HELPERS
+// =============================================================================
+
+// File paths for GIFs
+#define BOOT_GIF_PATH "/boot.gif"
+#define SCREEN_GIF_PATH "/screen.gif"
+
+bool gifFileExists(const char* path) {
+    return LittleFS.exists(path);
+}
+
+bool playBootGif() {
+    // Check if boot GIF exists
+    if (!gifFileExists(BOOT_GIF_PATH)) {
+        Serial.println(F("[DISPLAY] No boot GIF found"));
+        return false;
+    }
+
+    Serial.println(F("[DISPLAY] Playing boot GIF..."));
+
+    // TODO: Implement actual GIF playback with AnimatedGIF library
+    // For now, just indicate GIF would play here
+    // The actual implementation requires adding the AnimatedGIF library
+    // and implementing the callback system for TFT_eSPI
+
+    // Placeholder: Show "Loading..." text for now
+    tft.fillScreen(0x0841);
+    tft.setTextColor(0x07FF);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(&FreeSans12pt7b);
+    tft.drawString("Loading...", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
+
+    delay(1000);  // Placeholder delay
+
+    return true;
+}
+
+void drawGifScreen() {
+    // Get current time
+    unsigned long epochTime = timeClient.getEpochTime();
+    int hours = (epochTime % 86400L) / 3600;
+    int minutes = (epochTime % 3600) / 60;
+
+    // Clear background
+    sprite.fillSprite(0x0841);  // Dark background
+
+    // Draw time header (60px tall)
+    sprite.setTextColor(COLOR_TEXT_WHITE);
+    sprite.setTextDatum(TC_DATUM);
+    sprite.setFreeFont(&FreeSansBold18pt7b);
+
+    char timeStr[12];
+    int h12 = hours % 12;
+    if (h12 == 0) h12 = 12;
+    const char* ampm = (hours < 12) ? "AM" : "PM";
+    snprintf(timeStr, sizeof(timeStr), "%d:%02d %s", h12, minutes, ampm);
+    sprite.drawString(timeStr, SCREEN_WIDTH / 2, 15);
+
+    // Draw separator line
+    sprite.drawFastHLine(20, 55, SCREEN_WIDTH - 40, 0x2104);
+
+    // GIF area starts at y=60, height=180
+    // Check if screen GIF exists
+    if (!gifFileExists(SCREEN_GIF_PATH)) {
+        // No GIF - show placeholder
+        sprite.setTextColor(0x4208);
+        sprite.setFreeFont(&FreeSans9pt7b);
+        sprite.setTextDatum(MC_DATUM);
+        sprite.drawString("No GIF uploaded", SCREEN_WIDTH / 2, 140);
+        sprite.drawString("Upload via Admin panel", SCREEN_WIDTH / 2, 160);
+    } else {
+        // TODO: Render GIF frame here
+        // Will be implemented with AnimatedGIF library
+        sprite.setTextColor(0x4208);
+        sprite.setFreeFont(&FreeSans9pt7b);
+        sprite.setTextDatum(MC_DATUM);
+        sprite.drawString("[GIF Animation]", SCREEN_WIDTH / 2, 150);
+    }
+
+    // Push to display
+    sprite.pushSprite(0, 0);
 }

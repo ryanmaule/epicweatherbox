@@ -345,6 +345,11 @@ void setupWebServer() {
         doc["nightModeBrightness"] = getNightModeBrightness();
         doc["mainScreenOnly"] = getMainScreenOnly();
         doc["themeMode"] = getThemeMode();
+        doc["gifScreenEnabled"] = getGifScreenEnabled();
+
+        // GIF status
+        doc["bootGifExists"] = LittleFS.exists("/boot.gif");
+        doc["screenGifExists"] = LittleFS.exists("/screen.gif");
 
         String response;
         serializeJson(doc, response);
@@ -454,6 +459,9 @@ void setupWebServer() {
         }
         if (doc["themeMode"].is<int>()) {
             setThemeMode(doc["themeMode"] | 0);
+        }
+        if (doc["gifScreenEnabled"].is<bool>()) {
+            setGifScreenEnabled(doc["gifScreenEnabled"] | false);
         }
 
         // Save and refresh weather
@@ -573,6 +581,116 @@ void setupWebServer() {
         String responseStr;
         serializeJson(response, responseStr);
         server.send(200, "application/json", responseStr);
+    });
+
+    // GIF file upload endpoints
+    // Boot GIF upload
+    server.on("/api/upload/bootgif", HTTP_POST, []() {
+        server.send(200, "application/json", "{\"success\":true,\"message\":\"Boot GIF uploaded\"}");
+    }, []() {
+        HTTPUpload& upload = server.upload();
+        static File uploadFile;
+
+        if (upload.status == UPLOAD_FILE_START) {
+            Serial.printf("[UPLOAD] Boot GIF: %s\n", upload.filename.c_str());
+            // Check file size limit (50KB max)
+            uploadFile = LittleFS.open("/boot.gif", "w");
+            if (!uploadFile) {
+                Serial.println(F("[UPLOAD] Failed to open file for writing"));
+            }
+        } else if (upload.status == UPLOAD_FILE_WRITE) {
+            if (uploadFile) {
+                // Check total size doesn't exceed 50KB
+                if (uploadFile.size() + upload.currentSize > 51200) {
+                    Serial.println(F("[UPLOAD] File too large (max 50KB)"));
+                    uploadFile.close();
+                    LittleFS.remove("/boot.gif");
+                    return;
+                }
+                uploadFile.write(upload.buf, upload.currentSize);
+            }
+        } else if (upload.status == UPLOAD_FILE_END) {
+            if (uploadFile) {
+                uploadFile.close();
+                Serial.printf("[UPLOAD] Boot GIF uploaded: %u bytes\n", upload.totalSize);
+            }
+        }
+    });
+
+    // Screen GIF upload
+    server.on("/api/upload/screengif", HTTP_POST, []() {
+        server.send(200, "application/json", "{\"success\":true,\"message\":\"Screen GIF uploaded\"}");
+    }, []() {
+        HTTPUpload& upload = server.upload();
+        static File uploadFile;
+
+        if (upload.status == UPLOAD_FILE_START) {
+            Serial.printf("[UPLOAD] Screen GIF: %s\n", upload.filename.c_str());
+            uploadFile = LittleFS.open("/screen.gif", "w");
+            if (!uploadFile) {
+                Serial.println(F("[UPLOAD] Failed to open file for writing"));
+            }
+        } else if (upload.status == UPLOAD_FILE_WRITE) {
+            if (uploadFile) {
+                // Check total size doesn't exceed 100KB
+                if (uploadFile.size() + upload.currentSize > 102400) {
+                    Serial.println(F("[UPLOAD] File too large (max 100KB)"));
+                    uploadFile.close();
+                    LittleFS.remove("/screen.gif");
+                    return;
+                }
+                uploadFile.write(upload.buf, upload.currentSize);
+            }
+        } else if (upload.status == UPLOAD_FILE_END) {
+            if (uploadFile) {
+                uploadFile.close();
+                Serial.printf("[UPLOAD] Screen GIF uploaded: %u bytes\n", upload.totalSize);
+            }
+        }
+    });
+
+    // Delete boot GIF
+    server.on("/api/delete/bootgif", HTTP_DELETE, []() {
+        if (LittleFS.exists("/boot.gif")) {
+            LittleFS.remove("/boot.gif");
+            server.send(200, "application/json", "{\"success\":true,\"message\":\"Boot GIF deleted\"}");
+        } else {
+            server.send(404, "application/json", "{\"success\":false,\"message\":\"No boot GIF found\"}");
+        }
+    });
+
+    // Delete screen GIF
+    server.on("/api/delete/screengif", HTTP_DELETE, []() {
+        if (LittleFS.exists("/screen.gif")) {
+            LittleFS.remove("/screen.gif");
+            server.send(200, "application/json", "{\"success\":true,\"message\":\"Screen GIF deleted\"}");
+        } else {
+            server.send(404, "application/json", "{\"success\":false,\"message\":\"No screen GIF found\"}");
+        }
+    });
+
+    // GIF status endpoint
+    server.on("/api/gif/status", HTTP_GET, []() {
+        JsonDocument doc;
+        doc["bootGifExists"] = LittleFS.exists("/boot.gif");
+        doc["screenGifExists"] = LittleFS.exists("/screen.gif");
+        doc["gifScreenEnabled"] = getGifScreenEnabled();
+
+        // Get file sizes
+        if (LittleFS.exists("/boot.gif")) {
+            File f = LittleFS.open("/boot.gif", "r");
+            doc["bootGifSize"] = f.size();
+            f.close();
+        }
+        if (LittleFS.exists("/screen.gif")) {
+            File f = LittleFS.open("/screen.gif", "r");
+            doc["screenGifSize"] = f.size();
+            f.close();
+        }
+
+        String response;
+        serializeJson(doc, response);
+        server.send(200, "application/json", response);
     });
 
     // Reboot endpoint
@@ -872,6 +990,31 @@ void handleAdmin() {
     html += F("<button onclick='saveSettings()'>Save Settings</button>"
         "<div id='st' class='status'></div></div>");
 
+    // GIF Settings section
+    html += F("<div class='card'><h3>Animated GIFs</h3>"
+        "<p class='hint'>Upload GIF images for boot animation and screen rotation.</p>"
+
+        // Boot GIF
+        "<label>Boot Animation (max 50KB)</label>"
+        "<div id='bootGifStatus' style='margin-bottom:10px;color:#888'>Checking...</div>"
+        "<input type='file' id='bootGifFile' accept='.gif' style='display:none' onchange='uploadGif(\"boot\")'>"
+        "<button type='button' onclick='document.getElementById(\"bootGifFile\").click()' style='margin-top:0'>Upload Boot GIF</button>"
+        "<button type='button' onclick='deleteGif(\"boot\")' style='background:#dc3545;margin-left:10px'>Delete</button>"
+
+        // Screen GIF
+        "<label style='margin-top:20px'>Screen GIF (max 100KB)</label>"
+        "<div id='screenGifStatus' style='margin-bottom:10px;color:#888'>Checking...</div>"
+        "<input type='file' id='screenGifFile' accept='.gif' style='display:none' onchange='uploadGif(\"screen\")'>"
+        "<button type='button' onclick='document.getElementById(\"screenGifFile\").click()' style='margin-top:0'>Upload Screen GIF</button>"
+        "<button type='button' onclick='deleteGif(\"screen\")' style='background:#dc3545;margin-left:10px'>Delete</button>"
+
+        // GIF screen toggle
+        "<label style='margin-top:20px'><input type='checkbox' id='gifScreenEnabled'");
+    html += getGifScreenEnabled() ? " checked" : "";
+    html += F("> Show GIF screen in rotation</label>"
+        "<p class='hint'>When enabled and a screen GIF is uploaded, it will appear in the display rotation.</p>"
+        "<div id='gifSt' class='status'></div></div>");
+
     // Links
     html += F("<div class='card' style='text-align:center'>"
         "<a href='/'>Home</a> | <a href='/preview'>Display Preview</a> | <a href='/api/weather'>Weather API</a> | "
@@ -946,7 +1089,8 @@ void handleAdmin() {
         "nightModeEndHour:parseInt(document.getElementById('nightEnd').value),"
         "nightModeBrightness:parseInt(document.getElementById('nightBrightness').value),"
         "mainScreenOnly:document.getElementById('screenMode').value==='1',"
-        "themeMode:parseInt(document.getElementById('themeMode').value)};}"
+        "themeMode:parseInt(document.getElementById('themeMode').value),"
+        "gifScreenEnabled:document.getElementById('gifScreenEnabled').checked};}"
 
         // Save locations to server
         "async function saveLocations(){"
@@ -968,9 +1112,42 @@ void handleAdmin() {
         "st.textContent=d.message;if(d.success){setTimeout(()=>location.reload(),2000);}"
         "}catch(e){st.className='status err';st.textContent='Error';}}"
 
+        // GIF upload function
+        "async function uploadGif(type){"
+        "const file=document.getElementById(type+'GifFile').files[0];"
+        "if(!file){return;}"
+        "const maxSize=type==='boot'?51200:102400;"
+        "if(file.size>maxSize){alert('File too large. Max '+(maxSize/1024)+'KB');return;}"
+        "const st=document.getElementById('gifSt');st.style.display='block';st.className='status';"
+        "st.textContent='Uploading...';"
+        "const form=new FormData();form.append('file',file);"
+        "try{const r=await fetch('/api/upload/'+type+'gif',{method:'POST',body:form});"
+        "const d=await r.json();st.className='status '+(d.success?'ok':'err');st.textContent=d.message;"
+        "if(d.success){setTimeout(updateGifStatus,1000);}"
+        "}catch(e){st.className='status err';st.textContent='Upload failed';}}"
+
+        // GIF delete function
+        "async function deleteGif(type){"
+        "if(!confirm('Delete '+type+' GIF?'))return;"
+        "const st=document.getElementById('gifSt');st.style.display='block';st.className='status';"
+        "st.textContent='Deleting...';"
+        "try{const r=await fetch('/api/delete/'+type+'gif',{method:'DELETE'});"
+        "const d=await r.json();st.className='status '+(d.success?'ok':'err');st.textContent=d.message;"
+        "updateGifStatus();"
+        "}catch(e){st.className='status err';st.textContent='Delete failed';}}"
+
+        // Update GIF status display
+        "async function updateGifStatus(){"
+        "try{const r=await fetch('/api/gif/status');const d=await r.json();"
+        "document.getElementById('bootGifStatus').textContent=d.bootGifExists?"
+        "'Uploaded ('+(d.bootGifSize/1024).toFixed(1)+'KB)':'No file uploaded';"
+        "document.getElementById('screenGifStatus').textContent=d.screenGifExists?"
+        "'Uploaded ('+(d.screenGifSize/1024).toFixed(1)+'KB)':'No file uploaded';"
+        "}catch(e){console.error('GIF status check failed');}}"
+
         // Event listeners
         "document.getElementById('search').onkeypress=e=>{if(e.key==='Enter'){e.preventDefault();searchCity();}};"
-        "loadLocations();"
+        "loadLocations();updateGifStatus();"
         "</script>");
 
     html += F("</div></body></html>");
@@ -1006,6 +1183,7 @@ void handleDisplayPreview() {
         "<button onclick='prevScreen()'>◀ Prev</button>"
         "<button onclick='nextScreen()'>Next ▶</button>"
         "<button onclick='toggleAuto()' id='autoBtn'>Auto: ON</button>"
+        "<button onclick='toggleTheme()' id='themeBtn'>Theme: Dark</button>"
         "<button onclick='refreshWeather()'>Refresh Weather</button>"
         "<div class='info'>Screen updates every 10 seconds when Auto is ON</div></div>"
         "<div class='card'><strong>Location:</strong> <span id='locName'>-</span> "
@@ -1019,14 +1197,13 @@ void handleDisplayPreview() {
         "const ctx=canvas.getContext('2d');"
         "ctx.imageSmoothingEnabled=false;"
         "let weatherData=null,config=null,currentLoc=0,currentScreen=0,autoPlay=true,autoTimer=null;"
-        "let mainScreenOnly=false;"  // Will be loaded from config
+        "let mainScreenOnly=false,darkMode=true;"
         "const SCREENS_PER_LOC=3;"
 
-        // Colors - true dark mode
-        "const C={"
-        "BG:'#0a0a14',CARD:'#141428',"
-        "WHITE:'#FFFFFF',GRAY:'#888888',CYAN:'#00D4FF',ORANGE:'#FF6B35',"
-        "BLUE:'#4DA8DA',YELLOW:'#FFE000',GREEN:'#00FF88'};"
+        // Colors - dark and light themes
+        "const DARK={BG:'#0a0a14',CARD:'#141428',WHITE:'#FFFFFF',GRAY:'#888888',CYAN:'#00D4FF',ORANGE:'#FF6B35',BLUE:'#4DA8DA',YELLOW:'#FFE000',GREEN:'#00FF88'};"
+        "const LIGHT={BG:'#E8F4FC',CARD:'#FFFFFF',WHITE:'#1a1a2e',GRAY:'#555555',CYAN:'#0088AA',ORANGE:'#E85520',BLUE:'#2980B9',YELLOW:'#D4A800',GREEN:'#00AA55'};"
+        "let C=DARK;"
 
         // Condition string to number mapping
         "function condToNum(s){"
@@ -1230,6 +1407,13 @@ void handleDisplayPreview() {
         "document.getElementById('autoBtn').textContent='Auto: '+(autoPlay?'ON':'OFF');"
         "document.getElementById('autoBtn').className=autoPlay?'active':'';"
         "if(autoPlay)startAuto();else stopAuto();}"
+
+        "function toggleTheme(){"
+        "darkMode=!darkMode;C=darkMode?DARK:LIGHT;"
+        "document.getElementById('themeBtn').textContent='Theme: '+(darkMode?'Dark':'Light');"
+        "document.getElementById('themeBtn').className=darkMode?'':'active';"
+        "document.body.style.background=darkMode?'#0d0d1a':'#f0f5fa';"
+        "render();}"
 
         "function startAuto(){stopAuto();autoTimer=setInterval(nextScreen,10000);}"
         "function stopAuto(){if(autoTimer){clearInterval(autoTimer);autoTimer=null;}}"

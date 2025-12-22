@@ -31,6 +31,7 @@ enum ScreenType {
     SCREEN_CURRENT_WEATHER = 0,  // Current time + weather (temp, conditions)
     SCREEN_FORECAST_1_3,         // Days 1-3 forecast
     SCREEN_FORECAST_4_6,         // Days 4-6 forecast
+    SCREEN_GIF_ANIMATION,        // Custom animated GIF with time header
     SCREEN_TYPE_COUNT
 };
 
@@ -89,6 +90,31 @@ enum ScreenType {
  * Call once in setup()
  */
 void initDisplay();
+
+/**
+ * Draw boot screen with logo and version
+ * Called automatically by initDisplay()
+ */
+void drawBootScreen();
+
+/**
+ * Play boot GIF animation (if uploaded)
+ * @return true if GIF was played, false if no GIF exists
+ */
+bool playBootGif();
+
+/**
+ * Draw the GIF animation screen
+ * Shows time at top and animated GIF below
+ */
+void drawGifScreen();
+
+/**
+ * Check if a GIF file exists
+ * @param path File path to check
+ * @return true if file exists
+ */
+bool gifFileExists(const char* path);
 
 /**
  * Update display (call in loop)

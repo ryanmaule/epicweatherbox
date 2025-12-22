@@ -328,6 +328,13 @@ bool getMainScreenOnly();
 void setMainScreenOnly(bool mainOnly);
 
 /**
+ * GIF screen settings
+ * Controls whether the animated GIF screen appears in rotation
+ */
+bool getGifScreenEnabled();
+void setGifScreenEnabled(bool enabled);
+
+/**
  * Theme mode
  * 0 = auto (dark at night, light during day based on night mode hours)
  * 1 = always dark
