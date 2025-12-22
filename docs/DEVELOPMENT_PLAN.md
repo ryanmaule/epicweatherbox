@@ -1,8 +1,8 @@
-# WeatherBuddy Development Plan
+# EpicWeatherBox Development Plan
 
 ## Overview
 
-This plan outlines the development approach for WeatherBuddy firmware, focusing on building features on the NodeMCU test device with a web-based display preview before deploying to the actual SmallTV-Ultra hardware.
+This plan outlines the development approach for EpicWeatherBox firmware, focusing on building features on the NodeMCU test device with a web-based display preview before deploying to the actual SmallTV-Ultra hardware.
 
 ## Development Strategy
 
@@ -17,7 +17,7 @@ This plan outlines the development approach for WeatherBuddy firmware, focusing 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     WeatherBuddy Firmware                    │
+│                    EpicWeatherBox Firmware                   │
 ├─────────────────────────────────────────────────────────────┤
 │  Weather API (Open-Meteo)                                   │
 │  ├── 7-day forecast data                                    │

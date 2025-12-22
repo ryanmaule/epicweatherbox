@@ -1,5 +1,5 @@
 /**
- * WeatherBuddy Firmware Configuration
+ * EpicWeatherBox Firmware Configuration
  *
  * Custom firmware for SmallTV-Ultra hardware
  * Defines hardware pins, default settings, and constants
@@ -12,8 +12,8 @@
 // FIRMWARE INFO
 // =============================================================================
 #define FIRMWARE_VERSION "0.2.0-dev"
-#define DEVICE_NAME "SmallTV-WeatherBuddy"
-#define DEVICE_MODEL "SmallTV-WeatherBuddy"
+#define DEVICE_NAME "EpicWeatherBox"
+#define DEVICE_MODEL "EpicWeatherBox"
 
 // =============================================================================
 // DISPLAY CONFIGURATION
@@ -41,7 +41,7 @@
 // =============================================================================
 // WIFI CONFIGURATION
 // =============================================================================
-#define WIFI_AP_SSID "WeatherBuddy"   // Fun name for setup portal
+#define WIFI_AP_SSID "EpicWeatherBox"   // Fun name for setup portal
 #define WIFI_AP_PASSWORD ""           // Open network for setup
 #define WIFI_CONFIG_PORTAL_TIMEOUT 300 // 5 minutes
 

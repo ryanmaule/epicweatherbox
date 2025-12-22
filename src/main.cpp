@@ -1,5 +1,5 @@
 /**
- * WeatherBuddy Firmware
+ * EpicWeatherBox Firmware
  *
  * Custom firmware for SmallTV-Ultra hardware
  *
@@ -303,7 +303,7 @@ void setupWebServer() {
               "display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}"
               ".box{text-align:center;}</style></head><body><div class='box'>"
               "<h1>Factory Reset</h1><p>WiFi settings cleared. Rebooting...</p>"
-              "<p>Connect to WeatherBuddy AP to reconfigure.</p>"
+              "<p>Connect to EpicWeatherBox AP to reconfigure.</p>"
               "</div></body></html>"));
         delay(500);
 
@@ -329,7 +329,7 @@ void handleRoot() {
     String html = F("<!DOCTYPE html><html><head>"
         "<meta charset='UTF-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-        "<title>WeatherBuddy</title>"
+        "<title>EpicWeatherBox</title>"
         "<style>"
         "*{box-sizing:border-box;}"
         "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
@@ -354,7 +354,7 @@ void handleRoot() {
         ".link-btn.danger{background:#dc3545;color:#fff;}"
         "</style></head><body>"
         "<div class='container'>"
-        "<h1>WeatherBuddy</h1>");
+        "<h1>EpicWeatherBox</h1>");
 
     html += F("<div class='card'><h3>Device Status</h3><div class='info-grid'>");
     html += F("<div class='info-item'><div class='info-label'>Firmware</div><div class='info-value'>");

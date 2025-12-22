@@ -1,5 +1,5 @@
 /**
- * WeatherBuddy Firmware - OTA Update Handler Implementation
+ * EpicWeatherBox Firmware - OTA Update Handler Implementation
  *
  * Implements both ArduinoOTA (for PlatformIO/Arduino IDE) and
  * web-based OTA (for browser-based updates).
@@ -19,7 +19,7 @@ static const char OTA_UPDATE_HTML[] PROGMEM = R"rawliteral(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>WeatherBuddy Firmware Update</title>
+    <title>EpicWeatherBox Firmware Update</title>
     <style>
         * { box-sizing: border-box; }
         body {

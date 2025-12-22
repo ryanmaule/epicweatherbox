@@ -1,5 +1,5 @@
 /**
- * WeatherBuddy Firmware - OTA Update Handler
+ * EpicWeatherBox Firmware - OTA Update Handler
  *
  * Provides both ArduinoOTA and web-based firmware updates.
  * This is CRITICAL functionality - without working OTA, the device
@@ -16,7 +16,7 @@
 #include <ESP8266HTTPUpdateServer.h>
 
 // OTA Configuration
-#define OTA_HOSTNAME "weatherbuddy"
+#define OTA_HOSTNAME "epicweatherbox"
 #define OTA_PORT 8266
 // Leave password empty for easier development, set in production
 #define OTA_PASSWORD ""
