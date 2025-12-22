@@ -53,6 +53,7 @@ void setupWebServer();
 void setupWatchdog();
 void handleRoot();
 void handleAdmin();
+void handleDisplayPreview();
 void handleNotFound();
 void feedWatchdog();
 
@@ -437,6 +438,9 @@ void setupWebServer() {
     // Admin page - minimal location config
     server.on("/admin", HTTP_GET, handleAdmin);
 
+    // Display preview page - simulates the TFT display in browser
+    server.on("/preview", HTTP_GET, handleDisplayPreview);
+
     // Version endpoint (original firmware compatibility)
     server.on("/v.json", HTTP_GET, []() {
         JsonDocument doc;
@@ -652,6 +656,7 @@ void handleRoot() {
 
     html += F("<div class='card'><h3>Quick Links</h3><div class='links'>"
         "<a href='/admin' class='link-btn'>Admin Panel</a>"
+        "<a href='/preview' class='link-btn'>Display Preview</a>"
         "<a href='/update' class='link-btn'>Firmware Update</a>"
         "<a href='/reboot' class='link-btn warning'>Reboot</a>"
         "<a href='/reset' class='link-btn danger'>Factory Reset</a>"
@@ -669,7 +674,8 @@ void handleRoot() {
         "<li>Phase 1: OTA Updates - <strong style='color:#00ff88'>Complete</strong></li>"
         "<li>Phase A: Weather API - <strong style='color:#00ff88'>Complete</strong></li>"
         "<li>Phase B: Admin Panel - <strong style='color:#00ff88'>Complete</strong></li>"
-        "<li>Phase C: Display Driver - Pending</li>"
+        "<li>Phase C: Display Preview - <strong style='color:#00ff88'>Complete</strong></li>"
+        "<li>Phase D: TFT Display Driver - <strong style='color:#ffc107'>In Progress</strong></li>"
         "</ul></div>");
 
     html += F("</div></body></html>");
@@ -781,7 +787,7 @@ void handleAdmin() {
 
     // Links
     html += F("<div class='card' style='text-align:center'>"
-        "<a href='/'>Home</a> | <a href='/api/weather'>Weather API</a> | "
+        "<a href='/'>Home</a> | <a href='/preview'>Display Preview</a> | <a href='/api/weather'>Weather API</a> | "
         "<a href='/update'>Firmware</a> | <a href='/reboot'>Reboot</a></div>");
 
     // JavaScript - more complex now for multi-location management
@@ -866,6 +872,517 @@ void handleAdmin() {
         // Event listeners
         "document.getElementById('search').onkeypress=e=>{if(e.key==='Enter'){e.preventDefault();searchCity();}};"
         "loadLocations();"
+        "</script>");
+
+    html += F("</div></body></html>");
+    server.send(200, "text/html", html);
+}
+
+/**
+ * Handle display preview page - HTML5 Canvas simulation of the TFT display
+ * Shows what will be rendered on the actual 240x240 display
+ */
+void handleDisplayPreview() {
+    String html = F("<!DOCTYPE html><html><head><meta charset='UTF-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Display Preview - EpicWeatherBox</title><style>"
+        "*{box-sizing:border-box}body{font-family:sans-serif;background:#1a1a2e;color:#eee;margin:0;padding:20px}"
+        ".c{max-width:800px;margin:0 auto}h1{color:#00d4ff;text-align:center}"
+        ".preview-container{display:flex;justify-content:center;margin:20px 0}"
+        "#display{border:8px solid #333;border-radius:12px;background:#000;image-rendering:pixelated}"
+        ".controls{background:rgba(255,255,255,0.05);border-radius:10px;padding:15px;margin:15px 0;text-align:center}"
+        "button{background:#00d4ff;color:#1a1a2e;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;margin:5px}"
+        "button:hover{background:#00a8cc}button.active{background:#00ff88}"
+        ".info{margin-top:10px;color:#888;font-size:0.9em}"
+        ".screen-label{color:#00d4ff;font-size:1.2em;margin:10px 0}"
+        "a{color:#00d4ff}.card{background:rgba(255,255,255,0.05);border-radius:10px;padding:15px;margin:15px 0}"
+        "</style></head><body><div class='c'><h1>Display Preview</h1>"
+        "<div class='preview-container'><canvas id='display' width='240' height='240'></canvas></div>"
+        "<div class='controls'>"
+        "<div class='screen-label' id='screenLabel'>Current Weather</div>"
+        "<button onclick='prevScreen()'>◀ Prev</button>"
+        "<button onclick='nextScreen()'>Next ▶</button>"
+        "<button onclick='toggleAuto()' id='autoBtn'>Auto: ON</button>"
+        "<button onclick='refreshWeather()'>Refresh Weather</button>"
+        "<div class='info'>Screen updates every 10 seconds when Auto is ON</div></div>"
+        "<div class='card'><strong>Location:</strong> <span id='locName'>-</span> "
+        "(<span id='locIdx'>1</span>/<span id='locTotal'>1</span>)</div>"
+        "<div class='card' style='text-align:center'>"
+        "<a href='/admin'>Admin Panel</a> | <a href='/'>Home</a></div>");
+
+    // JavaScript for canvas rendering
+    html += F("<script>"
+        "const canvas=document.getElementById('display');"
+        "const ctx=canvas.getContext('2d');"
+        "ctx.imageSmoothingEnabled=false;"  // Pixel art style
+        "let weatherData=null;let currentLoc=0;let currentScreen=0;let autoPlay=true;let autoTimer=null;"
+
+        // Color constants matching display.h
+        "const COLORS={"
+        "BG_DAY:'#5DDF',BG_NIGHT:'#1926',"
+        "TEXT_WHITE:'#FFFFFF',TEXT_LIGHT:'#DEDEDE',TEXT_YELLOW:'#FFE000',TEXT_ORANGE:'#FD2000',"
+        "TEXT_BLUE:'#5D9F',TEXT_CYAN:'#00FFFF',CARD_BG:'#212040',SUN:'#FFE000',MOON:'#C0C0C0',"
+        "CLOUD:'#DEDEDE',RAIN:'#5D9FFF',SNOW:'#FFFFFF',THUNDER:'#FFE000'};"
+
+        // Weather icons as pixel art (32x32 simplified)
+        "const ICONS={"
+        "sun:["
+        "'                                ',"
+        "'              ##                ',"
+        "'              ##                ',"
+        "'    #         ##         #      ',"
+        "'     #                  #       ',"
+        "'       ##  ########  ##         ',"
+        "'         ############           ',"
+        "'        ##          ##          ',"
+        "'       ##            ##         ',"
+        "'      ##              ##        ',"
+        "'      #                #        ',"
+        "'     ##                ##       ',"
+        "'     ##                ##       ',"
+        "'######                  ######  ',"
+        "'######                  ######  ',"
+        "'     ##                ##       ',"
+        "'     ##                ##       ',"
+        "'      #                #        ',"
+        "'      ##              ##        ',"
+        "'       ##            ##         ',"
+        "'        ##          ##          ',"
+        "'         ############           ',"
+        "'       ##  ########  ##         ',"
+        "'     #                  #       ',"
+        "'    #         ##         #      ',"
+        "'              ##                ',"
+        "'              ##                ',"
+        "'              ##                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                '],"
+
+        "moon:["
+        "'                                ',"
+        "'          ######                ',"
+        "'        ##########              ',"
+        "'       ############             ',"
+        "'      ##############            ',"
+        "'      #############             ',"
+        "'     #############              ',"
+        "'     ############               ',"
+        "'     ###########                ',"
+        "'    ###########                 ',"
+        "'    ##########                  ',"
+        "'    ##########                  ',"
+        "'    ##########                  ',"
+        "'    ##########                  ',"
+        "'    ##########                  ',"
+        "'    ##########                  ',"
+        "'    ##########                  ',"
+        "'    ##########                  ',"
+        "'    ###########                 ',"
+        "'     ############               ',"
+        "'     #############              ',"
+        "'      ##############            ',"
+        "'      ###############           ',"
+        "'       ###############          ',"
+        "'        ################        ',"
+        "'          ##############        ',"
+        "'            ############        ',"
+        "'              ########          ',"
+        "'                ####            ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                '],"
+
+        "cloud:["
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'           ######               ',"
+        "'         ##########             ',"
+        "'        ##        ##            ',"
+        "'       ##          ##           ',"
+        "'       #            #           ',"
+        "'      ##            #           ',"
+        "'     ##              #          ',"
+        "'    ##               ##         ',"
+        "'   ##                 ###       ',"
+        "'  ##                   ###      ',"
+        "' ##                     ##      ',"
+        "'##                       #      ',"
+        "'#                        #      ',"
+        "'#                        #      ',"
+        "'#                        #      ',"
+        "'##                      ##      ',"
+        "'######################  #       ',"
+        "'#######################         ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                '],"
+
+        "rain:["
+        "'                                ',"
+        "'           ######               ',"
+        "'         ##########             ',"
+        "'        ##        ##            ',"
+        "'       ##          ##           ',"
+        "'       #            #           ',"
+        "'      ##            #           ',"
+        "'     ##              #          ',"
+        "'    ##               ##         ',"
+        "'   ##                 ###       ',"
+        "'  ##                   ###      ',"
+        "' ##                     ##      ',"
+        "'##                       #      ',"
+        "'#                        #      ',"
+        "'##                      ##      ',"
+        "'######################  #       ',"
+        "'#######################         ',"
+        "'                                ',"
+        "'      #   #    #                ',"
+        "'       #   #    #               ',"
+        "'        #   #    #              ',"
+        "'   #     #   #                  ',"
+        "'    #     #   #    #            ',"
+        "'      #       #    #            ',"
+        "'       #   #        #           ',"
+        "'        #   #    #              ',"
+        "'   #         #    #             ',"
+        "'    #    #        #             ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                '],"
+
+        "snow:["
+        "'                                ',"
+        "'           ######               ',"
+        "'         ##########             ',"
+        "'        ##        ##            ',"
+        "'       ##          ##           ',"
+        "'       #            #           ',"
+        "'      ##            #           ',"
+        "'     ##              #          ',"
+        "'    ##               ##         ',"
+        "'   ##                 ###       ',"
+        "'  ##                   ###      ',"
+        "' ##                     ##      ',"
+        "'##                       #      ',"
+        "'#                        #      ',"
+        "'##                      ##      ',"
+        "'######################  #       ',"
+        "'#######################         ',"
+        "'                                ',"
+        "'       #      #      #          ',"
+        "'      ###    ###    ###         ',"
+        "'       #      #      #          ',"
+        "'                                ',"
+        "'    #      #      #      #      ',"
+        "'   ###    ###    ###    ###     ',"
+        "'    #      #      #      #      ',"
+        "'                                ',"
+        "'       #      #      #          ',"
+        "'      ###    ###    ###         ',"
+        "'       #      #      #          ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                '],"
+
+        "thunder:["
+        "'                                ',"
+        "'           ######               ',"
+        "'         ##########             ',"
+        "'        ##        ##            ',"
+        "'       ##          ##           ',"
+        "'       #            #           ',"
+        "'      ##            #           ',"
+        "'     ##              #          ',"
+        "'    ##               ##         ',"
+        "'   ##                 ###       ',"
+        "'  ##                   ###      ',"
+        "' ##                     ##      ',"
+        "'##                       #      ',"
+        "'#                        #      ',"
+        "'##                      ##      ',"
+        "'######################  #       ',"
+        "'#######################         ',"
+        "'          ####                  ',"
+        "'         ####                   ',"
+        "'        ####                    ',"
+        "'       ####                     ',"
+        "'      ########                  ',"
+        "'        ####                    ',"
+        "'       ####                     ',"
+        "'      ####                      ',"
+        "'     ####                       ',"
+        "'      ##                        ',"
+        "'       #                        ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                '],"
+
+        "fog:["
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'##############################  ',"
+        "'##############################  ',"
+        "'                                ',"
+        "'                                ',"
+        "'  ##########################    ',"
+        "'  ##########################    ',"
+        "'                                ',"
+        "'                                ',"
+        "'##############################  ',"
+        "'##############################  ',"
+        "'                                ',"
+        "'                                ',"
+        "'  ##########################    ',"
+        "'  ##########################    ',"
+        "'                                ',"
+        "'                                ',"
+        "'##############################  ',"
+        "'##############################  ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                '],"
+
+        "unknown:["
+        "'                                ',"
+        "'        ##########              ',"
+        "'      ##############            ',"
+        "'     ####        ####           ',"
+        "'    ###            ###          ',"
+        "'   ###              ###         ',"
+        "'   ##                ##         ',"
+        "'   ##                ##         ',"
+        "'   ##                ##         ',"
+        "'                     ##         ',"
+        "'                    ##          ',"
+        "'                   ##           ',"
+        "'                 ###            ',"
+        "'               ###              ',"
+        "'              ##                ',"
+        "'             ##                 ',"
+        "'             ##                 ',"
+        "'             ##                 ',"
+        "'                                ',"
+        "'                                ',"
+        "'             ##                 ',"
+        "'            ####                ',"
+        "'            ####                ',"
+        "'             ##                 ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ',"
+        "'                                ']};"
+
+        // Get icon for condition
+        "function getIcon(condition,isDay){"
+        "const c=condition||9;"  // 9 = unknown
+        "if(c===0)return isDay?ICONS.sun:ICONS.moon;"  // Clear
+        "if(c===1)return ICONS.cloud;"  // Partly cloudy - use cloud
+        "if(c===2)return ICONS.cloud;"  // Cloudy
+        "if(c===3)return ICONS.fog;"  // Fog
+        "if(c===4)return ICONS.rain;"  // Drizzle
+        "if(c===5||c===6)return ICONS.rain;"  // Rain/Freezing rain
+        "if(c===7)return ICONS.snow;"  // Snow
+        "if(c===8)return ICONS.thunder;"  // Thunder
+        "return ICONS.unknown;}"
+
+        // Get icon color
+        "function getIconColor(condition,isDay){"
+        "const c=condition||9;"
+        "if(c===0)return isDay?COLORS.SUN:COLORS.MOON;"
+        "if(c<=3)return COLORS.CLOUD;"
+        "if(c<=6)return COLORS.RAIN;"
+        "if(c===7)return COLORS.SNOW;"
+        "if(c===8)return COLORS.THUNDER;"
+        "return COLORS.TEXT_WHITE;}"
+
+        // Draw pixel icon
+        "function drawIcon(icon,x,y,size,color){"
+        "const scale=size/32;"
+        "ctx.fillStyle=color;"
+        "for(let row=0;row<32;row++){"
+        "for(let col=0;col<32;col++){"
+        "if(icon[row]&&icon[row][col]==='#'){"
+        "ctx.fillRect(x+col*scale,y+row*scale,scale,scale);}}}}"
+
+        // Temperature color
+        "function getTempColor(temp){"
+        "if(temp<0)return COLORS.TEXT_BLUE;"
+        "if(temp<10)return COLORS.TEXT_CYAN;"
+        "if(temp<20)return COLORS.TEXT_WHITE;"
+        "return COLORS.TEXT_ORANGE;}"
+
+        // Format temp
+        "function formatTemp(temp,useCelsius){"
+        "if(!useCelsius)temp=temp*9/5+32;"
+        "return Math.round(temp)+(useCelsius?'°C':'°F');}"
+
+        // Draw current weather screen
+        "function drawCurrentWeather(){"
+        "if(!weatherData||!weatherData.locations||weatherData.locations.length===0){"
+        "ctx.fillStyle='#333';ctx.fillRect(0,0,240,240);"
+        "ctx.fillStyle='#FFF';ctx.font='16px sans-serif';ctx.textAlign='center';"
+        "ctx.fillText('No weather data',120,120);return;}"
+        "const loc=weatherData.locations[currentLoc]||weatherData.locations[0];"
+        "const w=loc.current||{};"
+        "const isDay=w.isDay!==false;"
+        "const useCelsius=true;"  // TODO: get from config
+        // Background
+        "ctx.fillStyle=isDay?'#5DDFFF':'#192640';ctx.fillRect(0,0,240,240);"
+        // Time
+        "const now=new Date();const h=now.getHours().toString().padStart(2,'0');"
+        "const m=now.getMinutes().toString().padStart(2,'0');"
+        "ctx.fillStyle=COLORS.TEXT_WHITE;ctx.font='bold 48px sans-serif';ctx.textAlign='center';"
+        "ctx.fillText(h+':'+m,120,55);"
+        // Location name
+        "ctx.fillStyle=COLORS.TEXT_LIGHT;ctx.font='18px sans-serif';"
+        "ctx.fillText(loc.locationName||'Unknown',120,85);"
+        // Weather icon (centered, large)
+        "const icon=getIcon(w.condition,isDay);"
+        "const iconColor=getIconColor(w.condition,isDay);"
+        "drawIcon(icon,88,100,64,iconColor);"
+        // Temperature
+        "const temp=w.temperature||0;"
+        "ctx.fillStyle=getTempColor(temp);ctx.font='bold 36px sans-serif';"
+        "ctx.fillText(formatTemp(temp,useCelsius),120,195);"
+        // Condition text
+        "ctx.fillStyle=COLORS.TEXT_LIGHT;ctx.font='14px sans-serif';"
+        "const condNames=['Clear','Partly Cloudy','Cloudy','Fog','Drizzle','Rain','Freezing Rain','Snow','Thunderstorm','Unknown'];"
+        "ctx.fillText(condNames[w.condition||9],120,218);"
+        // Location dots
+        "const numLocs=weatherData.locations.length;"
+        "if(numLocs>1){"
+        "const startX=120-(numLocs-1)*6;"
+        "for(let i=0;i<numLocs;i++){"
+        "ctx.fillStyle=i===currentLoc?COLORS.TEXT_WHITE:COLORS.TEXT_LIGHT;"
+        "ctx.beginPath();ctx.arc(startX+i*12,232,3,0,Math.PI*2);ctx.fill();}}}"
+
+        // Draw forecast screen
+        "function drawForecast(startDay){"
+        "if(!weatherData||!weatherData.locations)return;"
+        "const loc=weatherData.locations[currentLoc]||weatherData.locations[0];"
+        "const forecast=loc.forecast||[];"
+        "const isDay=loc.current?.isDay!==false;"
+        "const useCelsius=true;"
+        // Background
+        "ctx.fillStyle=isDay?'#5DDFFF':'#192640';ctx.fillRect(0,0,240,240);"
+        // Title
+        "ctx.fillStyle=COLORS.TEXT_WHITE;ctx.font='14px sans-serif';ctx.textAlign='center';"
+        "const title=(loc.locationName||'?')+' - Days '+(startDay+1)+'-'+(startDay+3);"
+        "ctx.fillText(title,120,22);"
+        // Draw 3 cards
+        "const cardW=70,cardH=160,cardSpace=8,startX=(240-3*cardW-2*cardSpace)/2;"
+        "for(let i=0;i<3;i++){"
+        "const dayIdx=startDay+i;"
+        "if(dayIdx>=forecast.length)continue;"
+        "const day=forecast[dayIdx];"
+        "const cardX=startX+i*(cardW+cardSpace);"
+        // Card background
+        "ctx.fillStyle=COLORS.CARD_BG;"
+        "ctx.beginPath();ctx.roundRect(cardX,45,cardW,cardH,4);ctx.fill();"
+        // Day name
+        "ctx.fillStyle=COLORS.TEXT_WHITE;ctx.font='12px sans-serif';"
+        "ctx.fillText(day.dayName||'?',cardX+cardW/2,62);"
+        // Icon
+        "const icon=getIcon(day.condition,true);"
+        "const iconColor=getIconColor(day.condition,true);"
+        "drawIcon(icon,cardX+(cardW-32)/2,70,32,iconColor);"
+        // High temp
+        "ctx.fillStyle=getTempColor(day.tempMax||0);ctx.font='14px sans-serif';"
+        "ctx.fillText(formatTemp(day.tempMax||0,useCelsius),cardX+cardW/2,120);"
+        // Low temp
+        "ctx.fillStyle=getTempColor(day.tempMin||0);"
+        "ctx.fillText(formatTemp(day.tempMin||0,useCelsius),cardX+cardW/2,140);"
+        // Precip %
+        "if((day.precipitationProb||0)>0){"
+        "ctx.fillStyle=COLORS.RAIN;ctx.font='11px sans-serif';"
+        "ctx.fillText(Math.round(day.precipitationProb)+'%',cardX+cardW/2,160);}}"
+        // Location dots
+        "const numLocs=weatherData.locations.length;"
+        "if(numLocs>1){"
+        "const dotsX=120-(numLocs-1)*6;"
+        "for(let i=0;i<numLocs;i++){"
+        "ctx.fillStyle=i===currentLoc?COLORS.TEXT_WHITE:COLORS.TEXT_LIGHT;"
+        "ctx.beginPath();ctx.arc(dotsX+i*12,232,3,0,Math.PI*2);ctx.fill();}}}"
+
+        // Main render function
+        "function render(){"
+        "ctx.clearRect(0,0,240,240);"
+        "const screenNames=['Current Weather','Forecast Days 1-3','Forecast Days 4-6'];"
+        "document.getElementById('screenLabel').textContent=screenNames[currentScreen];"
+        "if(weatherData&&weatherData.locations){"
+        "const loc=weatherData.locations[currentLoc];"
+        "document.getElementById('locName').textContent=loc?.locationName||'Unknown';"
+        "document.getElementById('locIdx').textContent=currentLoc+1;"
+        "document.getElementById('locTotal').textContent=weatherData.locations.length;}"
+        "switch(currentScreen){"
+        "case 0:drawCurrentWeather();break;"
+        "case 1:drawForecast(0);break;"
+        "case 2:drawForecast(3);break;}}"
+
+        // Navigation
+        "function nextScreen(){"
+        "currentScreen=(currentScreen+1)%3;"
+        "if(currentScreen===0&&weatherData&&weatherData.locations){"
+        "currentLoc=(currentLoc+1)%weatherData.locations.length;}"
+        "render();}"
+
+        "function prevScreen(){"
+        "currentScreen=(currentScreen+2)%3;"
+        "if(currentScreen===2&&weatherData&&weatherData.locations){"
+        "currentLoc=(currentLoc+weatherData.locations.length-1)%weatherData.locations.length;}"
+        "render();}"
+
+        "function toggleAuto(){"
+        "autoPlay=!autoPlay;"
+        "document.getElementById('autoBtn').textContent='Auto: '+(autoPlay?'ON':'OFF');"
+        "document.getElementById('autoBtn').className=autoPlay?'active':'';"
+        "if(autoPlay)startAuto();else stopAuto();}"
+
+        "function startAuto(){"
+        "stopAuto();"
+        "autoTimer=setInterval(nextScreen,10000);}"
+
+        "function stopAuto(){"
+        "if(autoTimer){clearInterval(autoTimer);autoTimer=null;}}"
+
+        // Fetch weather data
+        "async function fetchWeather(){"
+        "try{const r=await fetch('/api/weather');weatherData=await r.json();render();"
+        "}catch(e){console.error('Failed to fetch weather',e);}}"
+
+        "function refreshWeather(){"
+        "fetch('/api/weather/refresh').then(()=>setTimeout(fetchWeather,2000));}"
+
+        // Init
+        "fetchWeather();"
+        "if(autoPlay)startAuto();"
+        "setInterval(fetchWeather,60000);"  // Refresh data every minute
         "</script>");
 
     html += F("</div></body></html>");
