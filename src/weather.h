@@ -291,4 +291,49 @@ bool loadWeatherConfig();
  */
 void weatherToJson(const WeatherData& data, JsonDocument& doc);
 
+// =============================================================================
+// DISPLAY SETTINGS
+// =============================================================================
+
+/**
+ * Get/Set display brightness (0-100)
+ */
+int getBrightness();
+void setBrightness(int brightness);
+
+/**
+ * Night mode settings
+ * When enabled, automatically dims display and uses dark theme during night hours
+ */
+bool getNightModeEnabled();
+void setNightModeEnabled(bool enabled);
+int getNightModeStartHour();  // Hour to start night mode (0-23)
+void setNightModeStartHour(int hour);
+int getNightModeEndHour();    // Hour to end night mode (0-23)
+void setNightModeEndHour(int hour);
+int getNightModeBrightness(); // Brightness during night mode (0-100)
+void setNightModeBrightness(int brightness);
+
+/**
+ * Check if currently in night mode based on time
+ */
+bool isNightModeActive(int currentHour);
+
+/**
+ * Screen cycling mode
+ * false = cycle through all screens (current + forecasts)
+ * true = show only main weather screen (no forecast cycling)
+ */
+bool getMainScreenOnly();
+void setMainScreenOnly(bool mainOnly);
+
+/**
+ * Theme mode
+ * 0 = auto (dark at night, light during day based on night mode hours)
+ * 1 = always dark
+ * 2 = always light
+ */
+int getThemeMode();
+void setThemeMode(int mode);
+
 #endif // WEATHER_H

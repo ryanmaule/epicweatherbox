@@ -338,6 +338,13 @@ void setupWebServer() {
 
         // Display settings
         doc["useCelsius"] = getUseCelsius();
+        doc["brightness"] = getBrightness();
+        doc["nightModeEnabled"] = getNightModeEnabled();
+        doc["nightModeStartHour"] = getNightModeStartHour();
+        doc["nightModeEndHour"] = getNightModeEndHour();
+        doc["nightModeBrightness"] = getNightModeBrightness();
+        doc["mainScreenOnly"] = getMainScreenOnly();
+        doc["themeMode"] = getThemeMode();
 
         String response;
         serializeJson(doc, response);
@@ -424,8 +431,29 @@ void setupWebServer() {
         }
 
         // Update display settings
-        if (doc.containsKey("useCelsius")) {
+        if (doc["useCelsius"].is<bool>()) {
             setUseCelsius(doc["useCelsius"] | false);
+        }
+        if (doc["brightness"].is<int>()) {
+            setBrightness(doc["brightness"] | 50);
+        }
+        if (doc["nightModeEnabled"].is<bool>()) {
+            setNightModeEnabled(doc["nightModeEnabled"] | true);
+        }
+        if (doc["nightModeStartHour"].is<int>()) {
+            setNightModeStartHour(doc["nightModeStartHour"] | 22);
+        }
+        if (doc["nightModeEndHour"].is<int>()) {
+            setNightModeEndHour(doc["nightModeEndHour"] | 7);
+        }
+        if (doc["nightModeBrightness"].is<int>()) {
+            setNightModeBrightness(doc["nightModeBrightness"] | 20);
+        }
+        if (doc["mainScreenOnly"].is<bool>()) {
+            setMainScreenOnly(doc["mainScreenOnly"] | false);
+        }
+        if (doc["themeMode"].is<int>()) {
+            setThemeMode(doc["themeMode"] | 0);
         }
 
         // Save and refresh weather
@@ -774,15 +802,74 @@ void handleAdmin() {
     html += String(locCount);
     html += F("</p></div>");
 
-    // Settings
+    // Settings - Temperature
     html += F("<div class='card'><h3>Settings</h3>"
         "<label>Temperature Unit</label><select id='unit'>"
         "<option value='f'");
     html += celsius ? "" : " selected";
     html += F(">Fahrenheit</option><option value='c'");
     html += celsius ? " selected" : "";
-    html += F(">Celsius</option></select>"
-        "<button onclick='saveSettings()'>Save Settings</button>"
+    html += F(">Celsius</option></select>");
+
+    // Display Mode
+    html += F("<label>Display Mode</label><select id='screenMode'>"
+        "<option value='0'");
+    html += getMainScreenOnly() ? "" : " selected";
+    html += F(">Cycle All Screens</option><option value='1'");
+    html += getMainScreenOnly() ? " selected" : "";
+    html += F(">Main Screen Only</option></select>"
+        "<p class='hint'>Cycle through weather + forecast screens, or show only main weather</p>");
+
+    // Theme Mode
+    html += F("<label>Theme</label><select id='themeMode'>"
+        "<option value='0'");
+    html += (getThemeMode() == 0) ? " selected" : "";
+    html += F(">Auto (dark at night)</option><option value='1'");
+    html += (getThemeMode() == 1) ? " selected" : "";
+    html += F(">Always Dark</option><option value='2'");
+    html += (getThemeMode() == 2) ? " selected" : "";
+    html += F(">Always Light</option></select>");
+
+    // Brightness
+    html += F("<label>Brightness: <span id='brtVal'>");
+    html += String(getBrightness());
+    html += F("</span>%</label><input type='range' id='brightness' min='10' max='100' value='");
+    html += String(getBrightness());
+    html += F("' oninput='document.getElementById(\"brtVal\").textContent=this.value'>");
+
+    // Night Mode
+    html += F("<label><input type='checkbox' id='nightMode'");
+    html += getNightModeEnabled() ? " checked" : "";
+    html += F("> Enable Night Mode</label>"
+        "<p class='hint'>Automatically dims display and uses dark theme during night hours</p>"
+        "<div class='row'><div><label>Night Start</label><select id='nightStart'>");
+    for (int h = 0; h < 24; h++) {
+        html += F("<option value='");
+        html += String(h);
+        html += "'";
+        if (h == getNightModeStartHour()) html += F(" selected");
+        html += ">";
+        html += (h == 0) ? "12 AM" : (h < 12) ? String(h) + " AM" : (h == 12) ? "12 PM" : String(h - 12) + " PM";
+        html += F("</option>");
+    }
+    html += F("</select></div><div><label>Night End</label><select id='nightEnd'>");
+    for (int h = 0; h < 24; h++) {
+        html += F("<option value='");
+        html += String(h);
+        html += "'";
+        if (h == getNightModeEndHour()) html += F(" selected");
+        html += ">";
+        html += (h == 0) ? "12 AM" : (h < 12) ? String(h) + " AM" : (h == 12) ? "12 PM" : String(h - 12) + " PM";
+        html += F("</option>");
+    }
+    html += F("</select></div></div>"
+        "<label>Night Brightness: <span id='nightBrtVal'>");
+    html += String(getNightModeBrightness());
+    html += F("</span>%</label><input type='range' id='nightBrightness' min='5' max='50' value='");
+    html += String(getNightModeBrightness());
+    html += F("' oninput='document.getElementById(\"nightBrtVal\").textContent=this.value'>");
+
+    html += F("<button onclick='saveSettings()'>Save Settings</button>"
         "<div id='st' class='status'></div></div>");
 
     // Links
@@ -849,12 +936,24 @@ void handleAdmin() {
         "if(!confirm('Remove '+locations[idx].name+'?'))return;"
         "locations.splice(idx,1);await saveLocations();}"
 
+        // Get all settings as object
+        "function getSettings(){"
+        "return{locations:locations,"
+        "useCelsius:document.getElementById('unit').value==='c',"
+        "brightness:parseInt(document.getElementById('brightness').value),"
+        "nightModeEnabled:document.getElementById('nightMode').checked,"
+        "nightModeStartHour:parseInt(document.getElementById('nightStart').value),"
+        "nightModeEndHour:parseInt(document.getElementById('nightEnd').value),"
+        "nightModeBrightness:parseInt(document.getElementById('nightBrightness').value),"
+        "mainScreenOnly:document.getElementById('screenMode').value==='1',"
+        "themeMode:parseInt(document.getElementById('themeMode').value)};}"
+
         // Save locations to server
         "async function saveLocations(){"
         "const st=document.getElementById('st');st.style.display='block';st.className='status';"
         "st.textContent='Saving...';"
         "try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},"
-        "body:JSON.stringify({locations:locations,useCelsius:document.getElementById('unit').value==='c'})});"
+        "body:JSON.stringify(getSettings())});"
         "const d=await r.json();st.className='status '+(d.success?'ok':'err');"
         "st.textContent=d.message;if(d.success){setTimeout(()=>location.reload(),2000);}"
         "}catch(e){st.className='status err';st.textContent='Error';}}"
@@ -864,7 +963,7 @@ void handleAdmin() {
         "const st=document.getElementById('st');st.style.display='block';st.className='status';"
         "st.textContent='Saving...';"
         "try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},"
-        "body:JSON.stringify({locations:locations,useCelsius:document.getElementById('unit').value==='c'})});"
+        "body:JSON.stringify(getSettings())});"
         "const d=await r.json();st.className='status '+(d.success?'ok':'err');"
         "st.textContent=d.message;if(d.success){setTimeout(()=>location.reload(),2000);}"
         "}catch(e){st.className='status err';st.textContent='Error';}}"
@@ -919,7 +1018,8 @@ void handleDisplayPreview() {
         "const canvas=document.getElementById('display');"
         "const ctx=canvas.getContext('2d');"
         "ctx.imageSmoothingEnabled=false;"
-        "let weatherData=null,currentLoc=0,currentScreen=0,autoPlay=true,autoTimer=null;"
+        "let weatherData=null,config=null,currentLoc=0,currentScreen=0,autoPlay=true,autoTimer=null;"
+        "let mainScreenOnly=false;"  // Will be loaded from config
         "const SCREENS_PER_LOC=3;"
 
         // Colors - true dark mode
@@ -995,36 +1095,37 @@ void handleDisplayPreview() {
         "const loc=locs[currentLoc]||locs[0],w=loc.current||{};"
         "const isDay=w.isDay!==false,useC=weatherData.useCelsius!==false;"
         "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
-        // Time + AM/PM (shifted down 15px for vertical centering)
+        // Time + AM/PM
         "const t=fmtTime();"
         "ctx.fillStyle=C.CYAN;ctx.font='bold 48px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText(t.time,100,58);"
-        "ctx.font='18px sans-serif';ctx.fillText(t.ampm,178,58);"
+        "ctx.fillText(t.time,100,52);"
+        "ctx.font='18px sans-serif';ctx.fillText(t.ampm,178,52);"
         // Date + Location row
         "ctx.fillStyle=C.GRAY;ctx.font='14px sans-serif';"
-        "ctx.fillText(fmtDate()+' • '+(loc.location||'Unknown'),120,82);"
+        "ctx.fillText(fmtDate()+' • '+(loc.location||'Unknown'),120,76);"
         // 2-column layout: left=icon+condition, right=temp+hi/lo+precip
+        // Row 2 starts at y=105 (more space from header)
         // Left column: icon (80x80) + condition directly below
         "const ico=getIco(w.condition,isDay);"
-        "drawIco(ico.ico,15,100,80,ico.col);"
+        "drawIco(ico.ico,15,105,80,ico.col);"
         // Condition text tight under icon (just a few px gap)
         "ctx.fillStyle=C.WHITE;ctx.font='14px sans-serif';ctx.textAlign='center';"
         "const cond=w.condition||'Unknown';"
-        "ctx.fillText(cond.length>12?cond.substring(0,12):cond,55,190);"
+        "ctx.fillText(cond.length>12?cond.substring(0,12):cond,55,195);"
         // Right column: temp centered, hi/lo below, precip at bottom
         "const temp=w.temperature||0;"
         "ctx.fillStyle=tempCol(temp);ctx.font='bold 56px sans-serif';"
-        "ctx.fillText(fmtTemp(temp,useC),170,145);"
+        "ctx.fillText(fmtTemp(temp,useC),170,155);"
         // Hi/Lo centered below temp
         "const fc=loc.forecast||[];if(fc.length>0){"
         "const today=fc[0];"
         "ctx.font='14px sans-serif';"
-        "ctx.fillStyle=C.ORANGE;ctx.fillText('↑'+fmtTemp(today.tempMax||0,useC),145,173);"
-        "ctx.fillStyle=C.BLUE;ctx.fillText('↓'+fmtTemp(today.tempMin||0,useC),195,173);"
+        "ctx.fillStyle=C.ORANGE;ctx.fillText('↑'+fmtTemp(today.tempMax||0,useC),145,183);"
+        "ctx.fillStyle=C.BLUE;ctx.fillText('↓'+fmtTemp(today.tempMin||0,useC),195,183);"
         // Precipitation below hi/lo
         "const pp=today.precipProbability||today.precipitationProb||0;"
         "ctx.fillStyle=pp>0?C.BLUE:C.GRAY;ctx.font='12px sans-serif';"
-        "ctx.fillText((pp>0?'💧':'')+Math.round(pp)+'%',170,195);}"
+        "ctx.fillText((pp>0?'💧':'')+Math.round(pp)+'%',170,203);}"
         // Screen dots
         "drawDots();}"
 
@@ -1108,14 +1209,20 @@ void handleDisplayPreview() {
         // Navigation
         "function nextScreen(){"
         "const nLocs=weatherData?.locations?.length||1;"
+        "if(mainScreenOnly){"
+        "currentLoc=(currentLoc+1)%nLocs;currentScreen=0;}"  // Only change location, stay on main screen
+        "else{"
         "currentScreen++;"
-        "if(currentScreen>=SCREENS_PER_LOC){currentScreen=0;currentLoc=(currentLoc+1)%nLocs;}"
+        "if(currentScreen>=SCREENS_PER_LOC){currentScreen=0;currentLoc=(currentLoc+1)%nLocs;}}"
         "render();}"
 
         "function prevScreen(){"
         "const nLocs=weatherData?.locations?.length||1;"
+        "if(mainScreenOnly){"
+        "currentLoc=(currentLoc+nLocs-1)%nLocs;currentScreen=0;}"
+        "else{"
         "currentScreen--;"
-        "if(currentScreen<0){currentScreen=SCREENS_PER_LOC-1;currentLoc=(currentLoc+nLocs-1)%nLocs;}"
+        "if(currentScreen<0){currentScreen=SCREENS_PER_LOC-1;currentLoc=(currentLoc+nLocs-1)%nLocs;}}"
         "render();}"
 
         "function toggleAuto(){"
@@ -1127,6 +1234,13 @@ void handleDisplayPreview() {
         "function startAuto(){stopAuto();autoTimer=setInterval(nextScreen,10000);}"
         "function stopAuto(){if(autoTimer){clearInterval(autoTimer);autoTimer=null;}}"
 
+        // Fetch config
+        "async function fetchConfig(){"
+        "try{const r=await fetch('/api/config');config=await r.json();"
+        "mainScreenOnly=config.mainScreenOnly||false;"
+        "console.log('Config:',config);"
+        "}catch(e){console.error('Config fetch failed',e);}}"
+
         // Fetch weather
         "async function fetchWeather(){"
         "try{const r=await fetch('/api/weather');weatherData=await r.json();"
@@ -1136,7 +1250,7 @@ void handleDisplayPreview() {
         "function refreshWeather(){fetch('/api/weather/refresh').then(()=>setTimeout(fetchWeather,2000));}"
 
         // Init
-        "fetchWeather();if(autoPlay)startAuto();setInterval(fetchWeather,60000);"
+        "fetchConfig().then(()=>fetchWeather());if(autoPlay)startAuto();setInterval(fetchWeather,60000);"
         "</script>");
 
     html += F("</div></body></html>");

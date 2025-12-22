@@ -32,6 +32,13 @@ static int locationCount = 1;
 
 // Display settings
 static bool useCelsius = false;  // false = Fahrenheit, true = Celsius
+static int brightness = 50;      // 0-100
+static bool nightModeEnabled = true;
+static int nightModeStartHour = 22;  // 10 PM
+static int nightModeEndHour = 7;     // 7 AM
+static int nightModeBrightness = 20;
+static bool mainScreenOnly = false;  // false = cycle all, true = main only
+static int themeMode = 0;  // 0=auto, 1=dark, 2=light
 
 // Timing
 static unsigned long lastUpdateTime = 0;
@@ -577,6 +584,45 @@ bool getUseCelsius() {
 }
 
 // =============================================================================
+// DISPLAY SETTINGS
+// =============================================================================
+
+int getBrightness() { return brightness; }
+void setBrightness(int b) { brightness = constrain(b, 0, 100); }
+
+bool getNightModeEnabled() { return nightModeEnabled; }
+void setNightModeEnabled(bool enabled) { nightModeEnabled = enabled; }
+
+int getNightModeStartHour() { return nightModeStartHour; }
+void setNightModeStartHour(int hour) { nightModeStartHour = constrain(hour, 0, 23); }
+
+int getNightModeEndHour() { return nightModeEndHour; }
+void setNightModeEndHour(int hour) { nightModeEndHour = constrain(hour, 0, 23); }
+
+int getNightModeBrightness() { return nightModeBrightness; }
+void setNightModeBrightness(int b) { nightModeBrightness = constrain(b, 0, 100); }
+
+bool getMainScreenOnly() { return mainScreenOnly; }
+void setMainScreenOnly(bool mainOnly) { mainScreenOnly = mainOnly; }
+
+int getThemeMode() { return themeMode; }
+void setThemeMode(int mode) { themeMode = constrain(mode, 0, 2); }
+
+/**
+ * Check if currently in night mode based on hour
+ */
+bool isNightModeActive(int currentHour) {
+    if (!nightModeEnabled) return false;
+
+    // Handle overnight range (e.g., 22:00 to 7:00)
+    if (nightModeStartHour > nightModeEndHour) {
+        return currentHour >= nightModeStartHour || currentHour < nightModeEndHour;
+    }
+    // Handle same-day range (e.g., 1:00 to 5:00)
+    return currentHour >= nightModeStartHour && currentHour < nightModeEndHour;
+}
+
+// =============================================================================
 // CONFIGURATION PERSISTENCE
 // =============================================================================
 
@@ -598,6 +644,13 @@ bool saveWeatherConfig() {
 
     // Display settings
     doc["useCelsius"] = useCelsius;
+    doc["brightness"] = brightness;
+    doc["nightModeEnabled"] = nightModeEnabled;
+    doc["nightModeStartHour"] = nightModeStartHour;
+    doc["nightModeEndHour"] = nightModeEndHour;
+    doc["nightModeBrightness"] = nightModeBrightness;
+    doc["mainScreenOnly"] = mainScreenOnly;
+    doc["themeMode"] = themeMode;
 
     File file = LittleFS.open(WEATHER_CONFIG_FILE, "w");
     if (!file) {
@@ -713,6 +766,13 @@ bool loadWeatherConfig() {
 
     // Load display settings
     useCelsius = doc["useCelsius"] | false;
+    brightness = doc["brightness"] | 50;
+    nightModeEnabled = doc["nightModeEnabled"] | true;
+    nightModeStartHour = doc["nightModeStartHour"] | 22;
+    nightModeEndHour = doc["nightModeEndHour"] | 7;
+    nightModeBrightness = doc["nightModeBrightness"] | 20;
+    mainScreenOnly = doc["mainScreenOnly"] | false;
+    themeMode = doc["themeMode"] | 0;
 
     // Log loaded locations
     for (int i = 0; i < locationCount; i++) {
@@ -720,6 +780,7 @@ bool loadWeatherConfig() {
                       i, locations[i].name, locations[i].latitude, locations[i].longitude);
     }
     Serial.printf("[WEATHER] Temperature unit: %s\n", useCelsius ? "Celsius" : "Fahrenheit");
+    Serial.printf("[WEATHER] Brightness: %d%%, Night mode: %s\n", brightness, nightModeEnabled ? "on" : "off");
 
     return true;
 }
