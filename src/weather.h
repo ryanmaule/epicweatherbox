@@ -16,7 +16,8 @@
 // =============================================================================
 
 // Open-Meteo API endpoint (free, no API key needed!)
-#define WEATHER_API_URL "https://api.open-meteo.com/v1/forecast"
+// Using HTTP instead of HTTPS for ESP8266 compatibility (saves ~20KB RAM)
+#define WEATHER_API_URL "http://api.open-meteo.com/v1/forecast"
 
 // Update interval (milliseconds) - 20 minutes default
 #define WEATHER_UPDATE_INTERVAL_MS (20 * 60 * 1000)

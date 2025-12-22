@@ -9,7 +9,6 @@
 #include "config.h"
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
-#include <WiFiClientSecureBearSSL.h>
 #include <LittleFS.h>
 
 // =============================================================================
@@ -160,14 +159,13 @@ bool fetchWeather(float lat, float lon, WeatherData& data) {
     String url = buildApiUrl(lat, lon);
     Serial.printf("[WEATHER] Fetching: %s\n", url.c_str());
 
-    // Use BearSSL for HTTPS
-    std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure);
-    client->setInsecure();  // Skip certificate validation (OK for weather data)
+    // Use regular WiFiClient for HTTP (saves RAM vs BearSSL)
+    WiFiClient client;
 
     HTTPClient http;
     http.setTimeout(10000);  // 10 second timeout
 
-    if (!http.begin(*client, url)) {
+    if (!http.begin(client, url)) {
         strncpy(data.lastError, "HTTP begin failed", sizeof(data.lastError));
         data.errorCount++;
         Serial.println(F("[WEATHER] HTTP begin failed"));
