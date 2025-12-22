@@ -444,9 +444,10 @@ void setupWebServer() {
         }
 
         // Build Open-Meteo geocoding URL
+        // Request 20 results from API to include international cities (Canada, etc.)
         String url = "http://geocoding-api.open-meteo.com/v1/search?name=";
         url += encodedQuery;
-        url += "&count=5&language=en&format=json";
+        url += "&count=20&language=en&format=json";
 
         Serial.printf("[GEOCODE] Searching: %s\n", query.c_str());
 
@@ -683,10 +684,10 @@ void handleAdmin() {
 
     // City search section
     html += F("<div class='card'><h3>Find Location</h3>"
-        "<div class='search-box'><input type='text' id='search' placeholder='Type city name (e.g. Aurora, CA)'>"
+        "<div class='search-box'><input type='text' id='search' placeholder='Type city name (e.g. Aurora)'>"
         "<button type='button' onclick='searchCity()'>Search</button></div>"
         "<div id='results' class='results'></div>"
-        "<p class='hint'>Search for a city and click a result to fill in the coordinates automatically</p></div>");
+        "<p class='hint'>Search by city name only (not state/country). Scroll to find your location.</p></div>");
 
     // Location config form
     html += F("<div class='card'><h3>Location Settings</h3>"
