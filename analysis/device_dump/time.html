@@ -1,0 +1,225 @@
+<!Doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=0.8, minimal-ui">
+		<meta name="author" content="GEEKMAGIC">
+		<meta name="theme-color" content="#36393E" />
+		<link rel="stylesheet" href="css/style.css">
+	</head>
+	<body onload = "getData('/hour12.json');getData('/ntp.json');getData('/day.json');getData('/timecolor.json');getData('/font.json');getData('/timebrt.json');getData('/colon.json');getData('/dst.json');getData('/daytimer.json');getNav();">
+		<nav id="nav" style="width: 80%;margin: 0 auto;font-size: 25px;text-align: center;">
+		</nav>		
+		<div class="container">
+			<div class="row">
+				<div class="col-12">
+					<div id="popup" class="popup"></div>
+					<h1>1. Time Number Color</h1>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col-3">
+					<label for="enc">Hour：</label>
+				</div>
+				<div class="col-9">
+					<input type="color" id="hc" name="hc" value="#FFFFFF"/>
+				</div>
+				<div class="col-3">
+					<label for="enc">Minutes：</label>
+				</div>
+				<div class="col-9">
+					<input type="color" id="mc" name="mc" value="#FEBA01" />
+				</div>
+				<div class="col-3">
+					<label for="enc">Seconds：</label>
+				</div>
+				<div class="col-9">
+					<input type="color" id="sc" name="sc" value="#FF5900" />
+				</div>				
+				<div class="col-12">
+				<button class="button-primary left" onclick="set_timecolor()">SAVE</button>
+				</div>	
+			</div>
+			<div class="row">
+				<div class="col-12">
+					<div id="error" class="hide"></div>
+					<h1>2. 12/24 Hour Format</h1>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col-4">
+					<label for="enc">Default is 24-Hour, enable 12-Hour or not:</label>
+				</div>
+				<div class="col-1">
+					<input type="checkbox" id="hour12" name="hour12" /><p>
+				</div>
+				<div class="col-12">
+				<button class="button-primary left" onclick="set_hour12()">SAVE</button>
+				</div>	
+			</div>
+			<div class="row">
+				<div class="col-12">
+					<div id="error" class="hide"></div>
+					<h1>3. Date Format</h1>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col-6">
+					<select id="day-format" onchange="setDayFormat(this)" style="width:150px">
+					  <option value="-1" style="display:none">DD/MM/YYYY</option>
+					  <option value="1">DD/MM/YYYY</option>
+					  <option value="2">YYYY/MM/DD</option>
+					  <option value="3">MM/DD/YYYY</option>
+					  <option value="4">MM/DD</option>
+					  <option value="5">DD/MM</option>
+					</select>
+				</div>	
+			</div>						
+			<div class="row">
+				<div class="col-12">
+					<h1>4. Enable Colon Blink</h1>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col-1">
+					<label>Enable</label>
+				</div>
+				<div class="col-1">
+					<input type="checkbox" id="colon" name="colon" /><p>
+				</div>
+				<div class="col-12">
+				<button class="button-primary left" onclick="set_colon()">SAVE</button>
+				</div>	
+			</div>
+			<div class="row">
+				<div class="col-12">
+					<h1>5. Choose the Time Style Font</h1>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col-1">
+					<select id="font" onchange="set_font(this)" style="width:200px">
+					  <option value ="-1" style="display:none">Default Big Font</option>
+					  <option value ="1">Default Big Font</option>
+					  <option value ="2">Digital Font</option>
+					</select><p>
+				</div>
+			</div>			
+			<div class="row">
+				<div class="col-12">
+					<h1>6. Ntp Time server</h1>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col-12">
+				<label>The device has multiple sets of time servers built in to ensure correct time synchronization. If you set your own NTP time server, it will be used first to synchronize.</label><p>
+				</div>
+				<div class="col-12">
+					NTP Server Domain: <input type="text" name="ntp" id="ntp" placeholder="pool.ntp.org">
+				</div>
+				<div class="col-12">
+				<button class="button-primary left" onclick="set_ntp()">SAVE</button>
+				</div>	
+			</div>
+			<div class="row">
+				<div class="col-12">
+					<h1>7. DST(Daylight Saving Time) enable</h1>
+				</div>
+				<div class="col-12">
+				<label>Be careful, if you enable this option, the hours may ahead or later 1 hour.</label><p>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col-1">
+					<label>Enable</label>
+				</div>
+				<div class="col-1">
+					<input type="checkbox" id="dst" name="dst" /><p>
+				</div>
+				<div class="col-12">
+				<button class="button-primary left" onclick="set_dst()">SAVE</button>
+				</div>	
+			</div>			
+			<!--div class="row">
+				<div class="col-12">
+					<h1>5. 联网同步时间的间隔时间</h1>
+				</div>
+			</div>			
+			<div class="row">
+				<div class="col-6">
+					<input type="" name="time_interval" id="time_interval" value="60">s(单位:秒)
+				</div>
+				<div class="col-12">
+				<button class="button-primary left" onclick="set_interval()">保存</button>
+				</div>	
+			</div-->			
+			<div class="row">
+				<div class="col-12">
+					<br />
+					<div id="copyright">
+					</div>						
+					<script src="js/settings.js"></script>
+				</div>
+			</div>
+		</div>
+		<script>
+			function setDayFormat(ele){
+				var url = "/set?day="+ele.value;
+				send_http(url);	
+			}
+			function set_timecolor(){
+				var hc = getE('hc');
+				var mc = getE('mc');
+				var sc = getE('sc');				
+				var url = "/set?hc="+escape(hc.value)+"&mc="+encodeURIComponent(mc.value)+"&sc="+encodeURIComponent(sc.value);
+				send_http(url);				
+			}		
+			function set_hour12(){
+				var hour12 = getE('hour12').checked;
+				if(hour12 == true) hour=1;
+				else hour=0;
+				var url = "/set?hour="+hour;
+				send_http(url);				
+			}
+			function set_font(){
+				var font = getE('font').value;
+				var url = "/set?font="+font;
+				send_http(url);				
+			}			
+			function set_colon(){
+				var colon = getE('colon').checked;
+				if(colon == true) colon=1;
+				else colon=0;
+				var url = "/set?colon="+colon;
+				send_http(url);				
+			}
+			function set_ntp(){
+				var ntp = getE('ntp').value;
+				var url = "/set?ntp="+ntp.replace(/ /g,"");
+				send_http(url);				
+			}
+			function set_interval(){
+				var interval = getE('time_interval').value;
+				var url = "/set?time_interval="+interval.replace(/ /g,"");
+				send_http(url);				
+			}
+			function set_dst(){				
+				var dst = getE('dst').checked;
+				if(dst == true) dst=1;
+				else dst=0;
+				var url = "/set?dst="+dst;
+				send_http(url);				
+			}
+			function set_daytimer(){
+				var yr = getE('yr').value.replace(/ /g,"");
+				var mth = getE('mth').value.replace(/ /g,"");
+				var day = getE('day').value.replace(/ /g,"");
+				if(!Number.isInteger(parseInt(yr)) || !Number.isInteger(parseInt(mth)) || !Number.isInteger(parseInt(day)) || parseInt(day)>31 || parseInt(mth) >12 )
+				{ alert("Please check the date is valid！");return;}
+				
+				var url = "/set?yr="+yr+"&mth="+mth+"&day="+day;
+				send_http(url);				
+			}
+		</script>				
+	</body>
+</html>

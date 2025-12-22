@@ -22,3 +22,7 @@ __pycache__/
 
 # Log files
 *.log
+
+# Large binary files (keep locally but don't commit)
+original/*.bin
+original/*.zip

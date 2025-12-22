@@ -1,0 +1,161 @@
+<!Doctype html>
+<html>
+	<head>
+	  <meta charset="utf-8" />
+	  <meta name="viewport" content="width=device-width, initial-scale=0.8, minimal-ui" />
+	  <meta name="author" content="GEEKMAGIC" />
+	  <meta name="theme-color" content="#36393E" />
+	  <link rel="stylesheet" href="css/style.css" />
+	  <script src="js/jquery.min.js"></script>
+	</head>
+	<body onload = "getNav();">
+		<nav id="nav" style="width: 80%;margin: 0 auto;font-size: 25px;text-align: center;">
+		</nav>		
+		<div class="container">
+    	<div id="popup" class="popup"></div>
+
+		<div class="row">
+			<div class="col-12">
+			<h1 class="header">1. Scan WiFi</h1>
+				
+			<div style="display: flex; gap: 10px; align-items: center;">
+				<select id="wifi-select" style="flex: 1;">
+				<option value="">Scanning...</option>
+				</select>
+				<button class="button-primary" id="rescan-wifi" style="flex-shrink: 0;">RESCAN</button>
+			</div>
+				
+			<p class="red bold">Please select WiFi with strong signal to connect, 2.4G only, 5G is not supported.</p>
+			</div>
+		</div>
+
+		<div class="row">
+			<div class="col-12">
+			<label for="scan_ssid">WiFi Name:</label>
+			<input type="text" id="scan_ssid" placeholder="Select or Input Your WiFi Name" />
+			</div>
+			<div class="col-12">
+			<label for="scan_pwd">WiFi Password:</label>
+			<input type="password" id="scan_pwd" placeholder="Input password" />
+			</div>
+			<div class="col-12">
+			<button class="button-primary left" id="save-wifi">save</button>
+			</div>
+			<div class="col-12">
+			<p><br><span style="color: orange;">Warm reminder: After successfully connecting to the Internet, the "GIFTV" hotspot will be turned off, and the new IP address will be displayed on the screen when it is turned on. Please connect your phone to the same WIFI, then open a web browser and enter the new IP address to change settings.</span>
+			</div>
+		</div>
+
+
+	    <div class="row">
+	      <div class="col-12">
+	        <h1 class="header">2. Delay WiFi Connection：</h1>
+		  </div>
+	      <div class="col-12">
+			<label for="delay">How long does it take to start connecting to the WiFi after starting up:</label>
+			<p>It's useful when your router's WiFi boot slower than this device.
+		  </div>
+		  <div class="col-12">
+	        <input type="text" id="delay" placeholder="30" />s(seconds)
+	      </div>
+	      <div class="col-12">
+	        <button class="button-primary left" onclick="set_delay()">SAVE</button>
+	      </div>
+	    </div>
+
+	    <div class="row">
+	      <div class="col-12">
+	        <div id="copyright"></div>
+	        <script src="js/settings.js"></script>
+	      </div>
+	    </div>
+  	</div>
+		<script>
+    $(document).ready(function () {
+      //getData('/wifi.json?q=1');
+      getData('/config.json');
+	  getData('/delay.json');
+      getNav();
+
+		// 初次加载 WiFi 列表
+		loadWifiList();
+		// 切换 SSID 填入输入框
+		$('#wifi-select').on('change', function () {
+			$('#scan_ssid').val($(this).val());
+			$('#scan_pwd').val('');
+			
+			// ⚡️ 添加边框闪烁动画
+			const $pwd = $('#scan_pwd');
+			$pwd.addClass('flash-border');
+
+			setTimeout(() => {
+				$pwd.removeClass('flash-border');
+			}, 700); // 稍微长一点以便完整播放动画
+		});
+
+		// 保存按钮
+		$('#save-wifi').on('click', function () {
+			set_wifi('scan');
+		});
+
+		// Rescan 按钮
+		$('#rescan-wifi').on('click', function () {
+			loadWifiList();
+		});
+	});
+
+	function loadWifiList() {
+	var $select = $('#wifi-select');
+
+	// 显示 loading
+	$select.prop('disabled', true).html('<option>Scanning...</option>');
+
+	$.getJSON('wifi.json?q=1', function (res) {
+		$select.prop('disabled', false).empty();
+		$select.append('<option value="">👉✨✨ Click Here to Select WiFi ✨✨👈</option>');
+
+		if (res.aps && res.aps.length > 0) {
+		res.aps.sort((a, b) => b.r - a.r); // 降序：强信号在前
+
+		res.aps.forEach(function (ap, index) {
+			var name = $('<div/>').text(ap.ss).html();
+			let emoji = '📶', signalText = '';
+			if (ap.r >= 70) { emoji = '📶🟢'; signalText = 'Strong'; }
+			else if (ap.r >= 40) { emoji = '📶🟠'; signalText = 'Medium'; }
+			else { emoji = '📶🔴'; signalText = 'Weak'; }
+
+			var option = $('<option>')
+			.val(ap.ss)
+			.text(`${emoji} ${signalText}: ${name} (${ap.r}%)`);
+			$select.append(option);
+		});
+
+			$select.val(''); // 保持默认提示项
+
+
+		} else {
+			$select.append('<option value="">No WiFi Available</option>');
+		}
+	}).fail(function () {
+		$select.prop('disabled', false).html('<option value="">Load failed</option>');
+	});
+	}
+
+    function set_wifi(mode) {
+      var ssid = (mode === 'scan') ? $('#scan_ssid').val() : $('#ssid').val();
+      var pwd = (mode === 'scan') ? $('#scan_pwd').val() : $('#pwd').val();
+
+      var url = '/wifisave?s=' + encodeURIComponent(ssid) + '&p=' + encodeURIComponent(pwd);
+      getResponse(url, function () {
+        showPopup("WiFi info saved, the device will try reboot to connect.", 3000, "#02a601");
+      });
+    }
+
+    function set_delay() {
+      var delayVal = $('#delay').val().trim();
+      var url = '/set?delay=' + delayVal;
+      send_http(url);
+    }
+		</script>
+	</body>
+</html>
