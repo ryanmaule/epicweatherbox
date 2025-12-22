@@ -51,6 +51,7 @@ void setupWiFi();
 void setupWebServer();
 void setupWatchdog();
 void handleRoot();
+void handleAdmin();
 void handleNotFound();
 void feedWatchdog();
 
@@ -317,6 +318,84 @@ void setupWebServer() {
         server.send(success ? 200 : 500, "application/json", response);
     });
 
+    // Config API - GET returns location settings, POST saves them
+    server.on("/api/config", HTTP_GET, []() {
+        JsonDocument doc;
+
+        // Primary location
+        const WeatherData& primary = getPrimaryWeather();
+        JsonObject p = doc["primary"].to<JsonObject>();
+        p["name"] = primary.locationName;
+        p["lat"] = primary.latitude;
+        p["lon"] = primary.longitude;
+
+        // Secondary location
+        if (isSecondaryLocationEnabled()) {
+            const WeatherData& secondary = getSecondaryWeather();
+            JsonObject s = doc["secondary"].to<JsonObject>();
+            s["enabled"] = true;
+            s["name"] = secondary.locationName;
+            s["lat"] = secondary.latitude;
+            s["lon"] = secondary.longitude;
+        } else {
+            JsonObject s = doc["secondary"].to<JsonObject>();
+            s["enabled"] = false;
+        }
+
+        String response;
+        serializeJson(doc, response);
+        server.send(200, "application/json", response);
+    });
+
+    server.on("/api/config", HTTP_POST, []() {
+        if (!server.hasArg("plain")) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"No data\"}");
+            return;
+        }
+
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, server.arg("plain"));
+        if (error) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
+            return;
+        }
+
+        // Update primary location
+        JsonObject primary = doc["primary"];
+        if (primary) {
+            const char* name = primary["name"];
+            float lat = primary["lat"] | 0.0f;
+            float lon = primary["lon"] | 0.0f;
+            if (name && lat != 0 && lon != 0) {
+                setPrimaryLocation(name, lat, lon);
+            }
+        }
+
+        // Update secondary location
+        JsonObject secondary = doc["secondary"];
+        if (secondary) {
+            bool enabled = secondary["enabled"] | false;
+            setSecondaryLocationEnabled(enabled);
+            if (enabled) {
+                const char* name = secondary["name"];
+                float lat = secondary["lat"] | 0.0f;
+                float lon = secondary["lon"] | 0.0f;
+                if (name && lat != 0 && lon != 0) {
+                    setSecondaryLocation(name, lat, lon);
+                }
+            }
+        }
+
+        // Save and refresh weather
+        saveWeatherConfig();
+        forceWeatherUpdate();
+
+        server.send(200, "application/json", "{\"success\":true,\"message\":\"Config saved\"}");
+    });
+
+    // Admin page - minimal location config
+    server.on("/admin", HTTP_GET, handleAdmin);
+
     // Version endpoint (original firmware compatibility)
     server.on("/v.json", HTTP_GET, []() {
         JsonDocument doc;
@@ -435,31 +514,102 @@ void handleRoot() {
     html += F("</div></div></div></div>");
 
     html += F("<div class='card'><h3>Quick Links</h3><div class='links'>"
+        "<a href='/admin' class='link-btn'>Admin Panel</a>"
         "<a href='/update' class='link-btn'>Firmware Update</a>"
-        "<a href='/api/status' class='link-btn'>API Status</a>"
         "<a href='/reboot' class='link-btn warning'>Reboot</a>"
         "<a href='/reset' class='link-btn danger'>Factory Reset</a>"
         "</div></div>");
 
     html += F("<div class='card'><h3>API Endpoints</h3>"
-        "<p><a href='/api/status'>/api/status</a> - Device status JSON</p>"
-        "<p><a href='/api/time'>/api/time</a> - Current time JSON</p>"
-        "<p><a href='/v.json'>/v.json</a> - Firmware version</p>"
+        "<p><a href='/api/weather'>/api/weather</a> - Weather data</p>"
+        "<p><a href='/api/config'>/api/config</a> - Location config</p>"
+        "<p><a href='/api/status'>/api/status</a> - Device status</p>"
         "</div>");
 
     html += F("<div class='card'><h3>Development Status</h3>"
         "<p>Custom weather station firmware for SmallTV hardware.</p>"
         "<ul>"
         "<li>Phase 1: OTA Updates - <strong style='color:#00ff88'>Complete</strong></li>"
-        "<li>Phase 2: Display Driver - Pending</li>"
-        "<li>Phase 3: WiFi & Web Server - Pending</li>"
-        "<li>Phase 4: Time & NTP - In Progress</li>"
-        "<li>Phase 5: Weather API - Pending</li>"
-        "<li>Phase 6: Dual Location - Pending</li>"
+        "<li>Phase A: Weather API - <strong style='color:#00ff88'>Complete</strong></li>"
+        "<li>Phase B: Admin Panel - <strong style='color:#00ff88'>Complete</strong></li>"
+        "<li>Phase C: Display Driver - Pending</li>"
         "</ul></div>");
 
     html += F("</div></body></html>");
 
+    server.send(200, "text/html", html);
+}
+
+/**
+ * Handle admin page - minimal location config
+ */
+void handleAdmin() {
+    const WeatherData& w = getPrimaryWeather();
+
+    String html = F("<!DOCTYPE html><html><head><meta charset='UTF-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Admin</title><style>"
+        "*{box-sizing:border-box}body{font-family:sans-serif;background:#1a1a2e;color:#eee;margin:0;padding:20px}"
+        ".c{max-width:500px;margin:0 auto}h1{color:#00d4ff;text-align:center}"
+        ".card{background:rgba(255,255,255,0.05);border-radius:10px;padding:15px;margin-bottom:15px}"
+        ".card h3{color:#00d4ff;margin-top:0}label{display:block;margin:10px 0 5px;color:#aaa;font-size:0.9em}"
+        "input{width:100%;padding:10px;border:1px solid #333;border-radius:6px;background:#2a2a4e;color:#eee}"
+        ".row{display:grid;grid-template-columns:1fr 1fr;gap:10px}"
+        "button{background:#00d4ff;color:#1a1a2e;border:none;padding:12px 20px;border-radius:6px;cursor:pointer;margin-top:15px}"
+        "button:hover{background:#00a8cc}.status{padding:10px;border-radius:6px;margin-top:10px;display:none}"
+        ".ok{background:rgba(0,200,100,0.2);color:#0c6}.err{background:rgba(200,50,50,0.2);color:#f66}"
+        "a{color:#00d4ff}</style></head><body><div class='c'><h1>EpicWeatherBox</h1>");
+
+    // Current weather status
+    html += F("<div class='card'><h3>Current Weather</h3>");
+    if (w.valid) {
+        html += String(w.locationName) + F(": ");
+        html += String((int)w.current.temperature) + F("°F, ");
+        html += conditionToString(w.current.condition);
+    } else {
+        html += F("No data - configure location below");
+    }
+    html += F("</div>");
+
+    // Location config form
+    html += F("<div class='card'><h3>Location</h3>"
+        "<form id='f'><label>City Name</label>"
+        "<input type='text' id='name' value='");
+    html += w.locationName;
+    html += F("'><div class='row'><div><label>Latitude</label>"
+        "<input type='number' id='lat' step='0.0001' value='");
+    html += String(w.latitude, 4);
+    html += F("'></div><div><label>Longitude</label>"
+        "<input type='number' id='lon' step='0.0001' value='");
+    html += String(w.longitude, 4);
+    html += F("'></div></div><button type='submit'>Save & Refresh</button>"
+        "<button type='button' onclick='geo()' style='background:#444;margin-left:10px'>Use My Location</button>"
+        "<div id='st' class='status'></div></form></div>");
+
+    // Links
+    html += F("<div class='card' style='text-align:center'>"
+        "<a href='/'>Home</a> | <a href='/api/weather'>Weather API</a> | "
+        "<a href='/update'>Firmware</a> | <a href='/reboot'>Reboot</a></div>");
+
+    // JavaScript
+    html += F("<script>"
+        "document.getElementById('f').onsubmit=async e=>{"
+        "e.preventDefault();const s=document.getElementById('st');"
+        "s.style.display='block';s.className='status';s.textContent='Saving...';"
+        "try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({primary:{name:document.getElementById('name').value,"
+        "lat:parseFloat(document.getElementById('lat').value),"
+        "lon:parseFloat(document.getElementById('lon').value)}})});"
+        "const d=await r.json();s.className='status '+(d.success?'ok':'err');"
+        "s.textContent=d.message;if(d.success)setTimeout(()=>location.reload(),2000);"
+        "}catch(e){s.className='status err';s.textContent='Error';}};"
+        "function geo(){if(!navigator.geolocation)return alert('Not supported');"
+        "navigator.geolocation.getCurrentPosition(p=>{"
+        "document.getElementById('lat').value=p.coords.latitude.toFixed(4);"
+        "document.getElementById('lon').value=p.coords.longitude.toFixed(4);"
+        "},()=>alert('Could not get location'));}</script>");
+
+    html += F("</div></body></html>");
     server.send(200, "text/html", html);
 }
 
