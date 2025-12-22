@@ -1013,6 +1013,7 @@ void handleAdmin() {
     html += getGifScreenEnabled() ? " checked" : "";
     html += F("> Show GIF screen in rotation</label>"
         "<p class='hint'>When enabled and a screen GIF is uploaded, it will appear in the display rotation.</p>"
+        "<button type='button' onclick='saveGifSettings()' style='margin-top:10px'>Save GIF Settings</button>"
         "<div id='gifSt' class='status'></div></div>");
 
     // Links
@@ -1136,6 +1137,16 @@ void handleAdmin() {
         "updateGifStatus();"
         "}catch(e){st.className='status err';st.textContent='Delete failed';}}"
 
+        // Save GIF settings only
+        "async function saveGifSettings(){"
+        "const st=document.getElementById('gifSt');st.style.display='block';st.className='status';"
+        "st.textContent='Saving...';"
+        "try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify(getSettings())});"
+        "const d=await r.json();st.className='status '+(d.success?'ok':'err');"
+        "st.textContent=d.success?'GIF settings saved!':d.message;"
+        "}catch(e){st.className='status err';st.textContent='Error saving';}}"
+
         // Update GIF status display
         "async function updateGifStatus(){"
         "try{const r=await fetch('/api/gif/status');const d=await r.json();"
@@ -1197,8 +1208,8 @@ void handleDisplayPreview() {
         "const ctx=canvas.getContext('2d');"
         "ctx.imageSmoothingEnabled=false;"
         "let weatherData=null,config=null,currentLoc=0,currentScreen=0,autoPlay=true,autoTimer=null;"
-        "let mainScreenOnly=false,darkMode=true;"
-        "const SCREENS_PER_LOC=3;"
+        "let mainScreenOnly=false,darkMode=true,gifScreenEnabled=false;"
+        "const SCREENS_PER_LOC=4;"
 
         // Colors - dark and light themes
         "const DARK={BG:'#0a0a14',CARD:'#141428',WHITE:'#FFFFFF',GRAY:'#888888',CYAN:'#00D4FF',ORANGE:'#FF6B35',BLUE:'#4DA8DA',YELLOW:'#FFE000',GREEN:'#00FF88'};"
@@ -1350,10 +1361,30 @@ void handleDisplayPreview() {
         // Screen dots
         "drawDots();}"
 
+        // Draw GIF animation screen (placeholder)
+        "function drawGifScreen(){"
+        "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
+        // Time header
+        "const t=fmtTime();"
+        "ctx.fillStyle=C.WHITE;ctx.font='bold 24px sans-serif';ctx.textAlign='center';"
+        "ctx.fillText(t.time+' '+t.ampm,120,35);"
+        // Separator line
+        "ctx.strokeStyle=C.GRAY;ctx.beginPath();ctx.moveTo(20,55);ctx.lineTo(220,55);ctx.stroke();"
+        // GIF placeholder area
+        "ctx.strokeStyle=C.CYAN;ctx.lineWidth=2;ctx.setLineDash([5,5]);"
+        "ctx.strokeRect(40,70,160,140);ctx.setLineDash([]);"
+        "ctx.fillStyle=C.GRAY;ctx.font='16px sans-serif';"
+        "ctx.fillText('[Animated GIF]',120,145);"
+        "ctx.font='12px sans-serif';ctx.fillStyle='#666';"
+        "ctx.fillText('Upload via Admin panel',120,170);"
+        // Screen dots
+        "drawDots();}"
+
         // Draw screen indicator dots
         "function drawDots(){"
         "const locs=weatherData?.locations||[],nLocs=locs.length||1;"
-        "const total=nLocs*SCREENS_PER_LOC,cur=currentLoc*SCREENS_PER_LOC+currentScreen;"
+        "const screens=gifScreenEnabled?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
+        "const total=nLocs*screens,cur=currentLoc*screens+Math.min(currentScreen,screens-1);"
         "const dotR=3,gap=10,sx=120-(total-1)*gap/2;"
         "for(let i=0;i<total;i++){"
         "ctx.fillStyle=i===cur?C.CYAN:C.GRAY;"
@@ -1362,7 +1393,8 @@ void handleDisplayPreview() {
         // Update HTML dots
         "function updateHtmlDots(){"
         "const locs=weatherData?.locations||[],nLocs=locs.length||1;"
-        "const total=nLocs*SCREENS_PER_LOC,cur=currentLoc*SCREENS_PER_LOC+currentScreen;"
+        "const screens=gifScreenEnabled?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
+        "const total=nLocs*screens,cur=currentLoc*screens+Math.min(currentScreen,screens-1);"
         "const el=document.getElementById('screenDots');el.innerHTML='';"
         "for(let i=0;i<total;i++){const d=document.createElement('div');"
         "d.className='dot'+(i===cur?' active':'');el.appendChild(d);}}"
@@ -1370,8 +1402,8 @@ void handleDisplayPreview() {
         // Main render
         "function render(){"
         "ctx.clearRect(0,0,240,240);"
-        "const names=['Current Weather','Forecast Days 1-3','Forecast Days 4-6'];"
-        "document.getElementById('screenLabel').textContent=names[currentScreen];"
+        "const names=['Current Weather','Forecast Days 1-3','Forecast Days 4-6','GIF Animation'];"
+        "document.getElementById('screenLabel').textContent=names[currentScreen]+(currentScreen===3&&!gifScreenEnabled?' (disabled)':'');"
         "if(weatherData?.locations){"
         "const loc=weatherData.locations[currentLoc];"
         "document.getElementById('locName').textContent=loc?.location||'Unknown';"
@@ -1381,25 +1413,28 @@ void handleDisplayPreview() {
         "switch(currentScreen){"
         "case 0:drawCurrent();break;"
         "case 1:drawForecast(0);break;"
-        "case 2:drawForecast(3);break;}}"
+        "case 2:drawForecast(3);break;"
+        "case 3:drawGifScreen();break;}}"
 
         // Navigation
         "function nextScreen(){"
         "const nLocs=weatherData?.locations?.length||1;"
+        "const maxScreens=gifScreenEnabled?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
         "if(mainScreenOnly){"
         "currentLoc=(currentLoc+1)%nLocs;currentScreen=0;}"  // Only change location, stay on main screen
         "else{"
         "currentScreen++;"
-        "if(currentScreen>=SCREENS_PER_LOC){currentScreen=0;currentLoc=(currentLoc+1)%nLocs;}}"
+        "if(currentScreen>=maxScreens){currentScreen=0;currentLoc=(currentLoc+1)%nLocs;}}"
         "render();}"
 
         "function prevScreen(){"
         "const nLocs=weatherData?.locations?.length||1;"
+        "const maxScreens=gifScreenEnabled?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
         "if(mainScreenOnly){"
         "currentLoc=(currentLoc+nLocs-1)%nLocs;currentScreen=0;}"
         "else{"
         "currentScreen--;"
-        "if(currentScreen<0){currentScreen=SCREENS_PER_LOC-1;currentLoc=(currentLoc+nLocs-1)%nLocs;}}"
+        "if(currentScreen<0){currentScreen=maxScreens-1;currentLoc=(currentLoc+nLocs-1)%nLocs;}}"
         "render();}"
 
         "function toggleAuto(){"
@@ -1422,6 +1457,7 @@ void handleDisplayPreview() {
         "async function fetchConfig(){"
         "try{const r=await fetch('/api/config');config=await r.json();"
         "mainScreenOnly=config.mainScreenOnly||false;"
+        "gifScreenEnabled=config.gifScreenEnabled||false;"
         "console.log('Config:',config);"
         "}catch(e){console.error('Config fetch failed',e);}}"
 
