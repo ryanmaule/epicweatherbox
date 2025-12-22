@@ -1,0 +1,432 @@
+/**
+ * WeatherBuddy Firmware
+ *
+ * Custom firmware for SmallTV-Ultra hardware
+ *
+ * Features:
+ * - WiFi setup via captive portal
+ * - Web-based configuration
+ * - 7-day weather forecast (vs original 3-day)
+ * - Dual location weather support
+ * - Time display with NTP sync
+ * - OTA firmware updates (ArduinoOTA + Web)
+ *
+ * CRITICAL: This firmware includes OTA update capability.
+ * The USB-C port on SmallTV-Ultra is power-only (no data),
+ * so OTA is the ONLY way to update firmware after initial flash.
+ */
+
+#include <Arduino.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <WiFiManager.h>
+#include <ArduinoJson.h>
+#include <LittleFS.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+
+// Enable hardware watchdog
+extern "C" {
+    #include <user_interface.h>
+}
+
+// Local includes
+#include "config.h"
+#include "ota.h"
+// #include "display.h"  // TODO: Phase 2
+// #include "weather.h"  // TODO: Phase 5
+
+// Note: FIRMWARE_VERSION and DEVICE_NAME are defined in config.h
+
+// Objects
+ESP8266WebServer server(80);
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 0, 60000);
+
+// Watchdog timeout (8 seconds is max for ESP8266)
+#define WDT_TIMEOUT_SECONDS 8
+
+// Forward declarations
+void setupWiFi();
+void setupWebServer();
+void setupWatchdog();
+void handleRoot();
+void handleNotFound();
+void feedWatchdog();
+
+void setup() {
+    // Initialize serial first for debugging
+    Serial.begin(115200);
+    delay(100);  // Let serial stabilize
+
+    Serial.println();
+    Serial.println(F("================================================"));
+    Serial.printf_P(PSTR("%s Custom Firmware v%s\n"), DEVICE_NAME, FIRMWARE_VERSION);
+    Serial.println(F("================================================"));
+    Serial.println(F("[BOOT] Starting initialization..."));
+
+    // Initialize hardware watchdog
+    setupWatchdog();
+    Serial.println(F("[BOOT] Watchdog timer enabled"));
+
+    // Initialize LittleFS (SPIFFS is deprecated)
+    Serial.print(F("[BOOT] Mounting LittleFS... "));
+    if (!LittleFS.begin()) {
+        Serial.println(F("FAILED!"));
+        // Continue anyway - we can still work without filesystem
+    } else {
+        Serial.println(F("OK"));
+        FSInfo fs_info;
+        LittleFS.info(fs_info);
+        Serial.printf_P(PSTR("[BOOT] LittleFS: %u/%u bytes used\n"),
+                       fs_info.usedBytes, fs_info.totalBytes);
+    }
+
+    feedWatchdog();
+
+    // Initialize display
+    // TODO: Phase 2 - Display driver
+    // setupDisplay();
+    Serial.println(F("[BOOT] Display: TODO (Phase 2)"));
+
+    // Initialize WiFi (this can take a while)
+    Serial.println(F("[BOOT] Starting WiFi..."));
+    setupWiFi();
+
+    feedWatchdog();
+
+    // Only proceed if WiFi is connected
+    if (WiFi.status() == WL_CONNECTED) {
+        // Initialize OTA - CRITICAL for future updates!
+        Serial.println(F("[BOOT] Initializing OTA..."));
+        initArduinoOTA(OTA_HOSTNAME);
+
+        // Initialize NTP
+        Serial.println(F("[BOOT] Starting NTP client..."));
+        timeClient.begin();
+        timeClient.update();  // Force initial update
+
+        // Initialize web server (includes OTA web interface)
+        Serial.println(F("[BOOT] Starting web server..."));
+        setupWebServer();
+
+        // Initialize web OTA (add /update endpoint)
+        initWebOTA(&server);
+    }
+
+    feedWatchdog();
+
+    // Print startup summary
+    Serial.println(F("================================================"));
+    Serial.println(F("[BOOT] Initialization complete!"));
+    Serial.printf_P(PSTR("[BOOT] Free heap: %u bytes\n"), ESP.getFreeHeap());
+    Serial.printf_P(PSTR("[BOOT] Chip ID: %08X\n"), ESP.getChipId());
+    Serial.printf_P(PSTR("[BOOT] Flash size: %u bytes\n"), ESP.getFlashChipRealSize());
+
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.printf_P(PSTR("[BOOT] IP Address: %s\n"), WiFi.localIP().toString().c_str());
+        Serial.printf_P(PSTR("[BOOT] Web UI: http://%s/\n"), WiFi.localIP().toString().c_str());
+        Serial.printf_P(PSTR("[BOOT] OTA Update: http://%s/update\n"), WiFi.localIP().toString().c_str());
+    }
+    Serial.println(F("================================================"));
+}
+
+void loop() {
+    // Feed watchdog at start of loop
+    feedWatchdog();
+
+    // Handle OTA updates - CRITICAL, must be called frequently
+    handleOTA();
+
+    // Skip other processing during OTA to ensure stability
+    if (isOTAInProgress()) {
+        return;
+    }
+
+    // Handle web server
+    server.handleClient();
+
+    // Update NTP (library handles update interval internally)
+    timeClient.update();
+
+    // TODO: Phase 2 - Update display
+    // updateDisplay();
+
+    // TODO: Phase 5 - Check weather update interval
+    // updateWeather();
+
+    // Small yield to prevent watchdog issues
+    yield();
+}
+
+/**
+ * Setup hardware watchdog timer
+ * This will reset the ESP if it hangs for too long
+ */
+void setupWatchdog() {
+    // Disable software watchdog (we're using hardware)
+    ESP.wdtDisable();
+
+    // Enable hardware watchdog with 8-second timeout
+    ESP.wdtEnable(WDTO_8S);
+}
+
+/**
+ * Feed the watchdog timer
+ * Call this regularly in loop() to prevent reset
+ */
+void feedWatchdog() {
+    ESP.wdtFeed();
+    yield();  // Also yield to system tasks
+}
+
+/**
+ * Setup WiFi using WiFiManager
+ * Creates AP for configuration if no saved credentials
+ */
+void setupWiFi() {
+    WiFiManager wifiManager;
+
+    // Reset saved settings for testing (uncomment if needed)
+    // wifiManager.resetSettings();
+
+    // Set AP name
+    String apName = String(DEVICE_NAME);
+
+    // Set timeout for config portal (5 minutes)
+    wifiManager.setConfigPortalTimeout(300);
+
+    // Set minimum signal quality to show networks (%)
+    wifiManager.setMinimumSignalQuality(15);
+
+    // Set static IP if desired (optional)
+    // wifiManager.setSTAStaticIPConfig(IPAddress(192,168,1,99),
+    //                                   IPAddress(192,168,1,1),
+    //                                   IPAddress(255,255,255,0));
+
+    // Custom parameters could be added here for API keys, locations, etc.
+    // WiFiManagerParameter custom_api_key("apikey", "Weather API Key", "", 40);
+    // wifiManager.addParameter(&custom_api_key);
+
+    Serial.println(F("[WIFI] Starting WiFi Manager..."));
+    Serial.printf_P(PSTR("[WIFI] AP Name: %s\n"), apName.c_str());
+
+    // Feed watchdog before potentially long operation
+    feedWatchdog();
+
+    // Try to connect, or start config portal
+    // autoConnect will block until connected or timeout
+    if (!wifiManager.autoConnect(apName.c_str())) {
+        Serial.println(F("[WIFI] Failed to connect and hit timeout"));
+        Serial.println(F("[WIFI] Restarting in 3 seconds..."));
+        delay(3000);
+        ESP.restart();
+    }
+
+    Serial.println(F("[WIFI] Connected successfully!"));
+    Serial.printf_P(PSTR("[WIFI] SSID: %s\n"), WiFi.SSID().c_str());
+    Serial.printf_P(PSTR("[WIFI] IP: %s\n"), WiFi.localIP().toString().c_str());
+    Serial.printf_P(PSTR("[WIFI] RSSI: %d dBm\n"), WiFi.RSSI());
+    Serial.printf_P(PSTR("[WIFI] MAC: %s\n"), WiFi.macAddress().c_str());
+}
+
+/**
+ * Setup web server routes
+ */
+void setupWebServer() {
+    // Main page
+    server.on("/", HTTP_GET, handleRoot);
+
+    // API endpoints
+    server.on("/api/status", HTTP_GET, []() {
+        JsonDocument doc;
+        doc["version"] = FIRMWARE_VERSION;
+        doc["device"] = DEVICE_NAME;
+        doc["heap"] = ESP.getFreeHeap();
+        doc["uptime"] = millis() / 1000;
+        doc["ip"] = WiFi.localIP().toString();
+        doc["rssi"] = WiFi.RSSI();
+        doc["ssid"] = WiFi.SSID();
+        doc["mac"] = WiFi.macAddress();
+        doc["chipId"] = String(ESP.getChipId(), HEX);
+        doc["flashSize"] = ESP.getFlashChipRealSize();
+        doc["sketchSize"] = ESP.getSketchSize();
+        doc["freeSketchSpace"] = ESP.getFreeSketchSpace();
+
+        String response;
+        serializeJson(doc, response);
+        server.send(200, "application/json", response);
+    });
+
+    server.on("/api/time", HTTP_GET, []() {
+        JsonDocument doc;
+        doc["epoch"] = timeClient.getEpochTime();
+        doc["formatted"] = timeClient.getFormattedTime();
+        doc["day"] = timeClient.getDay();
+
+        String response;
+        serializeJson(doc, response);
+        server.send(200, "application/json", response);
+    });
+
+    // Version endpoint (original firmware compatibility)
+    server.on("/v.json", HTTP_GET, []() {
+        JsonDocument doc;
+        doc["v"] = FIRMWARE_VERSION;
+
+        String response;
+        serializeJson(doc, response);
+        server.send(200, "application/json", response);
+    });
+
+    // Reboot endpoint
+    server.on("/reboot", HTTP_GET, []() {
+        server.send(200, "text/html",
+            F("<!DOCTYPE html><html><head>"
+              "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+              "<style>body{font-family:sans-serif;background:#1a1a2e;color:#eee;"
+              "display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}"
+              ".box{text-align:center;}</style></head><body><div class='box'>"
+              "<h1>Rebooting...</h1><p>Please wait, redirecting in 10 seconds.</p>"
+              "<script>setTimeout(function(){location.href='/';},10000);</script>"
+              "</div></body></html>"));
+        delay(500);
+        ESP.restart();
+    });
+
+    // Reset WiFi settings endpoint
+    server.on("/reset", HTTP_GET, []() {
+        server.send(200, "text/html",
+            F("<!DOCTYPE html><html><head>"
+              "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+              "<style>body{font-family:sans-serif;background:#1a1a2e;color:#eee;"
+              "display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}"
+              ".box{text-align:center;}</style></head><body><div class='box'>"
+              "<h1>Factory Reset</h1><p>WiFi settings cleared. Rebooting...</p>"
+              "<p>Connect to WeatherBuddy AP to reconfigure.</p>"
+              "</div></body></html>"));
+        delay(500);
+
+        // Clear WiFi credentials
+        WiFi.disconnect(true);
+        delay(1000);
+        ESP.restart();
+    });
+
+    // Not found handler
+    server.onNotFound(handleNotFound);
+
+    // Start server
+    server.begin();
+    Serial.println(F("[WEB] HTTP server started on port 80"));
+}
+
+/**
+ * Handle root page
+ */
+void handleRoot() {
+    // Using F() macro to store strings in flash
+    String html = F("<!DOCTYPE html><html><head>"
+        "<meta charset='UTF-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<title>WeatherBuddy</title>"
+        "<style>"
+        "*{box-sizing:border-box;}"
+        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
+        "margin:0;padding:20px;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);"
+        "color:#eee;min-height:100vh;}"
+        ".container{max-width:600px;margin:0 auto;}"
+        "h1{color:#00d4ff;text-align:center;margin-bottom:30px;}"
+        ".card{background:rgba(255,255,255,0.05);border-radius:12px;padding:20px;"
+        "margin-bottom:20px;border:1px solid rgba(255,255,255,0.1);}"
+        ".card h3{margin-top:0;color:#00d4ff;}"
+        ".info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}"
+        ".info-item{padding:10px;background:rgba(0,0,0,0.2);border-radius:8px;}"
+        ".info-label{font-size:12px;color:#888;margin-bottom:4px;}"
+        ".info-value{font-size:16px;font-weight:500;}"
+        "a{color:#00d4ff;text-decoration:none;}"
+        "a:hover{text-decoration:underline;}"
+        ".links{display:flex;flex-wrap:wrap;gap:10px;}"
+        ".link-btn{display:inline-block;padding:12px 20px;background:#00d4ff;color:#1a1a2e;"
+        "border-radius:8px;font-weight:600;transition:all 0.3s;}"
+        ".link-btn:hover{background:#00a8cc;text-decoration:none;transform:translateY(-2px);}"
+        ".link-btn.warning{background:#ffc107;}"
+        ".link-btn.danger{background:#dc3545;color:#fff;}"
+        "</style></head><body>"
+        "<div class='container'>"
+        "<h1>WeatherBuddy</h1>");
+
+    html += F("<div class='card'><h3>Device Status</h3><div class='info-grid'>");
+    html += F("<div class='info-item'><div class='info-label'>Firmware</div><div class='info-value'>");
+    html += FIRMWARE_VERSION;
+    html += F("</div></div>");
+    html += F("<div class='info-item'><div class='info-label'>IP Address</div><div class='info-value'>");
+    html += WiFi.localIP().toString();
+    html += F("</div></div>");
+    html += F("<div class='info-item'><div class='info-label'>Free Memory</div><div class='info-value'>");
+    html += String(ESP.getFreeHeap());
+    html += F(" bytes</div></div>");
+    html += F("<div class='info-item'><div class='info-label'>Uptime</div><div class='info-value'>");
+
+    // Format uptime nicely
+    unsigned long uptime = millis() / 1000;
+    if (uptime < 60) {
+        html += String(uptime) + "s";
+    } else if (uptime < 3600) {
+        html += String(uptime / 60) + "m " + String(uptime % 60) + "s";
+    } else {
+        html += String(uptime / 3600) + "h " + String((uptime % 3600) / 60) + "m";
+    }
+
+    html += F("</div></div>");
+    html += F("<div class='info-item'><div class='info-label'>WiFi Signal</div><div class='info-value'>");
+    html += String(WiFi.RSSI());
+    html += F(" dBm</div></div>");
+    html += F("<div class='info-item'><div class='info-label'>Time</div><div class='info-value'>");
+    html += timeClient.getFormattedTime();
+    html += F("</div></div></div></div>");
+
+    html += F("<div class='card'><h3>Quick Links</h3><div class='links'>"
+        "<a href='/update' class='link-btn'>Firmware Update</a>"
+        "<a href='/api/status' class='link-btn'>API Status</a>"
+        "<a href='/reboot' class='link-btn warning'>Reboot</a>"
+        "<a href='/reset' class='link-btn danger'>Factory Reset</a>"
+        "</div></div>");
+
+    html += F("<div class='card'><h3>API Endpoints</h3>"
+        "<p><a href='/api/status'>/api/status</a> - Device status JSON</p>"
+        "<p><a href='/api/time'>/api/time</a> - Current time JSON</p>"
+        "<p><a href='/v.json'>/v.json</a> - Firmware version</p>"
+        "</div>");
+
+    html += F("<div class='card'><h3>Development Status</h3>"
+        "<p>Custom weather station firmware for SmallTV hardware.</p>"
+        "<ul>"
+        "<li>Phase 1: OTA Updates - <strong style='color:#00ff88'>Complete</strong></li>"
+        "<li>Phase 2: Display Driver - Pending</li>"
+        "<li>Phase 3: WiFi & Web Server - Pending</li>"
+        "<li>Phase 4: Time & NTP - In Progress</li>"
+        "<li>Phase 5: Weather API - Pending</li>"
+        "<li>Phase 6: Dual Location - Pending</li>"
+        "</ul></div>");
+
+    html += F("</div></body></html>");
+
+    server.send(200, "text/html", html);
+}
+
+/**
+ * Handle 404
+ */
+void handleNotFound() {
+    String message = F("<!DOCTYPE html><html><head>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<style>body{font-family:sans-serif;background:#1a1a2e;color:#eee;"
+        "display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}"
+        ".box{text-align:center;}a{color:#00d4ff;}</style></head><body>"
+        "<div class='box'><h1>404 - Not Found</h1>"
+        "<p>The requested URL was not found.</p>"
+        "<p><a href='/'>Go to Home</a></p></div></body></html>");
+
+    server.send(404, "text/html", message);
+}
