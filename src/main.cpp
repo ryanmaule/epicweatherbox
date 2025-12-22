@@ -19,6 +19,7 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266HTTPClient.h>
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
@@ -414,6 +415,101 @@ void setupWebServer() {
         server.send(200, "application/json", response);
     });
 
+    // Geocoding API - search for city by name
+    server.on("/api/geocode", HTTP_GET, []() {
+        if (!server.hasArg("q")) {
+            server.send(400, "application/json", "{\"error\":\"Missing query parameter 'q'\"}");
+            return;
+        }
+
+        String query = server.arg("q");
+        if (query.length() < 2) {
+            server.send(400, "application/json", "{\"error\":\"Query too short\"}");
+            return;
+        }
+
+        // URL encode the query
+        String encodedQuery = "";
+        for (size_t i = 0; i < query.length(); i++) {
+            char c = query.charAt(i);
+            if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+                encodedQuery += c;
+            } else if (c == ' ') {
+                encodedQuery += "%20";
+            } else {
+                char buf[4];
+                snprintf(buf, sizeof(buf), "%%%02X", (unsigned char)c);
+                encodedQuery += buf;
+            }
+        }
+
+        // Build Open-Meteo geocoding URL
+        String url = "http://geocoding-api.open-meteo.com/v1/search?name=";
+        url += encodedQuery;
+        url += "&count=5&language=en&format=json";
+
+        Serial.printf("[GEOCODE] Searching: %s\n", query.c_str());
+
+        WiFiClient client;
+        HTTPClient http;
+        http.setTimeout(10000);
+
+        if (!http.begin(client, url)) {
+            server.send(500, "application/json", "{\"error\":\"HTTP begin failed\"}");
+            return;
+        }
+
+        int httpCode = http.GET();
+        if (httpCode != HTTP_CODE_OK) {
+            http.end();
+            server.send(500, "application/json", "{\"error\":\"Geocoding request failed\"}");
+            return;
+        }
+
+        String payload = http.getString();
+        http.end();
+
+        // Parse and simplify the response
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, payload);
+        if (error) {
+            server.send(500, "application/json", "{\"error\":\"JSON parse failed\"}");
+            return;
+        }
+
+        // Build simplified response
+        JsonDocument response;
+        JsonArray results = response["results"].to<JsonArray>();
+
+        JsonArray apiResults = doc["results"];
+        if (apiResults) {
+            for (JsonObject r : apiResults) {
+                JsonObject item = results.add<JsonObject>();
+                item["name"] = r["name"];
+                item["lat"] = r["latitude"];
+                item["lon"] = r["longitude"];
+
+                // Build display string: "City, State, Country"
+                String display = r["name"].as<String>();
+                if (r.containsKey("admin1") && !r["admin1"].isNull()) {
+                    display += ", ";
+                    display += r["admin1"].as<String>();
+                }
+                if (r.containsKey("country") && !r["country"].isNull()) {
+                    display += ", ";
+                    display += r["country"].as<String>();
+                }
+                item["display"] = display;
+            }
+        }
+
+        response["count"] = results.size();
+
+        String responseStr;
+        serializeJson(response, responseStr);
+        server.send(200, "application/json", responseStr);
+    });
+
     // Reboot endpoint
     server.on("/reboot", HTTP_GET, []() {
         server.send(200, "text/html",
@@ -549,7 +645,7 @@ void handleRoot() {
 }
 
 /**
- * Handle admin page - minimal location config
+ * Handle admin page - minimal location config with city search
  */
 void handleAdmin() {
     const WeatherData& w = getPrimaryWeather();
@@ -568,7 +664,11 @@ void handleAdmin() {
         "button{background:#00d4ff;color:#1a1a2e;border:none;padding:12px 20px;border-radius:6px;cursor:pointer;margin-top:15px}"
         "button:hover{background:#00a8cc}.status{padding:10px;border-radius:6px;margin-top:10px;display:none}"
         ".ok{background:rgba(0,200,100,0.2);color:#0c6}.err{background:rgba(200,50,50,0.2);color:#f66}"
-        "a{color:#00d4ff}.hint{font-size:0.8em;color:#666;margin-top:5px}</style></head><body><div class='c'><h1>EpicWeatherBox</h1>");
+        "a{color:#00d4ff}.hint{font-size:0.8em;color:#666;margin-top:5px}"
+        ".search-box{display:flex;gap:10px}.search-box input{flex:1}.search-box button{margin-top:0}"
+        ".results{max-height:200px;overflow-y:auto;margin-top:10px}"
+        ".result{padding:10px;background:rgba(0,0,0,0.3);margin:5px 0;border-radius:6px;cursor:pointer}"
+        ".result:hover{background:rgba(0,212,255,0.2)}.result small{color:#888}</style></head><body><div class='c'><h1>EpicWeatherBox</h1>");
 
     // Current weather status
     html += F("<div class='card'><h3>Current Weather</h3>");
@@ -581,19 +681,25 @@ void handleAdmin() {
     }
     html += F("</div>");
 
+    // City search section
+    html += F("<div class='card'><h3>Find Location</h3>"
+        "<div class='search-box'><input type='text' id='search' placeholder='Type city name (e.g. Aurora, CA)'>"
+        "<button type='button' onclick='searchCity()'>Search</button></div>"
+        "<div id='results' class='results'></div>"
+        "<p class='hint'>Search for a city and click a result to fill in the coordinates automatically</p></div>");
+
     // Location config form
-    html += F("<div class='card'><h3>Location</h3>"
+    html += F("<div class='card'><h3>Location Settings</h3>"
         "<form id='f'><label>Display Name</label>"
         "<input type='text' id='name' value='");
     html += w.locationName;
-    html += F("'><p class='hint'>Name shown on display (e.g. \"Aurora\" or \"Home\")</p>"
-        "<div class='row'><div><label>Latitude</label>"
+    html += F("'><div class='row'><div><label>Latitude</label>"
         "<input type='number' id='lat' step='0.0001' value='");
     html += String(w.latitude, 4);
     html += F("'></div><div><label>Longitude</label>"
         "<input type='number' id='lon' step='0.0001' value='");
     html += String(w.longitude, 4);
-    html += F("'></div></div><p class='hint'>Find coordinates at latlong.net or use button below</p>"
+    html += F("'></div></div>"
         "<label>Temperature</label><select id='unit'>"
         "<option value='f'");
     html += celsius ? "" : " selected";
@@ -601,7 +707,7 @@ void handleAdmin() {
     html += celsius ? " selected" : "";
     html += F(">Celsius</option></select>"
         "<button type='submit'>Save & Refresh</button>"
-        "<button type='button' onclick='geo()' style='background:#444;margin-left:10px'>Use My Location</button>"
+        "<button type='button' onclick='geo()' style='background:#444;margin-left:10px'>Use GPS</button>"
         "<div id='st' class='status'></div></form></div>");
 
     // Links
@@ -611,6 +717,24 @@ void handleAdmin() {
 
     // JavaScript
     html += F("<script>"
+        "async function searchCity(){"
+        "const q=document.getElementById('search').value.trim();"
+        "if(q.length<2){alert('Enter at least 2 characters');return;}"
+        "const res=document.getElementById('results');res.innerHTML='Searching...';"
+        "try{const r=await fetch('/api/geocode?q='+encodeURIComponent(q));"
+        "const d=await r.json();if(d.error){res.innerHTML='<p>'+d.error+'</p>';return;}"
+        "if(!d.results||d.results.length===0){res.innerHTML='<p>No results found</p>';return;}"
+        "res.innerHTML='';d.results.forEach(loc=>{"
+        "const div=document.createElement('div');div.className='result';"
+        "div.innerHTML=loc.display+'<br><small>'+loc.lat.toFixed(4)+', '+loc.lon.toFixed(4)+'</small>';"
+        "div.onclick=()=>selectLocation(loc);res.appendChild(div);});"
+        "}catch(e){res.innerHTML='<p>Search failed</p>';}}"
+        "function selectLocation(loc){"
+        "document.getElementById('name').value=loc.name;"
+        "document.getElementById('lat').value=loc.lat.toFixed(4);"
+        "document.getElementById('lon').value=loc.lon.toFixed(4);"
+        "document.getElementById('results').innerHTML='<p style=\"color:#0c6\">Selected: '+loc.display+'</p>';}"
+        "document.getElementById('search').onkeypress=e=>{if(e.key==='Enter'){e.preventDefault();searchCity();}};"
         "document.getElementById('f').onsubmit=async e=>{"
         "e.preventDefault();const s=document.getElementById('st');"
         "s.style.display='block';s.className='status';s.textContent='Saving...';"
