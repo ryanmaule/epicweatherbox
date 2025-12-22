@@ -693,6 +693,28 @@ void setupWebServer() {
         server.send(200, "application/json", response);
     });
 
+    // Serve boot GIF file
+    server.on("/api/gif/boot", HTTP_GET, []() {
+        if (LittleFS.exists("/boot.gif")) {
+            File f = LittleFS.open("/boot.gif", "r");
+            server.streamFile(f, "image/gif");
+            f.close();
+        } else {
+            server.send(404, "text/plain", "Not found");
+        }
+    });
+
+    // Serve screen GIF file
+    server.on("/api/gif/screen", HTTP_GET, []() {
+        if (LittleFS.exists("/screen.gif")) {
+            File f = LittleFS.open("/screen.gif", "r");
+            server.streamFile(f, "image/gif");
+            f.close();
+        } else {
+            server.send(404, "text/plain", "Not found");
+        }
+    });
+
     // Reboot endpoint
     server.on("/reboot", HTTP_GET, []() {
         server.send(200, "text/html",
@@ -1209,7 +1231,8 @@ void handleDisplayPreview() {
         "ctx.imageSmoothingEnabled=false;"
         "let weatherData=null,config=null,currentLoc=0,currentScreen=0,autoPlay=true,autoTimer=null;"
         "let mainScreenOnly=false,darkMode=true,gifScreenEnabled=false;"
-        "const SCREENS_PER_LOC=4;"
+        "let bootGifExists=false,screenGifExists=false,bootGifImg=null,screenGifImg=null;"
+        "const SCREENS_PER_LOC=5;"
 
         // Colors - dark and light themes
         "const DARK={BG:'#0a0a14',CARD:'#141428',WHITE:'#FFFFFF',GRAY:'#888888',CYAN:'#00D4FF',ORANGE:'#FF6B35',BLUE:'#4DA8DA',YELLOW:'#FFE000',GREEN:'#00FF88'};"
@@ -1361,7 +1384,26 @@ void handleDisplayPreview() {
         // Screen dots
         "drawDots();}"
 
-        // Draw GIF animation screen (placeholder)
+        // Draw boot screen
+        "function drawBootScreen(){"
+        "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
+        // Show boot GIF if exists, otherwise show logo
+        "if(bootGifImg&&bootGifImg.complete){"
+        "const w=bootGifImg.width,h=bootGifImg.height;"
+        "const sc=Math.min(200/w,200/h,1);"
+        "const dw=w*sc,dh=h*sc;"
+        "ctx.drawImage(bootGifImg,(240-dw)/2,(240-dh)/2,dw,dh);"
+        "}else{"
+        // Default boot screen - title and version
+        "ctx.fillStyle=C.CYAN;ctx.font='bold 28px sans-serif';ctx.textAlign='center';"
+        "ctx.fillText('EpicWeatherBox',120,100);"
+        "ctx.fillStyle=C.GRAY;ctx.font='16px sans-serif';"
+        "ctx.fillText('v0.2.0-dev',120,130);"
+        "ctx.font='12px sans-serif';ctx.fillStyle='#666';"
+        "ctx.fillText(bootGifExists?'Loading boot GIF...':'No boot GIF uploaded',120,170);}"
+        "drawDots();}"
+
+        // Draw GIF animation screen
         "function drawGifScreen(){"
         "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
         // Time header
@@ -1370,13 +1412,21 @@ void handleDisplayPreview() {
         "ctx.fillText(t.time+' '+t.ampm,120,35);"
         // Separator line
         "ctx.strokeStyle=C.GRAY;ctx.beginPath();ctx.moveTo(20,55);ctx.lineTo(220,55);ctx.stroke();"
+        // Show screen GIF if exists
+        "if(screenGifImg&&screenGifImg.complete){"
+        "const w=screenGifImg.width,h=screenGifImg.height;"
+        "const maxW=200,maxH=170;"
+        "const sc=Math.min(maxW/w,maxH/h,1);"
+        "const dw=w*sc,dh=h*sc;"
+        "ctx.drawImage(screenGifImg,(240-dw)/2,60+(maxH-dh)/2,dw,dh);"
+        "}else{"
         // GIF placeholder area
         "ctx.strokeStyle=C.CYAN;ctx.lineWidth=2;ctx.setLineDash([5,5]);"
         "ctx.strokeRect(40,70,160,140);ctx.setLineDash([]);"
         "ctx.fillStyle=C.GRAY;ctx.font='16px sans-serif';"
-        "ctx.fillText('[Animated GIF]',120,145);"
+        "ctx.fillText(screenGifExists?'Loading GIF...':'[No GIF Uploaded]',120,145);"
         "ctx.font='12px sans-serif';ctx.fillStyle='#666';"
-        "ctx.fillText('Upload via Admin panel',120,170);"
+        "ctx.fillText('Upload via Admin panel',120,170);}"
         // Screen dots
         "drawDots();}"
 
@@ -1402,8 +1452,8 @@ void handleDisplayPreview() {
         // Main render
         "function render(){"
         "ctx.clearRect(0,0,240,240);"
-        "const names=['Current Weather','Forecast Days 1-3','Forecast Days 4-6','GIF Animation'];"
-        "document.getElementById('screenLabel').textContent=names[currentScreen]+(currentScreen===3&&!gifScreenEnabled?' (disabled)':'');"
+        "const names=['Boot Screen','Current Weather','Forecast Days 1-3','Forecast Days 4-6','GIF Animation'];"
+        "document.getElementById('screenLabel').textContent=names[currentScreen]+(currentScreen===4&&!gifScreenEnabled?' (disabled)':'');"
         "if(weatherData?.locations){"
         "const loc=weatherData.locations[currentLoc];"
         "document.getElementById('locName').textContent=loc?.location||'Unknown';"
@@ -1411,10 +1461,11 @@ void handleDisplayPreview() {
         "document.getElementById('locTotal').textContent=weatherData.locations.length;}"
         "updateHtmlDots();"
         "switch(currentScreen){"
-        "case 0:drawCurrent();break;"
-        "case 1:drawForecast(0);break;"
-        "case 2:drawForecast(3);break;"
-        "case 3:drawGifScreen();break;}}"
+        "case 0:drawBootScreen();break;"
+        "case 1:drawCurrent();break;"
+        "case 2:drawForecast(0);break;"
+        "case 3:drawForecast(3);break;"
+        "case 4:drawGifScreen();break;}}"
 
         // Navigation
         "function nextScreen(){"
@@ -1461,6 +1512,22 @@ void handleDisplayPreview() {
         "console.log('Config:',config);"
         "}catch(e){console.error('Config fetch failed',e);}}"
 
+        // Fetch GIF status and load images
+        "async function fetchGifStatus(){"
+        "try{const r=await fetch('/api/gif/status');const d=await r.json();"
+        "bootGifExists=d.bootGifExists||false;"
+        "screenGifExists=d.screenGifExists||false;"
+        "console.log('GIF status:',d);"
+        // Load boot GIF if exists
+        "if(bootGifExists){"
+        "bootGifImg=new Image();bootGifImg.onload=()=>render();"
+        "bootGifImg.src='/api/gif/boot?t='+Date.now();}"
+        // Load screen GIF if exists
+        "if(screenGifExists){"
+        "screenGifImg=new Image();screenGifImg.onload=()=>render();"
+        "screenGifImg.src='/api/gif/screen?t='+Date.now();}"
+        "}catch(e){console.error('GIF status fetch failed',e);}}"
+
         // Fetch weather
         "async function fetchWeather(){"
         "try{const r=await fetch('/api/weather');weatherData=await r.json();"
@@ -1470,7 +1537,7 @@ void handleDisplayPreview() {
         "function refreshWeather(){fetch('/api/weather/refresh').then(()=>setTimeout(fetchWeather,2000));}"
 
         // Init
-        "fetchConfig().then(()=>fetchWeather());if(autoPlay)startAuto();setInterval(fetchWeather,60000);"
+        "fetchConfig().then(()=>{fetchGifStatus();fetchWeather();});if(autoPlay)startAuto();setInterval(fetchWeather,60000);"
         "</script>");
 
     html += F("</div></body></html>");
