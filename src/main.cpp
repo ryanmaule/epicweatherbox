@@ -342,6 +342,9 @@ void setupWebServer() {
             s["enabled"] = false;
         }
 
+        // Display settings
+        doc["useCelsius"] = getUseCelsius();
+
         String response;
         serializeJson(doc, response);
         server.send(200, "application/json", response);
@@ -384,6 +387,11 @@ void setupWebServer() {
                     setSecondaryLocation(name, lat, lon);
                 }
             }
+        }
+
+        // Update display settings
+        if (doc.containsKey("useCelsius")) {
+            setUseCelsius(doc["useCelsius"] | false);
         }
 
         // Save and refresh weather
@@ -545,6 +553,8 @@ void handleRoot() {
  */
 void handleAdmin() {
     const WeatherData& w = getPrimaryWeather();
+    bool celsius = getUseCelsius();
+    const char* unit = celsius ? "C" : "F";
 
     String html = F("<!DOCTYPE html><html><head><meta charset='UTF-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -553,18 +563,18 @@ void handleAdmin() {
         ".c{max-width:500px;margin:0 auto}h1{color:#00d4ff;text-align:center}"
         ".card{background:rgba(255,255,255,0.05);border-radius:10px;padding:15px;margin-bottom:15px}"
         ".card h3{color:#00d4ff;margin-top:0}label{display:block;margin:10px 0 5px;color:#aaa;font-size:0.9em}"
-        "input{width:100%;padding:10px;border:1px solid #333;border-radius:6px;background:#2a2a4e;color:#eee}"
+        "input,select{width:100%;padding:10px;border:1px solid #333;border-radius:6px;background:#2a2a4e;color:#eee}"
         ".row{display:grid;grid-template-columns:1fr 1fr;gap:10px}"
         "button{background:#00d4ff;color:#1a1a2e;border:none;padding:12px 20px;border-radius:6px;cursor:pointer;margin-top:15px}"
         "button:hover{background:#00a8cc}.status{padding:10px;border-radius:6px;margin-top:10px;display:none}"
         ".ok{background:rgba(0,200,100,0.2);color:#0c6}.err{background:rgba(200,50,50,0.2);color:#f66}"
-        "a{color:#00d4ff}</style></head><body><div class='c'><h1>EpicWeatherBox</h1>");
+        "a{color:#00d4ff}.hint{font-size:0.8em;color:#666;margin-top:5px}</style></head><body><div class='c'><h1>EpicWeatherBox</h1>");
 
     // Current weather status
     html += F("<div class='card'><h3>Current Weather</h3>");
     if (w.valid) {
         html += String(w.locationName) + F(": ");
-        html += String((int)w.current.temperature) + F("°F, ");
+        html += String((int)w.current.temperature) + "°" + unit + ", ";
         html += conditionToString(w.current.condition);
     } else {
         html += F("No data - configure location below");
@@ -573,16 +583,24 @@ void handleAdmin() {
 
     // Location config form
     html += F("<div class='card'><h3>Location</h3>"
-        "<form id='f'><label>City Name</label>"
+        "<form id='f'><label>Display Name</label>"
         "<input type='text' id='name' value='");
     html += w.locationName;
-    html += F("'><div class='row'><div><label>Latitude</label>"
+    html += F("'><p class='hint'>Name shown on display (e.g. \"Aurora\" or \"Home\")</p>"
+        "<div class='row'><div><label>Latitude</label>"
         "<input type='number' id='lat' step='0.0001' value='");
     html += String(w.latitude, 4);
     html += F("'></div><div><label>Longitude</label>"
         "<input type='number' id='lon' step='0.0001' value='");
     html += String(w.longitude, 4);
-    html += F("'></div></div><button type='submit'>Save & Refresh</button>"
+    html += F("'></div></div><p class='hint'>Find coordinates at latlong.net or use button below</p>"
+        "<label>Temperature</label><select id='unit'>"
+        "<option value='f'");
+    html += celsius ? "" : " selected";
+    html += F(">Fahrenheit</option><option value='c'");
+    html += celsius ? " selected" : "";
+    html += F(">Celsius</option></select>"
+        "<button type='submit'>Save & Refresh</button>"
         "<button type='button' onclick='geo()' style='background:#444;margin-left:10px'>Use My Location</button>"
         "<div id='st' class='status'></div></form></div>");
 
@@ -599,7 +617,8 @@ void handleAdmin() {
         "try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},"
         "body:JSON.stringify({primary:{name:document.getElementById('name').value,"
         "lat:parseFloat(document.getElementById('lat').value),"
-        "lon:parseFloat(document.getElementById('lon').value)}})});"
+        "lon:parseFloat(document.getElementById('lon').value)},"
+        "useCelsius:document.getElementById('unit').value==='c'})});"
         "const d=await r.json();s.className='status '+(d.success?'ok':'err');"
         "s.textContent=d.message;if(d.success)setTimeout(()=>location.reload(),2000);"
         "}catch(e){s.className='status err';s.textContent='Error';}};"

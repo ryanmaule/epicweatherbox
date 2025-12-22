@@ -23,6 +23,9 @@ static WeatherData secondaryWeather;
 static WeatherLocation primaryLocation = {"Seattle", 47.6062, -122.3321, true};
 static WeatherLocation secondaryLocation = {"Portland", 45.5152, -122.6784, false};
 
+// Display settings
+static bool useCelsius = false;  // false = Fahrenheit, true = Celsius
+
 // Timing
 static unsigned long lastUpdateTime = 0;
 static bool initialized = false;
@@ -138,7 +141,7 @@ static String buildApiUrl(float lat, float lon) {
     url += "&longitude=" + String(lon, 4);
     url += "&current_weather=true";
     url += "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weathercode,windspeed_10m_max";
-    url += "&temperature_unit=fahrenheit";
+    url += useCelsius ? "&temperature_unit=celsius" : "&temperature_unit=fahrenheit";
     url += "&windspeed_unit=mph";
     url += "&precipitation_unit=inch";
     url += "&timezone=auto";
@@ -415,6 +418,20 @@ unsigned long getNextUpdateIn() {
     return WEATHER_UPDATE_INTERVAL_MS - elapsed;
 }
 
+/**
+ * Set temperature unit
+ */
+void setUseCelsius(bool celsius) {
+    useCelsius = celsius;
+}
+
+/**
+ * Get temperature unit setting
+ */
+bool getUseCelsius() {
+    return useCelsius;
+}
+
 // =============================================================================
 // CONFIGURATION PERSISTENCE
 // =============================================================================
@@ -438,6 +455,9 @@ bool saveWeatherConfig() {
     secondary["lat"] = secondaryLocation.latitude;
     secondary["lon"] = secondaryLocation.longitude;
     secondary["enabled"] = secondaryLocation.enabled;
+
+    // Display settings
+    doc["useCelsius"] = useCelsius;
 
     File file = LittleFS.open(WEATHER_CONFIG_FILE, "w");
     if (!file) {
@@ -496,8 +516,12 @@ bool loadWeatherConfig() {
         secondaryLocation.enabled = secondary["enabled"] | false;
     }
 
-    Serial.printf("[WEATHER] Config loaded: %s (%.2f, %.2f)\n",
-                  primaryLocation.name, primaryLocation.latitude, primaryLocation.longitude);
+    // Load display settings
+    useCelsius = doc["useCelsius"] | false;
+
+    Serial.printf("[WEATHER] Config loaded: %s (%.2f, %.2f) %s\n",
+                  primaryLocation.name, primaryLocation.latitude, primaryLocation.longitude,
+                  useCelsius ? "Celsius" : "Fahrenheit");
 
     return true;
 }

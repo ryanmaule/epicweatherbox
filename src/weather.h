@@ -192,6 +192,16 @@ bool isSecondaryLocationEnabled();
 unsigned long getNextUpdateIn();
 
 /**
+ * Set temperature unit (true = Celsius, false = Fahrenheit)
+ */
+void setUseCelsius(bool celsius);
+
+/**
+ * Get temperature unit setting
+ */
+bool getUseCelsius();
+
+/**
  * Convert WMO weather code to simplified condition
  */
 WeatherCondition weatherCodeToCondition(int code);
