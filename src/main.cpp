@@ -917,12 +917,12 @@ void handleDisplayPreview() {
         "ctx.imageSmoothingEnabled=false;"  // Pixel art style
         "let weatherData=null;let currentLoc=0;let currentScreen=0;let autoPlay=true;let autoTimer=null;"
 
-        // Color constants matching display.h
+        // Color constants - dark mode theme
         "const COLORS={"
-        "BG_DAY:'#5DDF',BG_NIGHT:'#1926',"
-        "TEXT_WHITE:'#FFFFFF',TEXT_LIGHT:'#DEDEDE',TEXT_YELLOW:'#FFE000',TEXT_ORANGE:'#FD2000',"
-        "TEXT_BLUE:'#5D9F',TEXT_CYAN:'#00FFFF',CARD_BG:'#212040',SUN:'#FFE000',MOON:'#C0C0C0',"
-        "CLOUD:'#DEDEDE',RAIN:'#5D9FFF',SNOW:'#FFFFFF',THUNDER:'#FFE000'};"
+        "BG_DARK:'#1a1a2e',BG_CARD:'#16213e',"
+        "TEXT_WHITE:'#FFFFFF',TEXT_LIGHT:'#B0B0B0',TEXT_YELLOW:'#FFE000',TEXT_ORANGE:'#FF6B35',"
+        "TEXT_BLUE:'#4DA8DA',TEXT_CYAN:'#00D4FF',CARD_BG:'#0f3460',SUN:'#FFE000',MOON:'#C0C0C0',"
+        "CLOUD:'#CCCCCC',RAIN:'#4DA8DA',SNOW:'#FFFFFF',THUNDER:'#FFE000'};"
 
         // Weather icons as pixel art (32x32 simplified)
         "const ICONS={"
@@ -1245,58 +1245,69 @@ void handleDisplayPreview() {
         // Draw current weather screen
         "function drawCurrentWeather(){"
         "if(!weatherData||!weatherData.locations||weatherData.locations.length===0){"
-        "ctx.fillStyle='#333';ctx.fillRect(0,0,240,240);"
+        "ctx.fillStyle=COLORS.BG_DARK;ctx.fillRect(0,0,240,240);"
         "ctx.fillStyle='#FFF';ctx.font='16px sans-serif';ctx.textAlign='center';"
         "ctx.fillText('No weather data',120,120);return;}"
         "const loc=weatherData.locations[currentLoc]||weatherData.locations[0];"
         "const w=loc.current||{};"
         "const isDay=w.isDay!==false;"
-        "const useCelsius=true;"  // TODO: get from config
-        // Background
-        "ctx.fillStyle=isDay?'#5DDFFF':'#192640';ctx.fillRect(0,0,240,240);"
+        "const useCelsius=weatherData.useCelsius!==false;"
+        // Dark mode background
+        "ctx.fillStyle=COLORS.BG_DARK;ctx.fillRect(0,0,240,240);"
         // Time
         "const now=new Date();const h=now.getHours().toString().padStart(2,'0');"
         "const m=now.getMinutes().toString().padStart(2,'0');"
-        "ctx.fillStyle=COLORS.TEXT_WHITE;ctx.font='bold 48px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText(h+':'+m,120,55);"
+        "ctx.fillStyle=COLORS.TEXT_CYAN;ctx.font='bold 48px sans-serif';ctx.textAlign='center';"
+        "ctx.fillText(h+':'+m,120,50);"
         // Location name
-        "ctx.fillStyle=COLORS.TEXT_LIGHT;ctx.font='18px sans-serif';"
-        "ctx.fillText(loc.locationName||'Unknown',120,85);"
+        "ctx.fillStyle=COLORS.TEXT_LIGHT;ctx.font='16px sans-serif';"
+        "ctx.fillText(loc.locationName||'Unknown',120,75);"
         // Weather icon (centered, large)
         "const icon=getIcon(w.condition,isDay);"
         "const iconColor=getIconColor(w.condition,isDay);"
-        "drawIcon(icon,88,100,64,iconColor);"
+        "drawIcon(icon,88,90,64,iconColor);"
         // Temperature
         "const temp=w.temperature||0;"
-        "ctx.fillStyle=getTempColor(temp);ctx.font='bold 36px sans-serif';"
-        "ctx.fillText(formatTemp(temp,useCelsius),120,195);"
+        "ctx.fillStyle=getTempColor(temp);ctx.font='bold 40px sans-serif';"
+        "ctx.fillText(formatTemp(temp,useCelsius),120,185);"
         // Condition text
-        "ctx.fillStyle=COLORS.TEXT_LIGHT;ctx.font='14px sans-serif';"
+        "ctx.fillStyle=COLORS.TEXT_WHITE;ctx.font='16px sans-serif';"
         "const condNames=['Clear','Partly Cloudy','Cloudy','Fog','Drizzle','Rain','Freezing Rain','Snow','Thunderstorm','Unknown'];"
-        "ctx.fillText(condNames[w.condition||9],120,218);"
+        "ctx.fillText(condNames[w.condition||9],120,212);"
         // Location dots
         "const numLocs=weatherData.locations.length;"
         "if(numLocs>1){"
         "const startX=120-(numLocs-1)*6;"
         "for(let i=0;i<numLocs;i++){"
-        "ctx.fillStyle=i===currentLoc?COLORS.TEXT_WHITE:COLORS.TEXT_LIGHT;"
+        "ctx.fillStyle=i===currentLoc?COLORS.TEXT_CYAN:COLORS.TEXT_LIGHT;"
         "ctx.beginPath();ctx.arc(startX+i*12,232,3,0,Math.PI*2);ctx.fill();}}}"
+
+        // Get day name from date string or index
+        "function getDayName(dateStr,idx){"
+        "if(dateStr){"
+        "const d=new Date(dateStr);"
+        "return['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];}"
+        "const days=['Today','Tom','Day3','Day4','Day5','Day6','Day7'];"
+        "return days[idx]||'?';}"
 
         // Draw forecast screen
         "function drawForecast(startDay){"
         "if(!weatherData||!weatherData.locations)return;"
         "const loc=weatherData.locations[currentLoc]||weatherData.locations[0];"
         "const forecast=loc.forecast||[];"
-        "const isDay=loc.current?.isDay!==false;"
-        "const useCelsius=true;"
-        // Background
-        "ctx.fillStyle=isDay?'#5DDFFF':'#192640';ctx.fillRect(0,0,240,240);"
-        // Title
-        "ctx.fillStyle=COLORS.TEXT_WHITE;ctx.font='14px sans-serif';ctx.textAlign='center';"
-        "const title=(loc.locationName||'?')+' - Days '+(startDay+1)+'-'+(startDay+3);"
-        "ctx.fillText(title,120,22);"
+        "const useCelsius=weatherData.useCelsius!==false;"
+        // Dark mode background
+        "ctx.fillStyle=COLORS.BG_DARK;ctx.fillRect(0,0,240,240);"
+        // Time at top
+        "const now=new Date();const h=now.getHours().toString().padStart(2,'0');"
+        "const m=now.getMinutes().toString().padStart(2,'0');"
+        "ctx.fillStyle=COLORS.TEXT_CYAN;ctx.font='bold 28px sans-serif';ctx.textAlign='center';"
+        "ctx.fillText(h+':'+m,120,28);"
+        // Location name
+        "ctx.fillStyle=COLORS.TEXT_LIGHT;ctx.font='14px sans-serif';"
+        "ctx.fillText(loc.locationName||'Unknown',120,48);"
         // Draw 3 cards
-        "const cardW=70,cardH=160,cardSpace=8,startX=(240-3*cardW-2*cardSpace)/2;"
+        "const cardW=72,cardH=165,cardSpace=6,startX=(240-3*cardW-2*cardSpace)/2;"
         "for(let i=0;i<3;i++){"
         "const dayIdx=startDay+i;"
         "if(dayIdx>=forecast.length)continue;"
@@ -1304,30 +1315,44 @@ void handleDisplayPreview() {
         "const cardX=startX+i*(cardW+cardSpace);"
         // Card background
         "ctx.fillStyle=COLORS.CARD_BG;"
-        "ctx.beginPath();ctx.roundRect(cardX,45,cardW,cardH,4);ctx.fill();"
-        // Day name
-        "ctx.fillStyle=COLORS.TEXT_WHITE;ctx.font='12px sans-serif';"
-        "ctx.fillText(day.dayName||'?',cardX+cardW/2,62);"
+        "ctx.beginPath();ctx.roundRect(cardX,58,cardW,cardH,6);ctx.fill();"
+        // Day name (e.g., Mon, Tue, Wed)
+        "ctx.fillStyle=COLORS.TEXT_CYAN;ctx.font='bold 13px sans-serif';"
+        "const dayName=getDayName(day.date,dayIdx);"
+        "ctx.fillText(dayName,cardX+cardW/2,76);"
+        // Date (e.g., Dec 23)
+        "if(day.date){"
+        "const dt=new Date(day.date);"
+        "const dateStr=(dt.getMonth()+1)+'/'+(dt.getDate());"
+        "ctx.fillStyle=COLORS.TEXT_LIGHT;ctx.font='11px sans-serif';"
+        "ctx.fillText(dateStr,cardX+cardW/2,91);}"
         // Icon
         "const icon=getIcon(day.condition,true);"
         "const iconColor=getIconColor(day.condition,true);"
-        "drawIcon(icon,cardX+(cardW-32)/2,70,32,iconColor);"
-        // High temp
-        "ctx.fillStyle=getTempColor(day.tempMax||0);ctx.font='14px sans-serif';"
-        "ctx.fillText(formatTemp(day.tempMax||0,useCelsius),cardX+cardW/2,120);"
-        // Low temp
-        "ctx.fillStyle=getTempColor(day.tempMin||0);"
-        "ctx.fillText(formatTemp(day.tempMin||0,useCelsius),cardX+cardW/2,140);"
-        // Precip %
+        "drawIcon(icon,cardX+(cardW-32)/2,96,32,iconColor);"
+        // High temp (with up arrow indicator)
+        "ctx.fillStyle=COLORS.TEXT_ORANGE;ctx.font='bold 14px sans-serif';"
+        "ctx.fillText('↑'+formatTemp(day.tempMax||0,useCelsius),cardX+cardW/2,148);"
+        // Low temp (with down arrow indicator)
+        "ctx.fillStyle=COLORS.TEXT_BLUE;ctx.font='14px sans-serif';"
+        "ctx.fillText('↓'+formatTemp(day.tempMin||0,useCelsius),cardX+cardW/2,166);"
+        // Precip % (rain drop icon)
         "if((day.precipitationProb||0)>0){"
-        "ctx.fillStyle=COLORS.RAIN;ctx.font='11px sans-serif';"
-        "ctx.fillText(Math.round(day.precipitationProb)+'%',cardX+cardW/2,160);}}"
+        "ctx.fillStyle=COLORS.RAIN;ctx.font='12px sans-serif';"
+        "ctx.fillText('💧'+Math.round(day.precipitationProb)+'%',cardX+cardW/2,184);"
+        "}else{"
+        "ctx.fillStyle=COLORS.TEXT_LIGHT;ctx.font='11px sans-serif';"
+        "ctx.fillText('0%',cardX+cardW/2,184);}"
+        // Condition text for each card
+        "const condNames=['Clear','Cloudy','Cloudy','Fog','Drizzle','Rain','Rain','Snow','Thunder','?'];"
+        "ctx.fillStyle=COLORS.TEXT_LIGHT;ctx.font='10px sans-serif';"
+        "ctx.fillText(condNames[day.condition||9],cardX+cardW/2,206);}"
         // Location dots
         "const numLocs=weatherData.locations.length;"
         "if(numLocs>1){"
         "const dotsX=120-(numLocs-1)*6;"
         "for(let i=0;i<numLocs;i++){"
-        "ctx.fillStyle=i===currentLoc?COLORS.TEXT_WHITE:COLORS.TEXT_LIGHT;"
+        "ctx.fillStyle=i===currentLoc?COLORS.TEXT_CYAN:COLORS.TEXT_LIGHT;"
         "ctx.beginPath();ctx.arc(dotsX+i*12,232,3,0,Math.PI*2);ctx.fill();}}}"
 
         // Main render function
