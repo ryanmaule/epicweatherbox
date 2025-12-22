@@ -1003,26 +1003,26 @@ void handleDisplayPreview() {
         // Date + Location row
         "ctx.fillStyle=C.GRAY;ctx.font='14px sans-serif';"
         "ctx.fillText(fmtDate()+' • '+(loc.location||'Unknown'),120,68);"
-        // 2-column layout: left=icon, right=temp+condition
-        // Left column: large icon (80x80)
+        // 2-column layout: left=icon+condition, right=temp+hi/lo
+        // Content area: y=75 to y=220 (145px height), center at y=147
+        // Left column: icon (80x80) centered vertically, condition below
         "const ico=getIco(w.condition,isDay);"
-        "drawIco(ico.ico,20,90,80,ico.col);"
-        // Right column: temp + condition
-        "const temp=w.temperature||0;"
-        "ctx.textAlign='center';"
-        // Temperature - large and bold
-        "ctx.fillStyle=tempCol(temp);ctx.font='bold 52px sans-serif';"
-        "ctx.fillText(fmtTemp(temp,useC),165,145);"
-        // Condition text - below temp
-        "ctx.fillStyle=C.WHITE;ctx.font='16px sans-serif';"
+        "drawIco(ico.ico,20,95,80,ico.col);"
+        // Condition text under icon
+        "ctx.fillStyle=C.WHITE;ctx.font='14px sans-serif';ctx.textAlign='center';"
         "const cond=w.condition||'Unknown';"
-        "ctx.fillText(cond.length>12?cond.substring(0,12):cond,165,175);"
+        "ctx.fillText(cond.length>10?cond.substring(0,10):cond,60,190);"
+        // Right column: temp + hi/lo
+        "const temp=w.temperature||0;"
+        // Temperature - large and bold
+        "ctx.fillStyle=tempCol(temp);ctx.font='bold 56px sans-serif';"
+        "ctx.fillText(fmtTemp(temp,useC),165,145);"
         // Hi/Lo from forecast day 0 (today)
         "const fc=loc.forecast||[];if(fc.length>0){"
         "const today=fc[0];"
-        "ctx.font='13px sans-serif';"
-        "ctx.fillStyle=C.ORANGE;ctx.fillText('↑'+fmtTemp(today.tempMax||0,useC),140,200);"
-        "ctx.fillStyle=C.BLUE;ctx.fillText('↓'+fmtTemp(today.tempMin||0,useC),190,200);}"
+        "ctx.font='14px sans-serif';"
+        "ctx.fillStyle=C.ORANGE;ctx.fillText('↑'+fmtTemp(today.tempMax||0,useC),140,175);"
+        "ctx.fillStyle=C.BLUE;ctx.fillText('↓'+fmtTemp(today.tempMin||0,useC),190,175);}"
         // Screen dots
         "drawDots();}"
 
