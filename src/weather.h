@@ -2,7 +2,7 @@
  * EpicWeatherBox Firmware - Weather API Interface
  *
  * Fetches weather data from Open-Meteo API (free, no API key required)
- * Supports 7-day forecast and dual location weather display.
+ * Supports 7-day forecast and multiple location weather display (up to 5).
  */
 
 #ifndef WEATHER_H
@@ -24,6 +24,9 @@
 
 // Maximum forecast days supported
 #define WEATHER_FORECAST_DAYS 7
+
+// Maximum number of locations supported
+#define MAX_WEATHER_LOCATIONS 5
 
 // =============================================================================
 // WEATHER CODE MAPPING (WMO Weather interpretation codes)
@@ -156,33 +159,85 @@ bool forceWeatherUpdate();
  */
 bool fetchWeather(float lat, float lon, WeatherData& data);
 
+// =============================================================================
+// MULTI-LOCATION API (NEW)
+// =============================================================================
+
 /**
- * Get weather data for primary location
+ * Get the number of configured locations
+ */
+int getLocationCount();
+
+/**
+ * Get weather data by index (0 to getLocationCount()-1)
+ */
+const WeatherData& getWeather(int index);
+
+/**
+ * Get location config by index
+ */
+const WeatherLocation& getLocation(int index);
+
+/**
+ * Add a new location
+ * @return true if added, false if at max capacity
+ */
+bool addLocation(const char* name, float lat, float lon);
+
+/**
+ * Remove a location by index
+ * @return true if removed, false if can't remove (last location or invalid index)
+ */
+bool removeLocation(int index);
+
+/**
+ * Update an existing location
+ * @return true if updated, false if invalid index
+ */
+bool updateLocation(int index, const char* name, float lat, float lon);
+
+/**
+ * Clear all locations and reset to default
+ */
+void clearLocations();
+
+// =============================================================================
+// LEGACY API (BACKWARD COMPATIBILITY)
+// =============================================================================
+
+/**
+ * Get weather data for primary location (index 0)
+ * @deprecated Use getWeather(0) instead
  */
 const WeatherData& getPrimaryWeather();
 
 /**
- * Get weather data for secondary location
+ * Get weather data for secondary location (index 1)
+ * @deprecated Use getWeather(1) instead
  */
 const WeatherData& getSecondaryWeather();
 
 /**
- * Set primary location
+ * Set primary location (index 0)
+ * @deprecated Use updateLocation(0, ...) instead
  */
 void setPrimaryLocation(const char* name, float lat, float lon);
 
 /**
- * Set secondary location
+ * Set secondary location (index 1)
+ * @deprecated Use addLocation() or updateLocation(1, ...) instead
  */
 void setSecondaryLocation(const char* name, float lat, float lon);
 
 /**
  * Enable/disable secondary location
+ * @deprecated Use addLocation/removeLocation instead
  */
 void setSecondaryLocationEnabled(bool enabled);
 
 /**
  * Check if secondary location is enabled
+ * @deprecated Use getLocationCount() > 1 instead
  */
 bool isSecondaryLocationEnabled();
 

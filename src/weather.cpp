@@ -2,7 +2,7 @@
  * EpicWeatherBox Firmware - Weather API Implementation
  *
  * Fetches weather data from Open-Meteo API (free, no API key required)
- * Supports 7-day forecast and dual location weather display.
+ * Supports 7-day forecast and multiple location weather display (up to 5).
  */
 
 #include "weather.h"
@@ -15,13 +15,20 @@
 // STATIC DATA
 // =============================================================================
 
-// Weather data storage
-static WeatherData primaryWeather;
-static WeatherData secondaryWeather;
+// Weather data storage (array for multiple locations)
+static WeatherData weatherData[MAX_WEATHER_LOCATIONS];
 
-// Location configuration
-static WeatherLocation primaryLocation = {"Seattle", 47.6062, -122.3321, true};
-static WeatherLocation secondaryLocation = {"Portland", 45.5152, -122.6784, false};
+// Location configuration (array for multiple locations)
+static WeatherLocation locations[MAX_WEATHER_LOCATIONS] = {
+    {"Seattle", 47.6062, -122.3321, true},  // Default first location
+    {"", 0, 0, false},
+    {"", 0, 0, false},
+    {"", 0, 0, false},
+    {"", 0, 0, false}
+};
+
+// Number of configured locations (at least 1 required)
+static int locationCount = 1;
 
 // Display settings
 static bool useCelsius = false;  // false = Fahrenheit, true = Celsius
@@ -292,19 +299,21 @@ void initWeather() {
 
     Serial.println(F("[WEATHER] Initializing..."));
 
-    // Clear weather data
-    memset(&primaryWeather, 0, sizeof(primaryWeather));
-    memset(&secondaryWeather, 0, sizeof(secondaryWeather));
+    // Clear all weather data
+    for (int i = 0; i < MAX_WEATHER_LOCATIONS; i++) {
+        memset(&weatherData[i], 0, sizeof(WeatherData));
+    }
 
     // Load saved configuration
     loadWeatherConfig();
 
     // Copy location names to weather data
-    strncpy(primaryWeather.locationName, primaryLocation.name, sizeof(primaryWeather.locationName));
-    strncpy(secondaryWeather.locationName, secondaryLocation.name, sizeof(secondaryWeather.locationName));
+    for (int i = 0; i < locationCount; i++) {
+        strncpy(weatherData[i].locationName, locations[i].name, sizeof(weatherData[i].locationName));
+    }
 
     initialized = true;
-    Serial.println(F("[WEATHER] Initialized"));
+    Serial.printf("[WEATHER] Initialized with %d location(s)\n", locationCount);
 }
 
 /**
@@ -329,23 +338,18 @@ bool updateWeather() {
  * Force immediate weather update
  */
 bool forceWeatherUpdate() {
-    Serial.println(F("[WEATHER] Updating weather data..."));
+    Serial.printf("[WEATHER] Updating weather for %d location(s)...\n", locationCount);
 
     bool success = true;
 
-    // Update primary location
-    if (primaryLocation.enabled) {
-        strncpy(primaryWeather.locationName, primaryLocation.name, sizeof(primaryWeather.locationName));
-        if (!fetchWeather(primaryLocation.latitude, primaryLocation.longitude, primaryWeather)) {
-            success = false;
-        }
-    }
-
-    // Update secondary location
-    if (secondaryLocation.enabled) {
-        strncpy(secondaryWeather.locationName, secondaryLocation.name, sizeof(secondaryWeather.locationName));
-        if (!fetchWeather(secondaryLocation.latitude, secondaryLocation.longitude, secondaryWeather)) {
-            success = false;
+    // Update all enabled locations
+    for (int i = 0; i < locationCount; i++) {
+        if (locations[i].enabled) {
+            strncpy(weatherData[i].locationName, locations[i].name, sizeof(weatherData[i].locationName));
+            Serial.printf("[WEATHER] Fetching location %d: %s\n", i, locations[i].name);
+            if (!fetchWeather(locations[i].latitude, locations[i].longitude, weatherData[i])) {
+                success = false;
+            }
         }
     }
 
@@ -353,57 +357,197 @@ bool forceWeatherUpdate() {
     return success;
 }
 
+// =============================================================================
+// MULTI-LOCATION API (NEW)
+// =============================================================================
+
 /**
- * Get primary weather data
+ * Get the number of configured locations
+ */
+int getLocationCount() {
+    return locationCount;
+}
+
+/**
+ * Get weather data by index
+ */
+const WeatherData& getWeather(int index) {
+    if (index < 0 || index >= MAX_WEATHER_LOCATIONS) {
+        index = 0;  // Return first location as fallback
+    }
+    return weatherData[index];
+}
+
+/**
+ * Get location config by index
+ */
+const WeatherLocation& getLocation(int index) {
+    if (index < 0 || index >= MAX_WEATHER_LOCATIONS) {
+        index = 0;  // Return first location as fallback
+    }
+    return locations[index];
+}
+
+/**
+ * Add a new location
+ * Returns true if added, false if at max capacity
+ */
+bool addLocation(const char* name, float lat, float lon) {
+    if (locationCount >= MAX_WEATHER_LOCATIONS) {
+        Serial.println(F("[WEATHER] Cannot add location - at max capacity"));
+        return false;
+    }
+
+    int idx = locationCount;
+    strncpy(locations[idx].name, name, sizeof(locations[idx].name) - 1);
+    locations[idx].name[sizeof(locations[idx].name) - 1] = '\0';
+    locations[idx].latitude = lat;
+    locations[idx].longitude = lon;
+    locations[idx].enabled = true;
+
+    // Clear weather data for new location
+    memset(&weatherData[idx], 0, sizeof(WeatherData));
+    strncpy(weatherData[idx].locationName, name, sizeof(weatherData[idx].locationName) - 1);
+
+    locationCount++;
+    Serial.printf("[WEATHER] Added location %d: %s (%.4f, %.4f)\n", idx, name, lat, lon);
+    return true;
+}
+
+/**
+ * Remove a location by index
+ * Returns true if removed, false if can't remove (last location or invalid index)
+ */
+bool removeLocation(int index) {
+    // Can't remove if it's the last location or invalid index
+    if (locationCount <= 1 || index < 0 || index >= locationCount) {
+        Serial.println(F("[WEATHER] Cannot remove location"));
+        return false;
+    }
+
+    Serial.printf("[WEATHER] Removing location %d: %s\n", index, locations[index].name);
+
+    // Shift all locations after this one down
+    for (int i = index; i < locationCount - 1; i++) {
+        locations[i] = locations[i + 1];
+        weatherData[i] = weatherData[i + 1];
+    }
+
+    // Clear the last slot
+    locationCount--;
+    memset(&locations[locationCount], 0, sizeof(WeatherLocation));
+    memset(&weatherData[locationCount], 0, sizeof(WeatherData));
+
+    Serial.printf("[WEATHER] Now have %d location(s)\n", locationCount);
+    return true;
+}
+
+/**
+ * Update an existing location
+ * Returns true if updated, false if invalid index
+ */
+bool updateLocation(int index, const char* name, float lat, float lon) {
+    if (index < 0 || index >= locationCount) {
+        return false;
+    }
+
+    strncpy(locations[index].name, name, sizeof(locations[index].name) - 1);
+    locations[index].name[sizeof(locations[index].name) - 1] = '\0';
+    locations[index].latitude = lat;
+    locations[index].longitude = lon;
+    locations[index].enabled = true;
+
+    // Update weather data location name and invalidate cache
+    strncpy(weatherData[index].locationName, name, sizeof(weatherData[index].locationName) - 1);
+    weatherData[index].valid = false;
+
+    Serial.printf("[WEATHER] Updated location %d: %s (%.4f, %.4f)\n", index, name, lat, lon);
+    return true;
+}
+
+/**
+ * Clear all locations and reset to default
+ */
+void clearLocations() {
+    // Reset to single default location
+    strcpy(locations[0].name, "Seattle");
+    locations[0].latitude = 47.6062;
+    locations[0].longitude = -122.3321;
+    locations[0].enabled = true;
+
+    // Clear remaining slots
+    for (int i = 1; i < MAX_WEATHER_LOCATIONS; i++) {
+        memset(&locations[i], 0, sizeof(WeatherLocation));
+        memset(&weatherData[i], 0, sizeof(WeatherData));
+    }
+
+    locationCount = 1;
+    memset(&weatherData[0], 0, sizeof(WeatherData));
+    strncpy(weatherData[0].locationName, locations[0].name, sizeof(weatherData[0].locationName));
+
+    Serial.println(F("[WEATHER] Locations cleared, reset to default"));
+}
+
+// =============================================================================
+// LEGACY API (BACKWARD COMPATIBILITY)
+// =============================================================================
+
+/**
+ * Get primary weather data (index 0)
+ * @deprecated Use getWeather(0) instead
  */
 const WeatherData& getPrimaryWeather() {
-    return primaryWeather;
+    return getWeather(0);
 }
 
 /**
- * Get secondary weather data
+ * Get secondary weather data (index 1)
+ * @deprecated Use getWeather(1) instead
  */
 const WeatherData& getSecondaryWeather() {
-    return secondaryWeather;
+    return getWeather(1);
 }
 
 /**
- * Set primary location
+ * Set primary location (index 0)
+ * @deprecated Use updateLocation(0, ...) instead
  */
 void setPrimaryLocation(const char* name, float lat, float lon) {
-    strncpy(primaryLocation.name, name, sizeof(primaryLocation.name) - 1);
-    primaryLocation.latitude = lat;
-    primaryLocation.longitude = lon;
-    primaryLocation.enabled = true;
-
-    // Clear cached data to force refresh
-    primaryWeather.valid = false;
+    updateLocation(0, name, lat, lon);
 }
 
 /**
- * Set secondary location
+ * Set secondary location (index 1)
+ * @deprecated Use addLocation() or updateLocation(1, ...) instead
  */
 void setSecondaryLocation(const char* name, float lat, float lon) {
-    strncpy(secondaryLocation.name, name, sizeof(secondaryLocation.name) - 1);
-    secondaryLocation.latitude = lat;
-    secondaryLocation.longitude = lon;
-
-    // Clear cached data to force refresh
-    secondaryWeather.valid = false;
+    if (locationCount < 2) {
+        addLocation(name, lat, lon);
+    } else {
+        updateLocation(1, name, lat, lon);
+    }
 }
 
 /**
  * Enable/disable secondary location
+ * @deprecated Use addLocation/removeLocation instead
  */
 void setSecondaryLocationEnabled(bool enabled) {
-    secondaryLocation.enabled = enabled;
+    if (enabled && locationCount < 2) {
+        // Add a default secondary location if none exists
+        addLocation("Portland", 45.5152, -122.6784);
+    } else if (!enabled && locationCount >= 2) {
+        // Remove secondary location
+        removeLocation(1);
+    }
 }
 
 /**
  * Check if secondary location is enabled
+ * @deprecated Use getLocationCount() > 1 instead
  */
 bool isSecondaryLocationEnabled() {
-    return secondaryLocation.enabled;
+    return locationCount > 1;
 }
 
 /**
@@ -442,19 +586,15 @@ bool getUseCelsius() {
 bool saveWeatherConfig() {
     JsonDocument doc;
 
-    // Primary location
-    JsonObject primary = doc["primary"].to<JsonObject>();
-    primary["name"] = primaryLocation.name;
-    primary["lat"] = primaryLocation.latitude;
-    primary["lon"] = primaryLocation.longitude;
-    primary["enabled"] = primaryLocation.enabled;
-
-    // Secondary location
-    JsonObject secondary = doc["secondary"].to<JsonObject>();
-    secondary["name"] = secondaryLocation.name;
-    secondary["lat"] = secondaryLocation.latitude;
-    secondary["lon"] = secondaryLocation.longitude;
-    secondary["enabled"] = secondaryLocation.enabled;
+    // Save locations as array
+    JsonArray locArray = doc["locations"].to<JsonArray>();
+    for (int i = 0; i < locationCount; i++) {
+        JsonObject loc = locArray.add<JsonObject>();
+        loc["name"] = locations[i].name;
+        loc["lat"] = locations[i].latitude;
+        loc["lon"] = locations[i].longitude;
+        loc["enabled"] = locations[i].enabled;
+    }
 
     // Display settings
     doc["useCelsius"] = useCelsius;
@@ -468,12 +608,13 @@ bool saveWeatherConfig() {
     serializeJson(doc, file);
     file.close();
 
-    Serial.println(F("[WEATHER] Configuration saved"));
+    Serial.printf("[WEATHER] Configuration saved (%d locations)\n", locationCount);
     return true;
 }
 
 /**
  * Load weather configuration from LittleFS
+ * Supports both old format (primary/secondary) and new format (locations array)
  */
 bool loadWeatherConfig() {
     if (!LittleFS.exists(WEATHER_CONFIG_FILE)) {
@@ -496,32 +637,89 @@ bool loadWeatherConfig() {
         return false;
     }
 
-    // Load primary location
-    JsonObject primary = doc["primary"];
-    if (primary) {
-        const char* name = primary["name"];
-        if (name) strncpy(primaryLocation.name, name, sizeof(primaryLocation.name) - 1);
-        primaryLocation.latitude = primary["lat"] | primaryLocation.latitude;
-        primaryLocation.longitude = primary["lon"] | primaryLocation.longitude;
-        primaryLocation.enabled = primary["enabled"] | true;
-    }
+    // Check for new array format first
+    if (doc["locations"].is<JsonArray>()) {
+        JsonArray locArray = doc["locations"].as<JsonArray>();
+        locationCount = 0;
 
-    // Load secondary location
-    JsonObject secondary = doc["secondary"];
-    if (secondary) {
-        const char* name = secondary["name"];
-        if (name) strncpy(secondaryLocation.name, name, sizeof(secondaryLocation.name) - 1);
-        secondaryLocation.latitude = secondary["lat"] | secondaryLocation.latitude;
-        secondaryLocation.longitude = secondary["lon"] | secondaryLocation.longitude;
-        secondaryLocation.enabled = secondary["enabled"] | false;
+        for (JsonObject loc : locArray) {
+            if (locationCount >= MAX_WEATHER_LOCATIONS) break;
+
+            const char* name = loc["name"];
+            if (name && strlen(name) > 0) {
+                strncpy(locations[locationCount].name, name, sizeof(locations[locationCount].name) - 1);
+                locations[locationCount].name[sizeof(locations[locationCount].name) - 1] = '\0';
+                locations[locationCount].latitude = loc["lat"] | 0.0f;
+                locations[locationCount].longitude = loc["lon"] | 0.0f;
+                locations[locationCount].enabled = loc["enabled"] | true;
+                locationCount++;
+            }
+        }
+
+        // Ensure at least one location
+        if (locationCount == 0) {
+            strcpy(locations[0].name, "Seattle");
+            locations[0].latitude = 47.6062;
+            locations[0].longitude = -122.3321;
+            locations[0].enabled = true;
+            locationCount = 1;
+        }
+
+        Serial.printf("[WEATHER] Loaded %d location(s) from array format\n", locationCount);
+    }
+    // Fall back to old format for migration
+    else if (doc["primary"].is<JsonObject>()) {
+        Serial.println(F("[WEATHER] Migrating from old config format..."));
+
+        locationCount = 0;
+
+        // Load primary location
+        JsonObject primary = doc["primary"];
+        const char* name = primary["name"];
+        if (name && strlen(name) > 0) {
+            strncpy(locations[0].name, name, sizeof(locations[0].name) - 1);
+            locations[0].latitude = primary["lat"] | 47.6062;
+            locations[0].longitude = primary["lon"] | -122.3321;
+            locations[0].enabled = primary["enabled"] | true;
+            locationCount = 1;
+        }
+
+        // Load secondary location if enabled
+        JsonObject secondary = doc["secondary"];
+        if (secondary) {
+            bool secondaryEnabled = secondary["enabled"] | false;
+            const char* secName = secondary["name"];
+            if (secondaryEnabled && secName && strlen(secName) > 0) {
+                strncpy(locations[1].name, secName, sizeof(locations[1].name) - 1);
+                locations[1].latitude = secondary["lat"] | 0.0f;
+                locations[1].longitude = secondary["lon"] | 0.0f;
+                locations[1].enabled = true;
+                locationCount = 2;
+            }
+        }
+
+        // Ensure at least one location
+        if (locationCount == 0) {
+            strcpy(locations[0].name, "Seattle");
+            locations[0].latitude = 47.6062;
+            locations[0].longitude = -122.3321;
+            locations[0].enabled = true;
+            locationCount = 1;
+        }
+
+        // Save in new format for next time
+        Serial.println(F("[WEATHER] Saving config in new format..."));
     }
 
     // Load display settings
     useCelsius = doc["useCelsius"] | false;
 
-    Serial.printf("[WEATHER] Config loaded: %s (%.2f, %.2f) %s\n",
-                  primaryLocation.name, primaryLocation.latitude, primaryLocation.longitude,
-                  useCelsius ? "Celsius" : "Fahrenheit");
+    // Log loaded locations
+    for (int i = 0; i < locationCount; i++) {
+        Serial.printf("[WEATHER] Location %d: %s (%.4f, %.4f)\n",
+                      i, locations[i].name, locations[i].latitude, locations[i].longitude);
+    }
+    Serial.printf("[WEATHER] Temperature unit: %s\n", useCelsius ? "Celsius" : "Fahrenheit");
 
     return true;
 }

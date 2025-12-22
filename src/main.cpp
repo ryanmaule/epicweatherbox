@@ -279,25 +279,22 @@ void setupWebServer() {
         server.send(200, "application/json", response);
     });
 
-    // Weather API endpoint
+    // Weather API endpoint - returns all locations
     server.on("/api/weather", HTTP_GET, []() {
         JsonDocument doc;
 
-        // Primary location weather
-        JsonObject primary = doc["primary"].to<JsonObject>();
-        JsonDocument primaryDoc;
-        weatherToJson(getPrimaryWeather(), primaryDoc);
-        primary.set(primaryDoc.as<JsonObject>());
-
-        // Secondary location (if enabled)
-        if (isSecondaryLocationEnabled()) {
-            JsonObject secondary = doc["secondary"].to<JsonObject>();
-            JsonDocument secondaryDoc;
-            weatherToJson(getSecondaryWeather(), secondaryDoc);
-            secondary.set(secondaryDoc.as<JsonObject>());
+        // Return all locations as array
+        JsonArray locations = doc["locations"].to<JsonArray>();
+        for (int i = 0; i < getLocationCount(); i++) {
+            JsonObject loc = locations.add<JsonObject>();
+            JsonDocument locDoc;
+            weatherToJson(getWeather(i), locDoc);
+            loc.set(locDoc.as<JsonObject>());
         }
 
         // Add metadata
+        doc["locationCount"] = getLocationCount();
+        doc["maxLocations"] = MAX_WEATHER_LOCATIONS;
         doc["nextUpdateIn"] = getNextUpdateIn() / 1000;  // seconds
         doc["updateInterval"] = WEATHER_UPDATE_INTERVAL_MS / 1000;  // seconds
 
@@ -323,25 +320,20 @@ void setupWebServer() {
     server.on("/api/config", HTTP_GET, []() {
         JsonDocument doc;
 
-        // Primary location
-        const WeatherData& primary = getPrimaryWeather();
-        JsonObject p = doc["primary"].to<JsonObject>();
-        p["name"] = primary.locationName;
-        p["lat"] = primary.latitude;
-        p["lon"] = primary.longitude;
-
-        // Secondary location
-        if (isSecondaryLocationEnabled()) {
-            const WeatherData& secondary = getSecondaryWeather();
-            JsonObject s = doc["secondary"].to<JsonObject>();
-            s["enabled"] = true;
-            s["name"] = secondary.locationName;
-            s["lat"] = secondary.latitude;
-            s["lon"] = secondary.longitude;
-        } else {
-            JsonObject s = doc["secondary"].to<JsonObject>();
-            s["enabled"] = false;
+        // Return all locations as array
+        JsonArray locArray = doc["locations"].to<JsonArray>();
+        for (int i = 0; i < getLocationCount(); i++) {
+            const WeatherLocation& loc = getLocation(i);
+            JsonObject l = locArray.add<JsonObject>();
+            l["name"] = loc.name;
+            l["lat"] = loc.latitude;
+            l["lon"] = loc.longitude;
+            l["enabled"] = loc.enabled;
         }
+
+        // Metadata
+        doc["locationCount"] = getLocationCount();
+        doc["maxLocations"] = MAX_WEATHER_LOCATIONS;
 
         // Display settings
         doc["useCelsius"] = getUseCelsius();
@@ -364,28 +356,68 @@ void setupWebServer() {
             return;
         }
 
-        // Update primary location
-        JsonObject primary = doc["primary"];
-        if (primary) {
+        // Check if using new array format
+        if (doc["locations"].is<JsonArray>()) {
+            JsonArray locArray = doc["locations"].as<JsonArray>();
+
+            // Validate
+            if (locArray.size() == 0) {
+                server.send(400, "application/json", "{\"success\":false,\"message\":\"At least one location required\"}");
+                return;
+            }
+            if (locArray.size() > MAX_WEATHER_LOCATIONS) {
+                server.send(400, "application/json", "{\"success\":false,\"message\":\"Max 5 locations\"}");
+                return;
+            }
+
+            // Clear existing locations and add new ones
+            clearLocations();
+
+            bool first = true;
+            for (JsonObject loc : locArray) {
+                const char* name = loc["name"];
+                float lat = loc["lat"] | 0.0f;
+                float lon = loc["lon"] | 0.0f;
+
+                if (name && strlen(name) > 0 && (lat != 0 || lon != 0)) {
+                    if (first) {
+                        // Update first location (can't remove it)
+                        updateLocation(0, name, lat, lon);
+                        first = false;
+                    } else {
+                        addLocation(name, lat, lon);
+                    }
+                }
+            }
+        }
+        // Fall back to old format for backward compatibility
+        else if (doc["primary"].is<JsonObject>()) {
+            JsonObject primary = doc["primary"];
             const char* name = primary["name"];
             float lat = primary["lat"] | 0.0f;
             float lon = primary["lon"] | 0.0f;
-            if (name && lat != 0 && lon != 0) {
-                setPrimaryLocation(name, lat, lon);
+            if (name && (lat != 0 || lon != 0)) {
+                updateLocation(0, name, lat, lon);
             }
-        }
 
-        // Update secondary location
-        JsonObject secondary = doc["secondary"];
-        if (secondary) {
-            bool enabled = secondary["enabled"] | false;
-            setSecondaryLocationEnabled(enabled);
-            if (enabled) {
-                const char* name = secondary["name"];
-                float lat = secondary["lat"] | 0.0f;
-                float lon = secondary["lon"] | 0.0f;
-                if (name && lat != 0 && lon != 0) {
-                    setSecondaryLocation(name, lat, lon);
+            // Handle secondary if present
+            if (doc["secondary"].is<JsonObject>()) {
+                JsonObject secondary = doc["secondary"];
+                bool enabled = secondary["enabled"] | false;
+                if (enabled) {
+                    const char* secName = secondary["name"];
+                    float secLat = secondary["lat"] | 0.0f;
+                    float secLon = secondary["lon"] | 0.0f;
+                    if (secName && (secLat != 0 || secLon != 0)) {
+                        if (getLocationCount() < 2) {
+                            addLocation(secName, secLat, secLon);
+                        } else {
+                            updateLocation(1, secName, secLat, secLon);
+                        }
+                    }
+                } else if (getLocationCount() > 1) {
+                    // Remove secondary if disabled
+                    removeLocation(1);
                 }
             }
         }
@@ -646,12 +678,12 @@ void handleRoot() {
 }
 
 /**
- * Handle admin page - minimal location config with city search
+ * Handle admin page - multi-location config with city search and add/remove
  */
 void handleAdmin() {
-    const WeatherData& w = getPrimaryWeather();
     bool celsius = getUseCelsius();
     const char* unit = celsius ? "C" : "F";
+    int locCount = getLocationCount();
 
     String html = F("<!DOCTYPE html><html><head><meta charset='UTF-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -669,16 +701,31 @@ void handleAdmin() {
         ".search-box{display:flex;gap:10px}.search-box input{flex:1}.search-box button{margin-top:0}"
         ".results{max-height:200px;overflow-y:auto;margin-top:10px}"
         ".result{padding:10px;background:rgba(0,0,0,0.3);margin:5px 0;border-radius:6px;cursor:pointer}"
-        ".result:hover{background:rgba(0,212,255,0.2)}.result small{color:#888}</style></head><body><div class='c'><h1>EpicWeatherBox</h1>");
+        ".result:hover{background:rgba(0,212,255,0.2)}.result small{color:#888}"
+        ".loc-item{background:rgba(0,0,0,0.2);border-radius:8px;padding:12px;margin:8px 0;position:relative}"
+        ".loc-item .name{font-weight:bold;font-size:1.1em}.loc-item .coords{color:#888;font-size:0.85em}"
+        ".loc-item .remove{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:#dc3545;"
+        "color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:0.85em}"
+        ".loc-item .remove:hover{background:#c82333}"
+        ".add-btn{background:#28a745;width:100%}.add-btn:hover{background:#218838}"
+        ".pending{border:2px dashed #00d4ff;background:rgba(0,212,255,0.1)}"
+        "</style></head><body><div class='c'><h1>EpicWeatherBox</h1>");
 
-    // Current weather status
+    // Current weather for all locations
     html += F("<div class='card'><h3>Current Weather</h3>");
-    if (w.valid) {
-        html += String(w.locationName) + F(": ");
-        html += String((int)w.current.temperature) + "°" + unit + ", ";
-        html += conditionToString(w.current.condition);
-    } else {
-        html += F("No data - configure location below");
+    for (int i = 0; i < locCount; i++) {
+        const WeatherData& w = getWeather(i);
+        if (i > 0) html += F("<br>");
+        if (w.valid) {
+            html += String(w.locationName) + F(": ");
+            html += String((int)w.current.temperature) + "°" + unit + ", ";
+            html += conditionToString(w.current.condition);
+        } else {
+            html += String(w.locationName) + F(": No data");
+        }
+    }
+    if (locCount == 0) {
+        html += F("No locations configured");
     }
     html += F("</div>");
 
@@ -687,37 +734,80 @@ void handleAdmin() {
         "<div class='search-box'><input type='text' id='search' placeholder='Type city name (e.g. Aurora)'>"
         "<button type='button' onclick='searchCity()'>Search</button></div>"
         "<div id='results' class='results'></div>"
-        "<p class='hint'>Search by city name only (not state/country). Scroll to find your location.</p></div>");
+        "<p class='hint'>Search by city name only. Click a result to select it.</p>"
+        "<div id='pending' class='loc-item pending' style='display:none'>"
+        "<div class='name' id='pendingName'>-</div>"
+        "<div class='coords' id='pendingCoords'>-</div>"
+        "<button class='add-btn' onclick='addPending()'>+ Add This Location</button></div></div>");
 
-    // Location config form
-    html += F("<div class='card'><h3>Location Settings</h3>"
-        "<form id='f'><label>Display Name</label>"
-        "<input type='text' id='name' value='");
-    html += w.locationName;
-    html += F("'><div class='row'><div><label>Latitude</label>"
-        "<input type='number' id='lat' step='0.0001' value='");
-    html += String(w.latitude, 4);
-    html += F("'></div><div><label>Longitude</label>"
-        "<input type='number' id='lon' step='0.0001' value='");
-    html += String(w.longitude, 4);
-    html += F("'></div></div>"
-        "<label>Temperature</label><select id='unit'>"
+    // Configured locations
+    html += F("<div class='card'><h3>Locations</h3><div id='locations'>");
+
+    // Render current locations from server side
+    for (int i = 0; i < locCount; i++) {
+        const WeatherLocation& loc = getLocation(i);
+        html += F("<div class='loc-item' data-idx='");
+        html += String(i);
+        html += F("'><div class='name'>");
+        html += String(i + 1) + ". " + String(loc.name);
+        html += F("</div><div class='coords'>");
+        html += String(loc.latitude, 4) + ", " + String(loc.longitude, 4);
+        html += F("</div>");
+        // Only show remove button if more than 1 location
+        if (locCount > 1) {
+            html += F("<button class='remove' onclick='removeLoc(");
+            html += String(i);
+            html += F(")'>Remove</button>");
+        }
+        html += F("</div>");
+    }
+
+    html += F("</div><p class='hint'>Max ");
+    html += String(MAX_WEATHER_LOCATIONS);
+    html += F(" locations. Current: ");
+    html += String(locCount);
+    html += F("</p></div>");
+
+    // Settings
+    html += F("<div class='card'><h3>Settings</h3>"
+        "<label>Temperature Unit</label><select id='unit'>"
         "<option value='f'");
     html += celsius ? "" : " selected";
     html += F(">Fahrenheit</option><option value='c'");
     html += celsius ? " selected" : "";
     html += F(">Celsius</option></select>"
-        "<button type='submit'>Save & Refresh</button>"
-        "<button type='button' onclick='geo()' style='background:#444;margin-left:10px'>Use GPS</button>"
-        "<div id='st' class='status'></div></form></div>");
+        "<button onclick='saveSettings()'>Save Settings</button>"
+        "<div id='st' class='status'></div></div>");
 
     // Links
     html += F("<div class='card' style='text-align:center'>"
         "<a href='/'>Home</a> | <a href='/api/weather'>Weather API</a> | "
         "<a href='/update'>Firmware</a> | <a href='/reboot'>Reboot</a></div>");
 
-    // JavaScript
+    // JavaScript - more complex now for multi-location management
     html += F("<script>"
+        "let locations=[];let pendingLoc=null;const MAX=");
+    html += String(MAX_WEATHER_LOCATIONS);
+    html += F(";"
+        // Load current locations from API
+        "async function loadLocations(){"
+        "try{const r=await fetch('/api/config');const d=await r.json();"
+        "locations=d.locations||[];renderLocations();"
+        "}catch(e){console.error('Load failed',e);}}"
+
+        // Render locations list
+        "function renderLocations(){"
+        "const el=document.getElementById('locations');el.innerHTML='';"
+        "locations.forEach((loc,i)=>{"
+        "const div=document.createElement('div');div.className='loc-item';"
+        "div.innerHTML='<div class=\"name\">'+(i+1)+'. '+loc.name+'</div>'"
+        "+'<div class=\"coords\">'+loc.lat.toFixed(4)+', '+loc.lon.toFixed(4)+'</div>';"
+        "if(locations.length>1){"
+        "const btn=document.createElement('button');btn.className='remove';btn.textContent='Remove';"
+        "btn.onclick=()=>removeLoc(i);div.appendChild(btn);}"
+        "el.appendChild(div);});}"
+
+        // Search city
         "async function searchCity(){"
         "const q=document.getElementById('search').value.trim();"
         "if(q.length<2){alert('Enter at least 2 characters');return;}"
@@ -730,28 +820,53 @@ void handleAdmin() {
         "div.innerHTML=loc.display+'<br><small>'+loc.lat.toFixed(4)+', '+loc.lon.toFixed(4)+'</small>';"
         "div.onclick=()=>selectLocation(loc);res.appendChild(div);});"
         "}catch(e){res.innerHTML='<p>Search failed</p>';}}"
+
+        // Select location from search
         "function selectLocation(loc){"
-        "document.getElementById('name').value=loc.name;"
-        "document.getElementById('lat').value=loc.lat.toFixed(4);"
-        "document.getElementById('lon').value=loc.lon.toFixed(4);"
-        "document.getElementById('results').innerHTML='<p style=\"color:#0c6\">Selected: '+loc.display+'</p>';}"
-        "document.getElementById('search').onkeypress=e=>{if(e.key==='Enter'){e.preventDefault();searchCity();}};"
-        "document.getElementById('f').onsubmit=async e=>{"
-        "e.preventDefault();const s=document.getElementById('st');"
-        "s.style.display='block';s.className='status';s.textContent='Saving...';"
+        "pendingLoc=loc;"
+        "document.getElementById('pending').style.display='block';"
+        "document.getElementById('pendingName').textContent=loc.display||loc.name;"
+        "document.getElementById('pendingCoords').textContent=loc.lat.toFixed(4)+', '+loc.lon.toFixed(4);"
+        "document.getElementById('results').innerHTML='<p style=\"color:#0c6\">Selected - click Add to confirm</p>';}"
+
+        // Add pending location
+        "async function addPending(){"
+        "if(!pendingLoc){alert('Select a location first');return;}"
+        "if(locations.length>=MAX){alert('Max '+MAX+' locations');return;}"
+        "locations.push({name:pendingLoc.name,lat:pendingLoc.lat,lon:pendingLoc.lon,enabled:true});"
+        "await saveLocations();pendingLoc=null;"
+        "document.getElementById('pending').style.display='none';}"
+
+        // Remove location
+        "async function removeLoc(idx){"
+        "if(locations.length<=1){alert('Must have at least 1 location');return;}"
+        "if(!confirm('Remove '+locations[idx].name+'?'))return;"
+        "locations.splice(idx,1);await saveLocations();}"
+
+        // Save locations to server
+        "async function saveLocations(){"
+        "const st=document.getElementById('st');st.style.display='block';st.className='status';"
+        "st.textContent='Saving...';"
         "try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},"
-        "body:JSON.stringify({primary:{name:document.getElementById('name').value,"
-        "lat:parseFloat(document.getElementById('lat').value),"
-        "lon:parseFloat(document.getElementById('lon').value)},"
-        "useCelsius:document.getElementById('unit').value==='c'})});"
-        "const d=await r.json();s.className='status '+(d.success?'ok':'err');"
-        "s.textContent=d.message;if(d.success)setTimeout(()=>location.reload(),2000);"
-        "}catch(e){s.className='status err';s.textContent='Error';}};"
-        "function geo(){if(!navigator.geolocation)return alert('Not supported');"
-        "navigator.geolocation.getCurrentPosition(p=>{"
-        "document.getElementById('lat').value=p.coords.latitude.toFixed(4);"
-        "document.getElementById('lon').value=p.coords.longitude.toFixed(4);"
-        "},()=>alert('Could not get location'));}</script>");
+        "body:JSON.stringify({locations:locations,useCelsius:document.getElementById('unit').value==='c'})});"
+        "const d=await r.json();st.className='status '+(d.success?'ok':'err');"
+        "st.textContent=d.message;if(d.success){setTimeout(()=>location.reload(),2000);}"
+        "}catch(e){st.className='status err';st.textContent='Error';}}"
+
+        // Save settings only
+        "async function saveSettings(){"
+        "const st=document.getElementById('st');st.style.display='block';st.className='status';"
+        "st.textContent='Saving...';"
+        "try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({locations:locations,useCelsius:document.getElementById('unit').value==='c'})});"
+        "const d=await r.json();st.className='status '+(d.success?'ok':'err');"
+        "st.textContent=d.message;if(d.success){setTimeout(()=>location.reload(),2000);}"
+        "}catch(e){st.className='status err';st.textContent='Error';}}"
+
+        // Event listeners
+        "document.getElementById('search').onkeypress=e=>{if(e.key==='Enter'){e.preventDefault();searchCity();}};"
+        "loadLocations();"
+        "</script>");
 
     html += F("</div></body></html>");
     server.send(200, "text/html", html);
