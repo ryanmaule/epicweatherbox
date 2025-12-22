@@ -1004,25 +1004,24 @@ void handleDisplayPreview() {
         "ctx.fillStyle=C.GRAY;ctx.font='14px sans-serif';"
         "ctx.fillText(fmtDate()+' • '+(loc.location||'Unknown'),120,68);"
         // 2-column layout: left=icon+condition, right=temp+hi/lo
-        // Content area: y=75 to y=220 (145px height), center at y=147
-        // Left column: icon (80x80) centered vertically, condition below
+        // Left column: icon (80x80) + condition below (shifted right for better balance)
         "const ico=getIco(w.condition,isDay);"
-        "drawIco(ico.ico,20,95,80,ico.col);"
-        // Condition text under icon
+        "drawIco(ico.ico,15,90,80,ico.col);"
+        // Condition text closer under icon
         "ctx.fillStyle=C.WHITE;ctx.font='14px sans-serif';ctx.textAlign='center';"
         "const cond=w.condition||'Unknown';"
-        "ctx.fillText(cond.length>10?cond.substring(0,10):cond,60,190);"
-        // Right column: temp + hi/lo
+        "ctx.fillText(cond.length>12?cond.substring(0,12):cond,55,180);"
+        // Right column: temp + hi/lo (shifted left for better visual balance)
         "const temp=w.temperature||0;"
-        // Temperature - large and bold
+        // Temperature - large and bold, left-aligned visually
         "ctx.fillStyle=tempCol(temp);ctx.font='bold 56px sans-serif';"
-        "ctx.fillText(fmtTemp(temp,useC),165,145);"
+        "ctx.fillText(fmtTemp(temp,useC),158,140);"
         // Hi/Lo from forecast day 0 (today)
         "const fc=loc.forecast||[];if(fc.length>0){"
         "const today=fc[0];"
         "ctx.font='14px sans-serif';"
-        "ctx.fillStyle=C.ORANGE;ctx.fillText('↑'+fmtTemp(today.tempMax||0,useC),140,175);"
-        "ctx.fillStyle=C.BLUE;ctx.fillText('↓'+fmtTemp(today.tempMin||0,useC),190,175);}"
+        "ctx.fillStyle=C.ORANGE;ctx.fillText('↑'+fmtTemp(today.tempMax||0,useC),133,170);"
+        "ctx.fillStyle=C.BLUE;ctx.fillText('↓'+fmtTemp(today.tempMin||0,useC),183,170);}"
         // Screen dots
         "drawDots();}"
 
@@ -1045,28 +1044,28 @@ void handleDisplayPreview() {
         "const day=fc[fi],cx=sx+i*(cw+sp);"
         "ctx.fillStyle=C.CARD;"
         "ctx.beginPath();ctx.roundRect(cx,30,cw,ch,6);ctx.fill();"
-        // Day name + date
+        // Day name + date (compact at top)
         "const tm=getTomorrow(startIdx+i);"
         "ctx.fillStyle=C.CYAN;ctx.font='bold 14px sans-serif';"
-        "ctx.fillText(day.day||tm.day,cx+cw/2,48);"
+        "ctx.fillText(day.day||tm.day,cx+cw/2,46);"
         "ctx.fillStyle=C.GRAY;ctx.font='12px sans-serif';"
-        "ctx.fillText(tm.date,cx+cw/2,64);"
-        // Icon - larger 48x48
+        "ctx.fillText(tm.date,cx+cw/2,62);"
+        // Icon - 48x48 with more space from date
         "const ico=getIco(day.condition,true);"
-        "drawIco(ico.ico,cx+(cw-48)/2,70,48,ico.col);"
-        // High/Low temps
+        "drawIco(ico.ico,cx+(cw-48)/2,78,48,ico.col);"
+        // High/Low temps (moved down to match icon shift)
         "ctx.fillStyle=C.ORANGE;ctx.font='bold 16px sans-serif';"
-        "ctx.fillText('↑'+fmtTemp(day.tempMax||0,useC),cx+cw/2,140);"
+        "ctx.fillText('↑'+fmtTemp(day.tempMax||0,useC),cx+cw/2,148);"
         "ctx.fillStyle=C.BLUE;ctx.font='14px sans-serif';"
-        "ctx.fillText('↓'+fmtTemp(day.tempMin||0,useC),cx+cw/2,160);"
+        "ctx.fillText('↓'+fmtTemp(day.tempMin||0,useC),cx+cw/2,168);"
         // Precip
         "const pp=day.precipProbability||day.precipitationProb||0;"
         "ctx.fillStyle=pp>0?C.BLUE:C.GRAY;ctx.font='12px sans-serif';"
-        "ctx.fillText((pp>0?'💧':'')+Math.round(pp)+'%',cx+cw/2,180);"
+        "ctx.fillText((pp>0?'💧':'')+Math.round(pp)+'%',cx+cw/2,188);"
         // Condition
         "ctx.fillStyle=C.GRAY;ctx.font='11px sans-serif';"
         "const cond=day.condition||'?';"
-        "ctx.fillText(cond.length>9?cond.substring(0,9):cond,cx+cw/2,198);}"
+        "ctx.fillText(cond.length>9?cond.substring(0,9):cond,cx+cw/2,206);}"
         // Screen dots
         "drawDots();}"
 
