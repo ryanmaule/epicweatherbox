@@ -257,6 +257,16 @@ void drawRaindrop(int x, int y, uint16_t color) {
     tft.fillCircle(x+4, y+6, 3, color);
 }
 
+// Small percent symbol (8x10 pixels) - drawn as two circles with diagonal line
+void drawPercent(int x, int y, uint16_t color) {
+    tft.fillCircle(x+2, y+2, 2, color);      // Top-left circle
+    tft.fillCircle(x+8, y+8, 2, color);      // Bottom-right circle
+    // Diagonal line (draw as small rectangles for thickness)
+    for (int i = 0; i < 10; i++) {
+        tft.fillRect(x + 8 - i, y + i, 2, 1, color);
+    }
+}
+
 // Main icon dispatcher - draws weather icon based on condition
 void drawWeatherIcon(int x, int y, WeatherCondition condition, bool isDay = true, int size = 32) {
     switch (condition) {
@@ -379,33 +389,31 @@ void drawCurrentWeather() {
     if (h12 == 0) h12 = 12;
     const char* ampm = (hours < 12) ? "AM" : "PM";
 
-    // Time display - large centered with smooth font
+    // ========== Header: Time and Location ==========
     char timeStr[16];
     snprintf(timeStr, sizeof(timeStr), "%d:%02d %s", h12, minutes, ampm);
     tft.setTextDatum(TC_DATUM);
     tft.setFreeFont(FSSB18);
     tft.setTextColor(COLOR_CYAN);
-    tft.drawString(timeStr, 120, 15, GFXFF);
+    tft.drawString(timeStr, 120, 8, GFXFF);
 
-    // Location name
     tft.setFreeFont(FSS9);
     tft.setTextColor(COLOR_GRAY);
-    tft.drawString(location.name, 120, 48, GFXFF);
+    tft.drawString(location.name, 120, 38, GFXFF);
 
-    // ========== Two-column layout: Icon (left) | Temp (right) ==========
-    // Layout spread across full screen height for better spacing
-    int iconY = 70;
+    // ========== Main content: Large icon + Large temp ==========
+    // Weather icon (64x64) on left - larger for main screen
+    int iconX = 15;
+    int iconY = 58;
+    drawWeatherIcon(iconX, iconY, weather.current.condition, weather.current.isDay, 64);
 
-    // Weather icon (48x48) on left side
-    drawWeatherIcon(20, iconY, weather.current.condition, weather.current.isDay, 48);
-
-    // Condition text under icon
+    // Condition text under icon - larger font
     tft.setTextDatum(TC_DATUM);
-    tft.setFreeFont(FSS9);
+    tft.setFreeFont(FSS12);
     tft.setTextColor(COLOR_WHITE);
-    tft.drawString(conditionToString(weather.current.condition), 44, iconY + 55, GFXFF);
+    tft.drawString(conditionToString(weather.current.condition), iconX + 32, iconY + 70, GFXFF);
 
-    // Current temperature on right side
+    // Current temperature on right side - smooth bold font instead of digital
     float temp = weather.current.temperature;
     if (!useCelsius) {
         temp = temp * 9.0 / 5.0 + 32.0;
@@ -418,15 +426,30 @@ void drawCurrentWeather() {
     else if (tempC < 10) tempColor = COLOR_CYAN;
     else if (tempC > 25) tempColor = COLOR_ORANGE;
 
-    // Large temperature with unit - centered in right half
-    char tempStr[16];
-    snprintf(tempStr, sizeof(tempStr), "%.0f%c", temp, useCelsius ? 'C' : 'F');
-    tft.setTextDatum(TC_DATUM);
+    // Large temperature with degree symbol - using bold 24pt smooth font
+    char tempStr[8];
+    snprintf(tempStr, sizeof(tempStr), "%.0f", temp);
+    tft.setTextDatum(TR_DATUM);
+    tft.setFreeFont(FSSB24);
     tft.setTextColor(tempColor);
-    tft.drawString(tempStr, 165, iconY + 8, 7);
+    int tempX = 200;
+    int tempY = 70;
+    tft.drawString(tempStr, tempX, tempY, GFXFF);
 
-    // ========== Hi/Lo/Precip row with icons (below main content) ==========
-    int detailY = 155;
+    // Degree symbol and unit (smaller, positioned after number)
+    tft.setFreeFont(FSSB12);
+    tft.setTextDatum(TL_DATUM);
+    char unitStr[4];
+    snprintf(unitStr, sizeof(unitStr), "°%c", useCelsius ? 'C' : 'F');
+    tft.drawString(unitStr, tempX + 2, tempY, GFXFF);
+
+    // ========== Detail bar at bottom with rounded rectangle background ==========
+    int barY = 175;
+    int barH = 36;
+    int barMargin = 8;
+
+    // Draw rounded rectangle background (same style as forecast cards)
+    tft.fillRoundRect(barMargin, barY, 240 - 2*barMargin, barH, 4, COLOR_CARD);
 
     if (weather.forecastDays > 0) {
         float hi = weather.forecast[0].tempMax;
@@ -436,31 +459,41 @@ void drawCurrentWeather() {
             lo = lo * 9.0 / 5.0 + 32.0;
         }
 
+        // Three sections within the bar, evenly spaced
+        int sectionW = (240 - 2*barMargin) / 3;
+        int section1X = barMargin;
+        int section2X = barMargin + sectionW;
+        int section3X = barMargin + 2*sectionW;
+        int contentY = barY + 10;
+
         tft.setFreeFont(FSSB12);
 
-        // High temp with up arrow icon (left third)
-        drawArrowUp(30, detailY + 2, COLOR_ORANGE);
+        // High temp section
+        drawArrowUp(section1X + 12, contentY, COLOR_ORANGE);
         tft.setTextDatum(TL_DATUM);
         tft.setTextColor(COLOR_ORANGE);
         char hiStr[8];
         snprintf(hiStr, sizeof(hiStr), "%.0f", hi);
-        tft.drawString(hiStr, 44, detailY, GFXFF);
+        tft.drawString(hiStr, section1X + 28, contentY - 2, GFXFF);
 
-        // Low temp with down arrow icon (middle)
-        drawArrowDown(100, detailY + 2, COLOR_BLUE);
+        // Low temp section
+        drawArrowDown(section2X + 12, contentY, COLOR_BLUE);
         tft.setTextColor(COLOR_BLUE);
         char loStr[8];
         snprintf(loStr, sizeof(loStr), "%.0f", lo);
-        tft.drawString(loStr, 114, detailY, GFXFF);
+        tft.drawString(loStr, section2X + 28, contentY - 2, GFXFF);
 
-        // Precipitation with raindrop icon (right third - icon indicates it's precip)
+        // Precipitation section with % symbol
         int precipVal = (int)weather.forecast[0].precipitationProb;
         uint16_t precipColor = precipVal > 30 ? COLOR_CYAN : COLOR_GRAY;
-        drawRaindrop(168, detailY, precipColor);
+        drawRaindrop(section3X + 12, contentY - 2, precipColor);
         tft.setTextColor(precipColor);
         char precip[8];
         snprintf(precip, sizeof(precip), "%d", precipVal);
-        tft.drawString(precip, 184, detailY, GFXFF);
+        tft.drawString(precip, section3X + 28, contentY - 2, GFXFF);
+        // Draw % after the number
+        int16_t numW = tft.textWidth(precip, GFXFF);
+        drawPercent(section3X + 30 + numW, contentY, precipColor);
     }
 
     // Screen dots at bottom (one per screen, not per location)
@@ -547,27 +580,37 @@ void drawForecast(int startDay) {
         snprintf(hiStr, sizeof(hiStr), "%.0f", hi);
         snprintf(loStr, sizeof(loStr), "%.0f", lo);
 
+        // Layout: arrow (12px) + gap (4px) + number (centered in remaining ~45px)
+        int arrowX = x + 8;
+        int numAreaX = x + 28;  // Start of number area (after arrow + gap)
+        int numAreaW = cardW - 28 - 4;  // Width for number (card width minus arrow area minus margin)
+
         // High temp with up arrow icon
-        drawArrowUp(x + 12, y + 95, COLOR_ORANGE);
+        drawArrowUp(arrowX, y + 95, COLOR_ORANGE);
         tft.setFreeFont(FSSB12);
         tft.setTextColor(COLOR_ORANGE);
-        tft.setTextDatum(TL_DATUM);
-        tft.drawString(hiStr, x + 24, y + 93, GFXFF);
+        tft.setTextDatum(TC_DATUM);
+        tft.drawString(hiStr, numAreaX + numAreaW/2, y + 93, GFXFF);
 
         // Low temp with down arrow icon
-        drawArrowDown(x + 12, y + 118, COLOR_BLUE);
+        drawArrowDown(arrowX, y + 120, COLOR_BLUE);
         tft.setTextColor(COLOR_BLUE);
-        tft.drawString(loStr, x + 24, y + 118, GFXFF);
+        tft.drawString(loStr, numAreaX + numAreaW/2, y + 118, GFXFF);
 
-        // Precipitation % with raindrop icon (raindrop indicates it's precip)
+        // Precipitation with raindrop icon and % symbol
         int precipVal = (int)day.precipitationProb;
         uint16_t precipColor = precipVal > 30 ? COLOR_CYAN : COLOR_GRAY;
-        drawRaindrop(x + 15, y + 145, precipColor);
+        drawRaindrop(arrowX + 2, y + 148, precipColor);
         tft.setFreeFont(FSSB12);
         tft.setTextColor(precipColor);
         char precip[8];
         snprintf(precip, sizeof(precip), "%d", precipVal);
-        tft.drawString(precip, x + 30, y + 145, GFXFF);
+        // Draw number centered, then % symbol after
+        int16_t numW = tft.textWidth(precip, GFXFF);
+        int numX = numAreaX + (numAreaW - numW - 12) / 2;  // Center number + % together
+        tft.setTextDatum(TL_DATUM);
+        tft.drawString(precip, numX, y + 148, GFXFF);
+        drawPercent(numX + numW + 2, y + 150, precipColor);
     }
 
     // Screen dots at bottom (one per screen, not per location)
