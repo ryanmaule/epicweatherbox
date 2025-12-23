@@ -267,6 +267,33 @@ void drawPercent(int x, int y, uint16_t color) {
     }
 }
 
+// Small globe icon (12x12 pixels) for location
+void drawGlobe(int x, int y, uint16_t color) {
+    tft.drawCircle(x+6, y+6, 5, color);       // Outer circle
+    tft.drawFastHLine(x+1, y+6, 10, color);   // Horizontal line (equator)
+    tft.drawFastVLine(x+6, y+1, 10, color);   // Vertical line (meridian)
+    // Curved lines for globe effect
+    tft.drawPixel(x+3, y+3, color);
+    tft.drawPixel(x+9, y+3, color);
+    tft.drawPixel(x+3, y+9, color);
+    tft.drawPixel(x+9, y+9, color);
+}
+
+// Small calendar icon (12x12 pixels) for date
+void drawCalendar(int x, int y, uint16_t color) {
+    // Calendar body
+    tft.drawRect(x, y+2, 12, 10, color);
+    // Top bar (header)
+    tft.fillRect(x, y+2, 12, 3, color);
+    // Calendar hooks
+    tft.fillRect(x+2, y, 2, 3, color);
+    tft.fillRect(x+8, y, 2, 3, color);
+    // Date dots (grid)
+    tft.fillRect(x+2, y+7, 2, 2, color);
+    tft.fillRect(x+5, y+7, 2, 2, color);
+    tft.fillRect(x+8, y+7, 2, 2, color);
+}
+
 // Main icon dispatcher - draws weather icon based on condition
 void drawWeatherIcon(int x, int y, WeatherCondition condition, bool isDay = true, int size = 32) {
     switch (condition) {
@@ -384,64 +411,112 @@ void drawCurrentWeather() {
     int hours = (epoch % 86400L) / 3600;
     int minutes = (epoch % 3600) / 60;
 
+    // Calculate date components
+    // Simple day calculation from epoch (days since Jan 1, 1970)
+    unsigned long days = epoch / 86400;
+    int year = 1970;
+    while (true) {
+        int daysInYear = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) ? 366 : 365;
+        if (days < (unsigned long)daysInYear) break;
+        days -= daysInYear;
+        year++;
+    }
+    // Calculate month and day
+    int daysInMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) daysInMonth[1] = 29;
+    int month = 0;
+    while (days >= (unsigned long)daysInMonth[month]) {
+        days -= daysInMonth[month];
+        month++;
+    }
+    int day = days + 1;
+    const char* monthNames[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
     // 12-hour format
     int h12 = hours % 12;
     if (h12 == 0) h12 = 12;
     const char* ampm = (hours < 12) ? "AM" : "PM";
 
-    // ========== Header: Time and Location ==========
+    // ========== Header: Time (large, centered) ==========
     char timeStr[16];
     snprintf(timeStr, sizeof(timeStr), "%d:%02d %s", h12, minutes, ampm);
     tft.setTextDatum(TC_DATUM);
     tft.setFreeFont(FSSB18);
     tft.setTextColor(COLOR_CYAN);
-    tft.drawString(timeStr, 120, 8, GFXFF);
+    tft.drawString(timeStr, 120, 6, GFXFF);
 
+    // ========== Info row: Globe + Location | Calendar + Date ==========
+    int infoY = 36;
+
+    // Globe icon + Location name (left side)
+    drawGlobe(15, infoY, COLOR_GRAY);
     tft.setFreeFont(FSS9);
+    tft.setTextDatum(TL_DATUM);
     tft.setTextColor(COLOR_GRAY);
-    tft.drawString(location.name, 120, 38, GFXFF);
+    tft.drawString(location.name, 32, infoY, GFXFF);
 
-    // ========== Main content: Large icon + Large temp ==========
-    // Weather icon (64x64) on left - larger for main screen
-    int iconX = 15;
-    int iconY = 58;
-    drawWeatherIcon(iconX, iconY, weather.current.condition, weather.current.isDay, 64);
+    // Calendar icon + Date (right side)
+    char dateStr[12];
+    snprintf(dateStr, sizeof(dateStr), "%s %d", monthNames[month], day);
+    int16_t dateW = tft.textWidth(dateStr, GFXFF);
+    int dateX = 225 - dateW;
+    drawCalendar(dateX - 16, infoY, COLOR_GRAY);
+    tft.setTextDatum(TL_DATUM);
+    tft.drawString(dateStr, dateX, infoY, GFXFF);
 
-    // Condition text under icon - larger font
+    // ========== Main content: Two columns ==========
+    // Left column (0-119): Weather icon + condition text
+    // Right column (120-239): Large temperature
+
+    int mainY = 58;
+    int leftColCenter = 60;   // Center of left column
+    int rightColCenter = 180; // Center of right column
+
+    // Weather icon (64x64) centered in left column
+    int iconX = leftColCenter - 32;
+    drawWeatherIcon(iconX, mainY, weather.current.condition, weather.current.isDay, 64);
+
+    // Condition text under icon - centered in left column
     tft.setTextDatum(TC_DATUM);
     tft.setFreeFont(FSS12);
     tft.setTextColor(COLOR_WHITE);
-    tft.drawString(conditionToString(weather.current.condition), iconX + 32, iconY + 70, GFXFF);
+    tft.drawString(conditionToString(weather.current.condition), leftColCenter, mainY + 70, GFXFF);
 
-    // Current temperature on right side - smooth bold font instead of digital
+    // Current temperature - large, centered in right column
     float temp = weather.current.temperature;
     if (!useCelsius) {
         temp = temp * 9.0 / 5.0 + 32.0;
     }
 
-    // Color based on temp (Celsius thresholds)
-    float tempC = useCelsius ? temp : (temp - 32.0) * 5.0 / 9.0;
-    uint16_t tempColor = COLOR_WHITE;
-    if (tempC < 0) tempColor = COLOR_BLUE;
-    else if (tempC < 10) tempColor = COLOR_CYAN;
-    else if (tempC > 25) tempColor = COLOR_ORANGE;
+    // Temperature is WHITE (not colored by value) to differentiate from time
+    tft.setTextColor(COLOR_WHITE);
 
-    // Large temperature with degree symbol - using bold 24pt smooth font
+    // Very large temperature using font 7 (48pt digital-style, but we want smooth)
+    // Using the largest smooth font we have - draw temp number
     char tempStr[8];
     snprintf(tempStr, sizeof(tempStr), "%.0f", temp);
-    tft.setTextDatum(TR_DATUM);
-    tft.setFreeFont(FSSB24);
-    tft.setTextColor(tempColor);
-    int tempX = 200;
-    int tempY = 70;
-    tft.drawString(tempStr, tempX, tempY, GFXFF);
 
-    // Degree symbol and unit (smaller, positioned after number)
-    tft.setFreeFont(FSSB12);
-    tft.setTextDatum(TL_DATUM);
+    // Calculate width to center temp + unit together
+    tft.setFreeFont(FSSB24);
+    int16_t tempW = tft.textWidth(tempStr, GFXFF);
+    tft.setFreeFont(FSSB18);
     char unitStr[4];
     snprintf(unitStr, sizeof(unitStr), "°%c", useCelsius ? 'C' : 'F');
-    tft.drawString(unitStr, tempX + 2, tempY, GFXFF);
+    int16_t unitW = tft.textWidth(unitStr, GFXFF);
+
+    int totalW = tempW + unitW;
+    int tempStartX = rightColCenter - totalW/2;
+    int tempY = mainY + 20;
+
+    // Draw temperature number
+    tft.setFreeFont(FSSB24);
+    tft.setTextDatum(TL_DATUM);
+    tft.drawString(tempStr, tempStartX, tempY, GFXFF);
+
+    // Draw degree symbol and unit (slightly smaller, positioned after number)
+    tft.setFreeFont(FSSB18);
+    tft.drawString(unitStr, tempStartX + tempW, tempY + 4, GFXFF);
 
     // ========== Detail bar at bottom with rounded rectangle background ==========
     int barY = 175;
