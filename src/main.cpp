@@ -327,8 +327,9 @@ int drawLargeDigit(int x, int y, char digit, int height, uint16_t color) {
             tft.fillRoundRect(left + gap, bot, w - 2*gap, t, t/2, color);      // bot
             break;
         case '1':
-            tft.fillRoundRect(right, top + gap, t, height/2 - gap, t/2, color);// topR
-            tft.fillRoundRect(right, mid + gap, t, height/2 - gap, t/2, color);// botR
+            // Draw '1' at left of its bounding box (not at 'right' position)
+            tft.fillRoundRect(left, top + gap, t, height/2 - gap, t/2, color);
+            tft.fillRoundRect(left, mid + gap, t, height/2 - gap, t/2, color);
             return t + gap;  // Narrow width for 1
         case '2':
             tft.fillRoundRect(left + gap, top, w - 2*gap, t, t/2, color);      // top
