@@ -1186,15 +1186,15 @@ void drawCustomScreen() {
         if (len <= 40) {
             // Short text: large font with generous spacing
             font = FSSB18;
-            lineHeight = 34;  // Increased from 28
+            lineHeight = 38;  // Comfortable spacing for large text
         } else if (len <= 80) {
             // Medium text: medium font with good spacing
             font = FSSB12;
-            lineHeight = 26;  // Increased from 20
+            lineHeight = 30;  // Good spacing for medium text
         } else {
             // Long text: small font with comfortable spacing
             font = FSS9;
-            lineHeight = 22;  // Increased from 16
+            lineHeight = 26;  // Readable spacing for small text
         }
 
         tft.setFreeFont(font);
