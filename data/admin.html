@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EpicWeatherBox Admin</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,system-ui,sans-serif;background:#1a1a2e;color:#eee;min-height:100vh}
+.container{max-width:800px;margin:0 auto;padding:15px}
+h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
+.grid{display:grid;grid-template-columns:1fr;gap:15px}
+@media(min-width:600px){.grid{grid-template-columns:260px 1fr}}
+.card{background:rgba(255,255,255,0.05);border-radius:10px;padding:15px;border:1px solid rgba(255,255,255,0.1)}
+.card h3{color:#00d4ff;margin-bottom:12px;font-size:1em}
+.preview-wrap{display:flex;flex-direction:column;align-items:center}
+#preview{border:2px solid #333;border-radius:8px;background:#000;image-rendering:pixelated}
+.preview-info{margin-top:8px;font-size:0.8em;color:#888}
+.btn-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btn{padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-size:0.85em;transition:all 0.2s}
+.btn-primary{background:#00d4ff;color:#1a1a2e}
+.btn-primary:hover{background:#00a8cc}
+.btn-secondary{background:rgba(255,255,255,0.1);color:#eee}
+.btn-secondary:hover{background:rgba(255,255,255,0.2)}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;margin-bottom:4px;font-size:0.85em;color:#aaa}
+.form-group input,.form-group select{width:100%;padding:8px;border:1px solid #333;border-radius:6px;background:#2a2a4e;color:#eee;font-size:0.9em}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:#00d4ff}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.weather-now{text-align:center;padding:10px}
+.weather-temp{font-size:2.5em;font-weight:bold}
+.weather-cond{font-size:1.1em;color:#aaa}
+.weather-icon{font-size:2em}
+.forecast{display:flex;justify-content:space-between;margin-top:10px;overflow-x:auto}
+.forecast-day{text-align:center;padding:5px;min-width:45px}
+.forecast-day .day{font-size:0.7em;color:#888}
+.forecast-day .icon{font-size:1.2em}
+.forecast-day .temp{font-size:0.8em}
+.status{padding:8px;border-radius:6px;margin-top:10px;font-size:0.85em}
+.status.success{background:rgba(0,200,100,0.2);color:#0c6}
+.status.error{background:rgba(200,50,50,0.2);color:#f66}
+.tabs{display:flex;border-bottom:1px solid #333;margin-bottom:15px}
+.tab{padding:10px 15px;cursor:pointer;border-bottom:2px solid transparent;color:#888;font-size:0.9em}
+.tab.active{color:#00d4ff;border-color:#00d4ff}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.links{margin-top:15px;text-align:center}
+.links a{color:#00d4ff;margin:0 10px;font-size:0.85em}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>EpicWeatherBox</h1>
+<div class="grid">
+<div>
+<div class="card preview-wrap">
+<canvas id="preview" width="240" height="240"></canvas>
+<div class="preview-info">240x240 Display Preview</div>
+<div class="btn-row">
+<button class="btn btn-secondary" onclick="cycleScreen()">Next Screen</button>
+<button class="btn btn-secondary" onclick="refreshPreview()">Refresh</button>
+</div>
+</div>
+<div class="card" style="margin-top:15px">
+<h3>Current Weather</h3>
+<div id="weather-display">Loading...</div>
+</div>
+</div>
+<div>
+<div class="card">
+<div class="tabs">
+<div class="tab active" data-tab="location">Location</div>
+<div class="tab" data-tab="display">Display</div>
+<div class="tab" data-tab="system">System</div>
+</div>
+<div id="location" class="tab-content active">
+<div class="form-group">
+<label>Primary Location</label>
+<input type="text" id="loc1-name" placeholder="City name">
+</div>
+<div class="form-row">
+<div class="form-group">
+<label>Latitude</label>
+<input type="number" id="loc1-lat" step="0.0001" placeholder="47.6062">
+</div>
+<div class="form-group">
+<label>Longitude</label>
+<input type="number" id="loc1-lon" step="0.0001" placeholder="-122.3321">
+</div>
+</div>
+<div class="form-group">
+<label><input type="checkbox" id="loc2-enabled"> Enable Second Location</label>
+</div>
+<div id="loc2-fields" style="display:none">
+<div class="form-group">
+<label>Secondary Location</label>
+<input type="text" id="loc2-name" placeholder="City name">
+</div>
+<div class="form-row">
+<div class="form-group">
+<label>Latitude</label>
+<input type="number" id="loc2-lat" step="0.0001">
+</div>
+<div class="form-group">
+<label>Longitude</label>
+<input type="number" id="loc2-lon" step="0.0001">
+</div>
+</div>
+</div>
+<div class="btn-row">
+<button class="btn btn-primary" onclick="saveLocation()">Save Location</button>
+<button class="btn btn-secondary" onclick="useMyLocation()">Use My Location</button>
+</div>
+<div id="loc-status"></div>
+</div>
+<div id="display" class="tab-content">
+<div class="form-group">
+<label>Temperature Unit</label>
+<select id="temp-unit">
+<option value="f">Fahrenheit</option>
+<option value="c">Celsius</option>
+</select>
+</div>
+<div class="form-group">
+<label>Screen Cycle (seconds)</label>
+<input type="number" id="cycle-time" value="10" min="3" max="60">
+</div>
+<div class="form-group">
+<label>Brightness</label>
+<input type="range" id="brightness" min="10" max="100" value="80">
+<span id="brightness-val">80%</span>
+</div>
+<div class="btn-row">
+<button class="btn btn-primary" onclick="saveDisplay()">Save Settings</button>
+</div>
+<div id="display-status"></div>
+</div>
+<div id="system" class="tab-content">
+<div class="form-group">
+<label>Device Info</label>
+<div id="device-info">Loading...</div>
+</div>
+<div class="btn-row">
+<button class="btn btn-secondary" onclick="refreshWeather()">Refresh Weather</button>
+<button class="btn btn-secondary" onclick="location.href='/update'">Firmware Update</button>
+<button class="btn btn-secondary" style="background:#c33" onclick="if(confirm('Reboot?'))location.href='/reboot'">Reboot</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="links">
+<a href="/">Home</a>
+<a href="/api/weather">Weather API</a>
+<a href="/api/status">Status API</a>
+</div>
+</div>
+<script>
+let currentScreen=0;
+const screens=['current','forecast','dual'];
+const canvas=document.getElementById('preview');
+const ctx=canvas.getContext('2d');
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab=>{
+tab.onclick=()=>{
+document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+tab.classList.add('active');
+document.getElementById(tab.dataset.tab).classList.add('active');
+}});
+
+// Secondary location toggle
+document.getElementById('loc2-enabled').onchange=e=>{
+document.getElementById('loc2-fields').style.display=e.target.checked?'block':'none';
+};
+
+// Brightness slider
+document.getElementById('brightness').oninput=e=>{
+document.getElementById('brightness-val').textContent=e.target.value+'%';
+};
+
+// Load initial data
+async function loadData(){
+try{
+const[weather,status,config]=await Promise.all([
+fetch('/api/weather').then(r=>r.json()),
+fetch('/api/status').then(r=>r.json()),
+fetch('/api/config').then(r=>r.json()).catch(()=>({}))
+]);
+updateWeatherDisplay(weather);
+updateDeviceInfo(status);
+updateConfig(config);
+drawPreview(weather);
+}catch(e){console.error(e)}
+}
+
+function updateWeatherDisplay(data){
+if(!data.primary||!data.primary.valid){
+document.getElementById('weather-display').innerHTML='<div class="status error">Weather unavailable</div>';
+return;
+}
+const w=data.primary;
+let html=`<div class="weather-now">
+<div class="weather-icon">${w.current.icon}</div>
+<div class="weather-temp">${Math.round(w.current.temperature)}°F</div>
+<div class="weather-cond">${w.current.condition} - ${w.location}</div>
+</div><div class="forecast">`;
+w.forecast.slice(0,5).forEach(d=>{
+html+=`<div class="forecast-day"><div class="day">${d.day}</div><div class="icon">${d.icon}</div><div class="temp">${Math.round(d.tempMax)}°</div></div>`;
+});
+html+='</div>';
+document.getElementById('weather-display').innerHTML=html;
+}
+
+function updateDeviceInfo(s){
+document.getElementById('device-info').innerHTML=`
+<div>Version: ${s.version}</div>
+<div>IP: ${s.ip}</div>
+<div>Uptime: ${Math.floor(s.uptime/60)}m ${s.uptime%60}s</div>
+<div>Free RAM: ${s.heap} bytes</div>
+<div>WiFi: ${s.rssi} dBm</div>`;
+}
+
+function updateConfig(c){
+if(c.primary){
+document.getElementById('loc1-name').value=c.primary.name||'';
+document.getElementById('loc1-lat').value=c.primary.lat||'';
+document.getElementById('loc1-lon').value=c.primary.lon||'';
+}
+if(c.secondary){
+document.getElementById('loc2-enabled').checked=c.secondary.enabled;
+document.getElementById('loc2-fields').style.display=c.secondary.enabled?'block':'none';
+document.getElementById('loc2-name').value=c.secondary.name||'';
+document.getElementById('loc2-lat').value=c.secondary.lat||'';
+document.getElementById('loc2-lon').value=c.secondary.lon||'';
+}
+if(c.display){
+document.getElementById('temp-unit').value=c.display.unit||'f';
+document.getElementById('cycle-time').value=c.display.cycle||10;
+document.getElementById('brightness').value=c.display.brightness||80;
+document.getElementById('brightness-val').textContent=(c.display.brightness||80)+'%';
+}
+}
+
+function drawPreview(data){
+ctx.fillStyle='#000';
+ctx.fillRect(0,0,240,240);
+if(!data||!data.primary||!data.primary.valid){
+ctx.fillStyle='#666';
+ctx.font='16px sans-serif';
+ctx.textAlign='center';
+ctx.fillText('No weather data',120,120);
+return;
+}
+const w=data.primary;
+if(currentScreen===0)drawCurrentWeather(w);
+else if(currentScreen===1)drawForecast(w);
+else drawDualLocation(data);
+}
+
+function drawCurrentWeather(w){
+ctx.fillStyle='#1a1a2e';
+ctx.fillRect(0,0,240,240);
+ctx.textAlign='center';
+ctx.fillStyle='#00d4ff';
+ctx.font='bold 14px sans-serif';
+ctx.fillText(w.location,120,25);
+ctx.font='60px sans-serif';
+ctx.fillText(w.current.icon,120,100);
+ctx.fillStyle='#fff';
+ctx.font='bold 48px sans-serif';
+ctx.fillText(Math.round(w.current.temperature)+'°',120,160);
+ctx.fillStyle='#aaa';
+ctx.font='16px sans-serif';
+ctx.fillText(w.current.condition,120,185);
+ctx.font='12px sans-serif';
+ctx.fillText('Wind: '+w.current.windSpeed+' mph',120,210);
+const now=new Date();
+ctx.fillStyle='#666';
+ctx.fillText(now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),120,232);
+}
+
+function drawForecast(w){
+ctx.fillStyle='#1a1a2e';
+ctx.fillRect(0,0,240,240);
+ctx.textAlign='center';
+ctx.fillStyle='#00d4ff';
+ctx.font='bold 14px sans-serif';
+ctx.fillText('7-Day Forecast',120,20);
+const days=w.forecast.slice(0,7);
+const cols=4,rows=2;
+days.forEach((d,i)=>{
+if(i>=7)return;
+const row=Math.floor(i/cols),col=i%cols;
+const x=30+col*55,y=50+row*95;
+ctx.fillStyle='#888';
+ctx.font='11px sans-serif';
+ctx.fillText(d.day,x,y);
+ctx.font='24px sans-serif';
+ctx.fillText(d.icon,x,y+30);
+ctx.fillStyle='#fff';
+ctx.font='bold 14px sans-serif';
+ctx.fillText(Math.round(d.tempMax)+'°',x,y+55);
+ctx.fillStyle='#668';
+ctx.font='12px sans-serif';
+ctx.fillText(Math.round(d.tempMin)+'°',x,y+70);
+});
+}
+
+function drawDualLocation(data){
+ctx.fillStyle='#1a1a2e';
+ctx.fillRect(0,0,240,240);
+ctx.textAlign='center';
+const w1=data.primary;
+ctx.fillStyle='#00d4ff';
+ctx.font='bold 12px sans-serif';
+ctx.fillText(w1.location,60,25);
+ctx.font='36px sans-serif';
+ctx.fillText(w1.current.icon,60,70);
+ctx.fillStyle='#fff';
+ctx.font='bold 28px sans-serif';
+ctx.fillText(Math.round(w1.current.temperature)+'°',60,110);
+if(data.secondary&&data.secondary.valid){
+const w2=data.secondary;
+ctx.fillStyle='#00d4ff';
+ctx.font='bold 12px sans-serif';
+ctx.fillText(w2.location,180,25);
+ctx.font='36px sans-serif';
+ctx.fillText(w2.current.icon,180,70);
+ctx.fillStyle='#fff';
+ctx.font='bold 28px sans-serif';
+ctx.fillText(Math.round(w2.current.temperature)+'°',180,110);
+}else{
+ctx.fillStyle='#666';
+ctx.font='12px sans-serif';
+ctx.fillText('Second location',180,60);
+ctx.fillText('not configured',180,75);
+}
+ctx.strokeStyle='#333';
+ctx.beginPath();
+ctx.moveTo(120,10);
+ctx.lineTo(120,130);
+ctx.stroke();
+const now=new Date();
+ctx.fillStyle='#888';
+ctx.font='14px sans-serif';
+ctx.fillText(now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),120,220);
+}
+
+function cycleScreen(){
+currentScreen=(currentScreen+1)%3;
+fetch('/api/weather').then(r=>r.json()).then(drawPreview);
+}
+
+function refreshPreview(){
+fetch('/api/weather').then(r=>r.json()).then(drawPreview);
+}
+
+async function saveLocation(){
+const data={
+primary:{name:document.getElementById('loc1-name').value,lat:parseFloat(document.getElementById('loc1-lat').value),lon:parseFloat(document.getElementById('loc1-lon').value)},
+secondary:{enabled:document.getElementById('loc2-enabled').checked,name:document.getElementById('loc2-name').value,lat:parseFloat(document.getElementById('loc2-lat').value)||0,lon:parseFloat(document.getElementById('loc2-lon').value)||0}
+};
+try{
+const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+const result=await r.json();
+showStatus('loc-status',result.success?'success':'error',result.message);
+if(result.success)setTimeout(()=>location.reload(),2000);
+}catch(e){showStatus('loc-status','error','Failed to save');}
+}
+
+function useMyLocation(){
+if(!navigator.geolocation){showStatus('loc-status','error','Geolocation not supported');return;}
+navigator.geolocation.getCurrentPosition(pos=>{
+document.getElementById('loc1-lat').value=pos.coords.latitude.toFixed(4);
+document.getElementById('loc1-lon').value=pos.coords.longitude.toFixed(4);
+showStatus('loc-status','success','Location detected - enter city name and save');
+},()=>showStatus('loc-status','error','Could not get location'));
+}
+
+async function saveDisplay(){
+const data={display:{
+unit:document.getElementById('temp-unit').value,
+cycle:parseInt(document.getElementById('cycle-time').value),
+brightness:parseInt(document.getElementById('brightness').value)
+}};
+try{
+const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+const result=await r.json();
+showStatus('display-status',result.success?'success':'error',result.message);
+}catch(e){showStatus('display-status','error','Failed to save');}
+}
+
+async function refreshWeather(){
+try{
+const r=await fetch('/api/weather/refresh');
+const result=await r.json();
+if(result.success)loadData();
+}catch(e){}
+}
+
+function showStatus(id,type,msg){
+const el=document.getElementById(id);
+el.className='status '+type;
+el.textContent=msg;
+setTimeout(()=>el.textContent='',5000);
+}
+
+loadData();
+setInterval(loadData,60000);
+</script>
+</body>
+</html>
