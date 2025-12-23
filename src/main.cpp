@@ -447,7 +447,7 @@ void drawCurrentWeather() {
     tft.drawString(timeStr, 120, 6, GFXFF);
 
     // ========== Info row: Globe + Location | Calendar + Date ==========
-    int infoY = 36;
+    int infoY = 42;  // More space below time
 
     // Globe icon + Location name (left side)
     drawGlobe(15, infoY, COLOR_GRAY);
@@ -483,7 +483,7 @@ void drawCurrentWeather() {
     tft.setTextColor(COLOR_WHITE);
     tft.drawString(conditionToString(weather.current.condition), leftColCenter, mainY + 70, GFXFF);
 
-    // Current temperature - large, centered in right column
+    // Current temperature - very large, centered in right column
     float temp = weather.current.temperature;
     if (!useCelsius) {
         temp = temp * 9.0 / 5.0 + 32.0;
@@ -492,31 +492,32 @@ void drawCurrentWeather() {
     // Temperature is WHITE (not colored by value) to differentiate from time
     tft.setTextColor(COLOR_WHITE);
 
-    // Very large temperature using font 7 (48pt digital-style, but we want smooth)
-    // Using the largest smooth font we have - draw temp number
+    // Use font 7 (48pt) for very large temperature display
     char tempStr[8];
     snprintf(tempStr, sizeof(tempStr), "%.0f", temp);
 
-    // Calculate width to center temp + unit together
-    tft.setFreeFont(FSSB24);
-    int16_t tempW = tft.textWidth(tempStr, GFXFF);
-    tft.setFreeFont(FSSB18);
+    // Calculate width of temp number in font 7
+    int16_t tempW = tft.textWidth(tempStr, 7);
+
+    // Unit string with degree symbol
     char unitStr[4];
     snprintf(unitStr, sizeof(unitStr), "°%c", useCelsius ? 'C' : 'F');
+    tft.setFreeFont(FSS12);
     int16_t unitW = tft.textWidth(unitStr, GFXFF);
 
-    int totalW = tempW + unitW;
+    // Add spacing between number and unit
+    int spacing = 6;
+    int totalW = tempW + spacing + unitW;
     int tempStartX = rightColCenter - totalW/2;
-    int tempY = mainY + 20;
+    int tempY = mainY + 10;
 
-    // Draw temperature number
-    tft.setFreeFont(FSSB24);
+    // Draw temperature number using font 7 (large 48pt)
     tft.setTextDatum(TL_DATUM);
-    tft.drawString(tempStr, tempStartX, tempY, GFXFF);
+    tft.drawString(tempStr, tempStartX, tempY, 7);
 
-    // Draw degree symbol and unit (slightly smaller, positioned after number)
-    tft.setFreeFont(FSSB18);
-    tft.drawString(unitStr, tempStartX + tempW, tempY + 4, GFXFF);
+    // Draw degree symbol and unit (smaller, top-aligned with number)
+    tft.setFreeFont(FSS12);
+    tft.drawString(unitStr, tempStartX + tempW + spacing, tempY + 2, GFXFF);
 
     // ========== Detail bar at bottom with rounded rectangle background ==========
     int barY = 175;
