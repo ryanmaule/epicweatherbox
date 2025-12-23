@@ -2441,7 +2441,7 @@ void handleDisplayPreview() {
         "bootCtx.fillStyle=C.CYAN;bootCtx.font='bold 28px sans-serif';bootCtx.textAlign='center';"
         "bootCtx.fillText('EpicWeatherBox',120,45);"
         "bootCtx.fillStyle=C.GRAY;bootCtx.font='16px sans-serif';"
-        "bootCtx.fillText('v0.2.0-dev',120,75);"
+        "bootCtx.fillText('v1.0.0',120,75);"
         // Show boot GIF below title if exists (scaled to fit)
         "if(bootGifImg&&bootGifImg.complete){"
         "const w=bootGifImg.width,h=bootGifImg.height;"
