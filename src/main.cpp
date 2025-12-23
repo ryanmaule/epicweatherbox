@@ -294,6 +294,141 @@ void drawCalendar(int x, int y, uint16_t color) {
     tft.fillRect(x+8, y+7, 2, 2, color);
 }
 
+// =============================================================================
+// LARGE CUSTOM NUMBERS (scalable, smooth rounded segments)
+// =============================================================================
+
+// Draw a single large digit (0-9) or minus sign
+// Returns the width of the drawn character
+int drawLargeDigit(int x, int y, char digit, int height, uint16_t color) {
+    // Proportions based on height
+    int w = height * 3 / 5;      // Width is 60% of height
+    int t = height / 10;         // Segment thickness
+    if (t < 2) t = 2;
+    int gap = t / 2;             // Gap between segments
+    int midY = y + height / 2 - t / 2;
+
+    // Segment positions
+    int top = y;
+    int mid = midY;
+    int bot = y + height - t;
+    int left = x;
+    int right = x + w - t;
+
+    // Segment definitions for each digit (top, topL, topR, mid, botL, botR, bot)
+    // Using rounded rectangles for smooth look
+    switch (digit) {
+        case '0':
+            tft.fillRoundRect(left + gap, top, w - 2*gap, t, t/2, color);      // top
+            tft.fillRoundRect(left, top + gap, t, height/2 - gap, t/2, color); // topL
+            tft.fillRoundRect(right, top + gap, t, height/2 - gap, t/2, color);// topR
+            tft.fillRoundRect(left, mid + gap, t, height/2 - gap, t/2, color); // botL
+            tft.fillRoundRect(right, mid + gap, t, height/2 - gap, t/2, color);// botR
+            tft.fillRoundRect(left + gap, bot, w - 2*gap, t, t/2, color);      // bot
+            break;
+        case '1':
+            tft.fillRoundRect(right, top + gap, t, height/2 - gap, t/2, color);// topR
+            tft.fillRoundRect(right, mid + gap, t, height/2 - gap, t/2, color);// botR
+            return t + gap;  // Narrow width for 1
+        case '2':
+            tft.fillRoundRect(left + gap, top, w - 2*gap, t, t/2, color);      // top
+            tft.fillRoundRect(right, top + gap, t, height/2 - gap, t/2, color);// topR
+            tft.fillRoundRect(left + gap, mid, w - 2*gap, t, t/2, color);      // mid
+            tft.fillRoundRect(left, mid + gap, t, height/2 - gap, t/2, color); // botL
+            tft.fillRoundRect(left + gap, bot, w - 2*gap, t, t/2, color);      // bot
+            break;
+        case '3':
+            tft.fillRoundRect(left + gap, top, w - 2*gap, t, t/2, color);      // top
+            tft.fillRoundRect(right, top + gap, t, height/2 - gap, t/2, color);// topR
+            tft.fillRoundRect(left + gap, mid, w - 2*gap, t, t/2, color);      // mid
+            tft.fillRoundRect(right, mid + gap, t, height/2 - gap, t/2, color);// botR
+            tft.fillRoundRect(left + gap, bot, w - 2*gap, t, t/2, color);      // bot
+            break;
+        case '4':
+            tft.fillRoundRect(left, top + gap, t, height/2 - gap, t/2, color); // topL
+            tft.fillRoundRect(right, top + gap, t, height/2 - gap, t/2, color);// topR
+            tft.fillRoundRect(left + gap, mid, w - 2*gap, t, t/2, color);      // mid
+            tft.fillRoundRect(right, mid + gap, t, height/2 - gap, t/2, color);// botR
+            break;
+        case '5':
+            tft.fillRoundRect(left + gap, top, w - 2*gap, t, t/2, color);      // top
+            tft.fillRoundRect(left, top + gap, t, height/2 - gap, t/2, color); // topL
+            tft.fillRoundRect(left + gap, mid, w - 2*gap, t, t/2, color);      // mid
+            tft.fillRoundRect(right, mid + gap, t, height/2 - gap, t/2, color);// botR
+            tft.fillRoundRect(left + gap, bot, w - 2*gap, t, t/2, color);      // bot
+            break;
+        case '6':
+            tft.fillRoundRect(left + gap, top, w - 2*gap, t, t/2, color);      // top
+            tft.fillRoundRect(left, top + gap, t, height/2 - gap, t/2, color); // topL
+            tft.fillRoundRect(left + gap, mid, w - 2*gap, t, t/2, color);      // mid
+            tft.fillRoundRect(left, mid + gap, t, height/2 - gap, t/2, color); // botL
+            tft.fillRoundRect(right, mid + gap, t, height/2 - gap, t/2, color);// botR
+            tft.fillRoundRect(left + gap, bot, w - 2*gap, t, t/2, color);      // bot
+            break;
+        case '7':
+            tft.fillRoundRect(left + gap, top, w - 2*gap, t, t/2, color);      // top
+            tft.fillRoundRect(right, top + gap, t, height/2 - gap, t/2, color);// topR
+            tft.fillRoundRect(right, mid + gap, t, height/2 - gap, t/2, color);// botR
+            break;
+        case '8':
+            tft.fillRoundRect(left + gap, top, w - 2*gap, t, t/2, color);      // top
+            tft.fillRoundRect(left, top + gap, t, height/2 - gap, t/2, color); // topL
+            tft.fillRoundRect(right, top + gap, t, height/2 - gap, t/2, color);// topR
+            tft.fillRoundRect(left + gap, mid, w - 2*gap, t, t/2, color);      // mid
+            tft.fillRoundRect(left, mid + gap, t, height/2 - gap, t/2, color); // botL
+            tft.fillRoundRect(right, mid + gap, t, height/2 - gap, t/2, color);// botR
+            tft.fillRoundRect(left + gap, bot, w - 2*gap, t, t/2, color);      // bot
+            break;
+        case '9':
+            tft.fillRoundRect(left + gap, top, w - 2*gap, t, t/2, color);      // top
+            tft.fillRoundRect(left, top + gap, t, height/2 - gap, t/2, color); // topL
+            tft.fillRoundRect(right, top + gap, t, height/2 - gap, t/2, color);// topR
+            tft.fillRoundRect(left + gap, mid, w - 2*gap, t, t/2, color);      // mid
+            tft.fillRoundRect(right, mid + gap, t, height/2 - gap, t/2, color);// botR
+            tft.fillRoundRect(left + gap, bot, w - 2*gap, t, t/2, color);      // bot
+            break;
+        case '-':
+            tft.fillRoundRect(left + gap, mid, w - 2*gap, t, t/2, color);      // mid only
+            break;
+        default:
+            break;
+    }
+    return w;
+}
+
+// Draw a number string with large custom digits
+// Returns total width drawn
+int drawLargeNumber(int x, int y, const char* numStr, int height, uint16_t color) {
+    int curX = x;
+    int spacing = height / 8;  // Space between digits
+    if (spacing < 2) spacing = 2;
+
+    for (int i = 0; numStr[i] != '\0'; i++) {
+        int charW = drawLargeDigit(curX, y, numStr[i], height, color);
+        curX += charW + spacing;
+    }
+    return curX - x - spacing;  // Total width (minus last spacing)
+}
+
+// Calculate width of a number string at given height (without drawing)
+int getLargeNumberWidth(const char* numStr, int height) {
+    int w = height * 3 / 5;      // Standard digit width
+    int t = height / 10;
+    if (t < 2) t = 2;
+    int spacing = height / 8;
+    if (spacing < 2) spacing = 2;
+
+    int total = 0;
+    for (int i = 0; numStr[i] != '\0'; i++) {
+        if (numStr[i] == '1') {
+            total += t + spacing / 2 + spacing;  // Narrow 1
+        } else {
+            total += w + spacing;
+        }
+    }
+    return total - spacing;  // Remove last spacing
+}
+
 // Main icon dispatcher - draws weather icon based on condition
 void drawWeatherIcon(int x, int y, WeatherCondition condition, bool isDay = true, int size = 32) {
     switch (condition) {
@@ -438,13 +573,29 @@ void drawCurrentWeather() {
     if (h12 == 0) h12 = 12;
     const char* ampm = (hours < 12) ? "AM" : "PM";
 
-    // ========== Header: Time (large, centered) ==========
-    char timeStr[16];
-    snprintf(timeStr, sizeof(timeStr), "%d:%02d %s", h12, minutes, ampm);
+    // ========== Header: Time (large, centered) with smaller AM/PM ==========
+    char timeNumStr[16];
+    snprintf(timeNumStr, sizeof(timeNumStr), "%d:%02d", h12, minutes);
     tft.setTextDatum(TC_DATUM);
     tft.setFreeFont(FSSB18);
     tft.setTextColor(COLOR_CYAN);
-    tft.drawString(timeStr, 120, 6, GFXFF);
+
+    // Calculate widths to center time + AM/PM together
+    int16_t timeNumW = tft.textWidth(timeNumStr, GFXFF);
+    tft.setFreeFont(FSS9);  // Smaller font for AM/PM
+    int16_t ampmW = tft.textWidth(ampm, GFXFF);
+    int timeSpacing = 4;
+    int totalTimeW = timeNumW + timeSpacing + ampmW;
+    int timeStartX = 120 - totalTimeW / 2;
+
+    // Draw time numbers
+    tft.setFreeFont(FSSB18);
+    tft.setTextDatum(TL_DATUM);
+    tft.drawString(timeNumStr, timeStartX, 6, GFXFF);
+
+    // Draw AM/PM smaller, vertically centered with time
+    tft.setFreeFont(FSS9);
+    tft.drawString(ampm, timeStartX + timeNumW + timeSpacing, 12, GFXFF);
 
     // ========== Info row: Globe + Location | Calendar + Date ==========
     int infoY = 42;  // More space below time
@@ -483,41 +634,40 @@ void drawCurrentWeather() {
     tft.setTextColor(COLOR_WHITE);
     tft.drawString(conditionToString(weather.current.condition), leftColCenter, mainY + 70, GFXFF);
 
-    // Current temperature - very large, centered in right column
+    // Current temperature - very large custom numbers, centered in right column
     float temp = weather.current.temperature;
     if (!useCelsius) {
         temp = temp * 9.0 / 5.0 + 32.0;
     }
 
-    // Temperature is WHITE (not colored by value) to differentiate from time
-    tft.setTextColor(COLOR_WHITE);
-
-    // Use font 7 (48pt) for very large temperature display
+    // Build temperature string
     char tempStr[8];
     snprintf(tempStr, sizeof(tempStr), "%.0f", temp);
 
-    // Calculate width of temp number in font 7
-    int16_t tempW = tft.textWidth(tempStr, 7);
+    // Use custom large numbers - 70px height for prominent display
+    int tempHeight = 70;
+    int16_t tempW = getLargeNumberWidth(tempStr, tempHeight);
 
-    // Unit string with degree symbol
-    char unitStr[4];
-    snprintf(unitStr, sizeof(unitStr), "°%c", useCelsius ? 'C' : 'F');
-    tft.setFreeFont(FSS12);
+    // Unit string (just C or F, no degree symbol)
+    char unitStr[2];
+    snprintf(unitStr, sizeof(unitStr), "%c", useCelsius ? 'C' : 'F');
+    tft.setFreeFont(FSSB18);
     int16_t unitW = tft.textWidth(unitStr, GFXFF);
 
     // Add spacing between number and unit
-    int spacing = 6;
-    int totalW = tempW + spacing + unitW;
-    int tempStartX = rightColCenter - totalW/2;
-    int tempY = mainY + 10;
+    int tempSpacing = 8;
+    int totalTempW = tempW + tempSpacing + unitW;
+    int tempStartX = rightColCenter - totalTempW / 2;
+    int tempY = mainY + 15;
 
-    // Draw temperature number using font 7 (large 48pt)
+    // Draw temperature number using custom large digits
+    drawLargeNumber(tempStartX, tempY, tempStr, tempHeight, COLOR_WHITE);
+
+    // Draw unit (smaller, top-aligned)
+    tft.setFreeFont(FSSB18);
     tft.setTextDatum(TL_DATUM);
-    tft.drawString(tempStr, tempStartX, tempY, 7);
-
-    // Draw degree symbol and unit (smaller, top-aligned with number)
-    tft.setFreeFont(FSS12);
-    tft.drawString(unitStr, tempStartX + tempW + spacing, tempY + 2, GFXFF);
+    tft.setTextColor(COLOR_WHITE);
+    tft.drawString(unitStr, tempStartX + tempW + tempSpacing, tempY + 5, GFXFF);
 
     // ========== Detail bar at bottom with rounded rectangle background ==========
     int barY = 175;
