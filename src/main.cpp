@@ -1262,7 +1262,7 @@ void handleDisplayPreview() {
         "let C=DARK;"
 
         // WMO weather icons from CDN (32x32 SVGs)
-        "const ICON_CDN='https://cdn.jsdelivr.net/gh/ryanmaule/epicweatherbox@main/images/open_meteo_weather_icons_32px_svg/';"
+        "const ICON_CDN='https://cdn.jsdelivr.net/gh/ryanmaule/epicweatherbox@main/images/wmo_icons/';"
         "const WMO_FILES={0:'wmo_0_clear.svg',1:'wmo_1_mainly_clear.svg',2:'wmo_2_partly_cloudy.svg',3:'wmo_3_overcast.svg',"
         "45:'wmo_45_fog.svg',48:'wmo_48_rime_fog.svg',51:'wmo_51_drizzle_light.svg',53:'wmo_53_drizzle_mod.svg',"
         "55:'wmo_55_drizzle_dense.svg',56:'wmo_56_freezing_drizzle_light.svg',57:'wmo_57_freezing_drizzle_dense.svg',"
