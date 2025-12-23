@@ -329,8 +329,12 @@ void drawForecastScreen(int locationIndex, int startDay) {
 // =============================================================================
 
 void drawWeatherIcon(int wmoCode, int x, int y, int size) {
+    Serial.printf("[DISPLAY] Drawing icon for WMO code: %d, size: %d\n", wmoCode, size);
     const uint16_t* icon = getIconForWMOCode(wmoCode);
-    if (!icon) return;
+    if (!icon) {
+        Serial.println("[DISPLAY] WARNING: No icon found for WMO code!");
+        return;
+    }
 
     if (size == 32) {
         // Draw 32x32 RGB565 icon with transparency (0x0000 = transparent)
