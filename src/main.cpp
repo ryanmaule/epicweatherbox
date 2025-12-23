@@ -1995,7 +1995,8 @@ void handleAdmin() {
     html += String(MAX_WEATHER_LOCATIONS);
     html += F(" locations. Current: ");
     html += String(locCount);
-    html += F("</p><p class='hint'><strong>Note:</strong> Location 1 is used for the time display timezone.</p></div>");
+    html += F("</p><p class='hint'><strong>Note:</strong> Location 1 is used for the time display timezone.</p>"
+        "<p class='hint' style='margin-top:10px'>Weather data from <a href='https://open-meteo.com/' target='_blank'>Open-Meteo</a> (free, no API key required)</p></div>");
 
     // Settings - Temperature
     html += F("<div class='card'><h3>Settings</h3>"
@@ -2089,8 +2090,8 @@ void handleAdmin() {
 
     // Links
     html += F("<div class='card' style='text-align:center'>"
-        "<a href='/'>Home</a> | <a href='/preview'>Display Preview</a> | <a href='/api/weather'>Weather API</a> | "
-        "<a href='/update'>Firmware</a> | <a href='/reboot'>Reboot</a></div>");
+        "<a href='/'>Home</a> | <a href='/preview'>Display Preview</a> | "
+        "<a href='/update'>Firmware</a> | <a href='/api/safemode' style='color:#ff6600'>Safe Mode</a> | <a href='/reboot'>Reboot</a></div>");
 
     // JavaScript - more complex now for multi-location management
     html += F("<script>"
@@ -2245,7 +2246,8 @@ void handleDisplayPreview() {
         "<div class='card'><strong>Location:</strong> <span id='locName'>-</span> "
         "(<span id='locIdx'>1</span>/<span id='locTotal'>1</span>)</div>"
         "<div class='card' style='text-align:center'>"
-        "<a href='/admin'>Admin Panel</a> | <a href='/'>Home</a></div>");
+        "<a href='/'>Home</a> | <a href='/admin'>Admin Panel</a> | "
+        "<a href='/update'>Firmware</a> | <a href='/api/safemode' style='color:#ff6600'>Safe Mode</a> | <a href='/reboot'>Reboot</a></div>");
 
     // JavaScript for canvas rendering
     html += F("<script>"
