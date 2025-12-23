@@ -415,16 +415,18 @@ int getLargeNumberWidth(const char* numStr, int height) {
     int w = height * 3 / 5;      // Standard digit width
     int t = height / 10;
     if (t < 2) t = 2;
+    int gap = t / 2;
     int spacing = height / 8;
     if (spacing < 2) spacing = 2;
 
     int total = 0;
     for (int i = 0; numStr[i] != '\0'; i++) {
         if (numStr[i] == '1') {
-            total += t + spacing / 2 + spacing;  // Narrow 1
+            total += t + gap;  // Matches drawLargeDigit return for '1'
         } else {
-            total += w + spacing;
+            total += w;
         }
+        total += spacing;
     }
     return total - spacing;  // Remove last spacing
 }
