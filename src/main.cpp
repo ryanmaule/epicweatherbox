@@ -46,7 +46,11 @@ extern "C" {
 #if ENABLE_TFT_TEST
 #include <TFT_eSPI.h>
 #include <NTPClient.h>
-#include <AnimatedGIF.h>
+// AnimatedGIF disabled - uses too much RAM (~25KB) for ESP8266 with only 80KB total
+// The ESP8266 runs out of heap when GIF decoder is loaded alongside web server
+// TODO: Consider ESP32 upgrade or simpler static image support
+// #include <AnimatedGIF.h>
+#define GIF_SUPPORT_DISABLED 1
 
 // FreeSans smooth fonts - already defined by TFT_eSPI when LOAD_GFXFF=1
 // Just need extern declarations to reference them
@@ -73,12 +77,12 @@ extern const GFXfont FreeSansBold24pt7b;
 static TFT_eSPI tft = TFT_eSPI();
 #define TFT_BL_PIN 5  // Backlight PWM pin
 
-// AnimatedGIF decoder for GIF screen
-static AnimatedGIF gif;
-static File gifFile;
+// GIF support disabled due to memory constraints
+// static AnimatedGIF gif;
+// static File gifFile;
 static bool gifPlaying = false;
-static unsigned long gifStartTime = 0;
-static int gifX = 0, gifY = 0;  // Position for centering
+// static unsigned long gifStartTime = 0;
+// static int gifX = 0, gifY = 0;
 
 // Forward declare timeClient (defined below)
 extern NTPClient timeClient;
@@ -678,149 +682,34 @@ uint16_t getIconRain() {
 }
 
 // ============================================================================
-// ANIMATED GIF SUPPORT
+// ANIMATED GIF SUPPORT - DISABLED
 // ============================================================================
+// GIF playback disabled due to ESP8266 memory constraints.
+// The AnimatedGIF library requires ~25KB RAM which causes heap exhaustion
+// when combined with the web server and weather data.
+// TODO: Consider ESP32 upgrade for GIF support
 
-// File operations callback for AnimatedGIF library
-void* gifOpen(const char *filename, int32_t *size) {
-    gifFile = LittleFS.open(filename, "r");
-    if (!gifFile) return nullptr;
-    *size = gifFile.size();
-    return &gifFile;
-}
-
-void gifClose(void *handle) {
-    if (gifFile) gifFile.close();
-}
-
-int32_t gifRead(GIFFILE *pFile, uint8_t *pBuf, int32_t len) {
-    if (!gifFile) return 0;
-    return gifFile.read(pBuf, len);
-}
-
-int32_t gifSeek(GIFFILE *pFile, int32_t pos) {
-    if (!gifFile) return 0;
-    return gifFile.seek(pos);
-}
-
-// Draw callback - draws each line of the GIF frame to the TFT
-void gifDraw(GIFDRAW *pDraw) {
-    uint8_t *s = pDraw->pPixels;
-    uint16_t *d, *usPalette;
-    int x, y, width;
-
-    usPalette = pDraw->pPalette;
-    y = pDraw->iY + pDraw->y + gifY;  // Apply offset for centering
-    width = pDraw->iWidth;
-    x = pDraw->iX + gifX;  // Apply offset for centering
-
-    if (y >= 240 || x >= 240) return;  // Clip to screen
-
-    // Allocate line buffer on stack (max 240 pixels)
-    static uint16_t lineBuffer[240];
-    d = lineBuffer;
-
-    // Convert palette indices to RGB565 pixels
-    for (int i = 0; i < width; i++) {
-        if (pDraw->ucHasTransparency && s[i] == pDraw->ucTransparent) {
-            // Skip transparent pixels by not drawing them
-            // (for simplicity, we'll just use background color)
-            d[i] = getThemeBg();
-        } else {
-            d[i] = usPalette[s[i]];
-        }
-    }
-
-    // Push the line to the display
-    int actualWidth = min(width, 240 - x);
-    if (actualWidth > 0 && y < 240) {
-        tft.pushImage(x, y, actualWidth, 1, lineBuffer);
-    }
-}
-
-// Start playing a GIF file
-bool startGif(const char* filename) {
-    gif.begin(GIF_PALETTE_RGB565_BE);  // Use big-endian RGB565 for TFT
-
-    if (gif.open(filename, gifOpen, gifClose, gifRead, gifSeek, gifDraw)) {
-        // Calculate centering offset
-        int gifWidth = gif.getCanvasWidth();
-        int gifHeight = gif.getCanvasHeight();
-        gifX = (240 - gifWidth) / 2;
-        gifY = (240 - gifHeight) / 2;
-        if (gifX < 0) gifX = 0;
-        if (gifY < 0) gifY = 0;
-
-        gifPlaying = true;
-        gifStartTime = millis();
-        Serial.printf("[GIF] Started: %dx%d at (%d,%d)\n", gifWidth, gifHeight, gifX, gifY);
-        return true;
-    }
-
-    Serial.println(F("[GIF] Failed to open file"));
-    return false;
-}
-
-// Play one frame of the GIF, returns false if finished
-bool playGifFrame() {
-    if (!gifPlaying) return false;
-
-    int result = gif.playFrame(true, nullptr);
-    if (result == 0) {
-        // GIF finished or error
-        gif.close();
-        gifPlaying = false;
-        return false;
-    }
-    return true;
-}
-
-// Stop the GIF playback
+// Stub functions - do nothing but prevent crashes
 void stopGif() {
-    if (gifPlaying) {
-        gif.close();
-        gifPlaying = false;
-    }
+    gifPlaying = false;
 }
 
-// Draw GIF screen - plays the screen.gif
+void updateGifScreen() {
+    // No-op - GIF support disabled
+}
+
+// Draw GIF screen - shows message that GIF is not supported
 void drawGifScreen() {
-    // Clear screen with theme background
     tft.fillScreen(getThemeBg());
 
-    // Check if screen.gif exists
-    if (!LittleFS.exists("/screen.gif")) {
-        // Draw placeholder
-        tft.setTextDatum(MC_DATUM);
-        tft.setFreeFont(FSS12);
-        tft.setTextColor(getThemeGray());
-        tft.drawString("No GIF Uploaded", 120, 120, GFXFF);
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FSS12);
+    tft.setTextColor(getThemeGray());
+    tft.drawString("GIF Not Supported", 120, 110, GFXFF);
 
-        tft.setFreeFont(FSS9);
-        tft.drawString("Upload via Admin Panel", 120, 150, GFXFF);
-        return;
-    }
-
-    // Start the GIF
-    if (!startGif("/screen.gif")) {
-        tft.setTextDatum(MC_DATUM);
-        tft.setFreeFont(FSS12);
-        tft.setTextColor(COLOR_ORANGE);
-        tft.drawString("GIF Error", 120, 120, GFXFF);
-        return;
-    }
-
-    // Play the first frame
-    playGifFrame();
-}
-
-// Continue playing the GIF (call from loop when on GIF screen)
-void updateGifScreen() {
-    if (gifPlaying) {
-        playGifFrame();
-        ESP.wdtFeed();  // Keep watchdog happy during GIF playback
-        yield();
-    }
+    tft.setFreeFont(FSS9);
+    tft.drawString("ESP8266 memory too limited", 120, 140, GFXFF);
+    tft.drawString("for animated GIF playback", 120, 160, GFXFF);
 }
 
 // Draw current weather screen (no sprites - direct to TFT)
@@ -1185,29 +1074,19 @@ void updateTftDisplay() {
     unsigned long now = millis();
     unsigned long cycleMs = (unsigned long)getScreenCycleTime() * 1000;
 
-    // If currently playing a GIF, keep updating it
-    if (gifPlaying) {
-        updateGifScreen();
-        // Check if screen time exceeded, but let at least one loop of GIF play
-        if (now - lastDisplayUpdate >= cycleMs && !gif.playFrame(false, nullptr)) {
-            stopGif();
-            lastDisplayUpdate = now;
-        }
-        return;  // Don't advance screen while GIF is playing
-    }
-
     // Check if time to change screen
     if (now - lastDisplayUpdate >= cycleMs) {
         lastDisplayUpdate = now;
 
         // Determine screens to show per location
         bool showForecast = getShowForecast();
-        bool showGif = getGifScreenEnabled();
+        // GIF disabled - don't include in rotation even if setting is on
+        // bool showGif = getGifScreenEnabled();
         int numLocations = getLocationCount();
 
-        // Screens per location: current, (forecast1, forecast2), (gif)
-        int weatherScreens = showForecast ? 3 : 1;  // current + 2 forecast pages
-        int screensPerLoc = weatherScreens + (showGif ? 1 : 0);
+        // Screens per location: current, (forecast1, forecast2)
+        // GIF screen removed from rotation due to memory constraints
+        int screensPerLoc = showForecast ? 3 : 1;
 
         // Advance screen
         currentDisplayScreen++;
@@ -1220,27 +1099,21 @@ void updateTftDisplay() {
         ESP.wdtFeed();
         yield();
 
-        // Screen order: 0=current, 1=forecast1-3, 2=forecast4-6, 3=gif (if enabled)
-        if (currentDisplayScreen == 0) {
-            stopGif();  // Ensure any previous GIF is stopped
-            drawCurrentWeather();
-        } else if (currentDisplayScreen == 1 && showForecast) {
-            stopGif();
-            drawForecast(0);  // Days 1-3
-        } else if (currentDisplayScreen == 2 && showForecast) {
-            stopGif();
-            drawForecast(3);  // Days 4-6
-        } else if ((showForecast && currentDisplayScreen == 3) ||
-                   (!showForecast && currentDisplayScreen == 1)) {
-            // GIF screen (only if enabled)
-            if (showGif) {
-                drawGifScreen();
-            }
+        // Screen order: 0=current, 1=forecast1-3, 2=forecast4-6
+        switch (currentDisplayScreen) {
+            case 0:
+                drawCurrentWeather();
+                break;
+            case 1:
+                drawForecast(0);  // Days 1-3
+                break;
+            case 2:
+                drawForecast(3);  // Days 4-6
+                break;
         }
 
-        Serial.printf("[TFT] Screen %d, Location %d, GIF: %s\n",
-                      currentDisplayScreen, currentDisplayLocation,
-                      gifPlaying ? "playing" : "no");
+        Serial.printf("[TFT] Screen %d, Location %d\n",
+                      currentDisplayScreen, currentDisplayLocation);
     }
 }
 #endif
