@@ -26,7 +26,10 @@ The display automatically cycles through multiple screens for each location:
 1. **Current Weather** - Large temperature display, weather condition, high/low temps, and current time
 2. **3-Day Forecast** - Days 1-3 with weather icons and temperature ranges
 3. **Extended Forecast** - Days 4-6 with weather icons and temperature ranges
-4. **Custom Screen** (optional) - Configurable text message with header, body, and footer
+4. **Custom Screen** (optional) - Configurable text message after each location's weather screens
+   - **Header**: Current time (left) + custom text (right, max 16 chars)
+   - **Body**: Centered text with dynamic font sizing (max 160 chars)
+   - **Footer**: Rounded box with custom text (max 30 chars)
 
 > **Tip**: Visit `http://<device-ip>/preview` for a live browser simulation of the display!
 
@@ -79,8 +82,12 @@ pio run
 
 Access the admin panel at `http://<device-ip>/admin` to configure:
 
-- **Locations** - Add up to 5 cities with search
-- **Custom Screen** - Optional text screen with header, body, and footer
+- **Locations** - Add up to 5 cities with geocoded search
+- **Custom Screen** - Optional text screen that appears after each location's weather
+  - Configurable header text (shows alongside time)
+  - Body text with automatic font sizing based on length
+  - Footer text in a styled rounded box
+  - Enable/disable toggle
 - **Temperature Units** - Celsius or Fahrenheit
 - **Display Settings** - Brightness, screen cycle time
 - **Night Mode** - Start/end hours, dimmed brightness
@@ -117,7 +124,9 @@ If the device gets stuck in a reboot loop, you can activate safe mode:
 curl http://<device-ip>/api/safemode
 ```
 
-This freezes the display (showing a warning screen with the IP), stops all processing except the web server, and allows you to upload new firmware via `/update`.
+This freezes the display (showing a warning screen with the IP address), stops all processing except the web server, and allows you to upload new firmware via `/update`.
+
+> **Note**: The safe mode screen layout was improved in v1.1.0 to prevent IP address cutoff when using the UI nudge feature.
 
 ## Technical Details
 
@@ -183,6 +192,30 @@ Contributions are welcome! Please feel free to submit issues and pull requests.
 ### Device stuck in reboot loop
 - Quickly access `http://<device-ip>/api/safemode` after a reboot
 - Then upload working firmware via `/update`
+
+## Version History
+
+### v1.1.0 (2025-12-23)
+- **New Feature**: Custom Text Screen
+  - Configurable screen that appears after each location's weather screens
+  - Header: Time (left) + custom text (right, max 16 chars)
+  - Body: Centered text with dynamic font sizing (max 160 chars)
+  - Footer: Rounded box with custom text (max 30 chars)
+  - Configure via Admin panel → Custom tab
+- **UI Improvements**:
+  - Fixed Safe Mode screen layout to prevent IP address cutoff with UI nudge
+  - Added Project Links section to home page (GitHub repo, releases, issues)
+  - Shows current firmware version with upgrade instructions
+  - Footer links reorganized for better navigation
+
+### v1.0.0 (2025-12-23)
+- Initial public release
+- 7-day weather forecast for up to 5 locations
+- Web-based admin panel with live display preview
+- Dark/light theme modes with auto-switching
+- Night mode with automatic dimming
+- Over-the-air firmware updates
+- Emergency safe mode for recovery
 
 ## License
 
