@@ -2274,45 +2274,106 @@ void handleDisplayPreview() {
         // Format temp
         "function fmtTemp(t,c){if(!c)t=t*9/5+32;return Math.round(t)+'°';}"
 
-        // Draw current weather screen - 2 column layout (vertically centered)
+        // Draw globe icon (matches TFT drawGlobe)
+        "function drawGlobeIcon(x,y,color){"
+        "ctx.strokeStyle=color;ctx.lineWidth=1.5;"
+        "ctx.beginPath();ctx.arc(x+6,y+6,6,0,Math.PI*2);ctx.stroke();"
+        "ctx.beginPath();ctx.ellipse(x+6,y+6,3,6,0,0,Math.PI*2);ctx.stroke();"
+        "ctx.beginPath();ctx.moveTo(x,y+6);ctx.lineTo(x+12,y+6);ctx.stroke();"
+        "ctx.lineWidth=1;}"
+
+        // Draw calendar icon (matches TFT drawCalendar)
+        "function drawCalIcon(x,y,color){"
+        "ctx.strokeStyle=color;ctx.lineWidth=1.5;"
+        "ctx.strokeRect(x+1,y+3,10,9);"
+        "ctx.beginPath();ctx.moveTo(x+3,y+1);ctx.lineTo(x+3,y+5);ctx.stroke();"
+        "ctx.beginPath();ctx.moveTo(x+9,y+1);ctx.lineTo(x+9,y+5);ctx.stroke();"
+        "ctx.beginPath();ctx.moveTo(x+1,y+6);ctx.lineTo(x+11,y+6);ctx.stroke();"
+        "ctx.lineWidth=1;}"
+
+        // Draw up arrow icon
+        "function drawUpArrow(x,y,color){"
+        "ctx.fillStyle=color;"
+        "ctx.beginPath();ctx.moveTo(x+6,y);ctx.lineTo(x+12,y+8);ctx.lineTo(x,y+8);ctx.closePath();ctx.fill();}"
+
+        // Draw down arrow icon
+        "function drawDownArrow(x,y,color){"
+        "ctx.fillStyle=color;"
+        "ctx.beginPath();ctx.moveTo(x+6,y+8);ctx.lineTo(x+12,y);ctx.lineTo(x,y);ctx.closePath();ctx.fill();}"
+
+        // Draw raindrop icon
+        "function drawDropIcon(x,y,color){"
+        "ctx.fillStyle=color;"
+        "ctx.beginPath();ctx.moveTo(x+5,y);ctx.bezierCurveTo(x+5,y,x,y+6,x+2,y+9);"
+        "ctx.bezierCurveTo(x+4,y+11,x+6,y+11,x+8,y+9);ctx.bezierCurveTo(x+10,y+6,x+5,y,x+5,y);ctx.fill();}"
+
+        // Draw current weather screen - matches TFT layout
         "function drawCurrent(){"
         "const locs=weatherData?.locations||[];"
         "if(!locs.length){ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
         "ctx.fillStyle=C.WHITE;ctx.font='16px sans-serif';ctx.textAlign='center';"
         "ctx.fillText('No weather data',120,120);return;}"
         "const loc=locs[currentLoc]||locs[0],w=loc.current||{};"
-        "const isDay=w.isDay!==false,useC=weatherData.useCelsius!==false;"
+        "const useC=weatherData.useCelsius!==false;"
         "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
-        // Time + AM/PM
+
+        // Header: Time (large, centered) with smaller AM/PM
         "const t=fmtTime();"
-        "ctx.fillStyle=C.CYAN;ctx.font='bold 48px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText(t.time,100,52);"
-        "ctx.font='18px sans-serif';ctx.fillText(t.ampm,178,52);"
-        // Date + Location row
-        "ctx.fillStyle=C.GRAY;ctx.font='14px sans-serif';"
-        "ctx.fillText(fmtDate()+' • '+(loc.location||'Unknown'),120,76);"
-        // 2-column layout: left=icon+condition, right=temp+hi/lo+precip
-        // Row 2 starts at y=105 (more space from header)
-        // Left column: icon (80x80) + condition directly below
-        "drawWmoIco(w.weatherCode||0,15,105,80);"
-        // Condition text tight under icon (just a few px gap)
+        "ctx.fillStyle=C.CYAN;ctx.font='bold 32px sans-serif';ctx.textAlign='left';"
+        "const timeW=ctx.measureText(t.time).width;"
+        "ctx.font='14px sans-serif';const ampmW=ctx.measureText(t.ampm).width;"
+        "const totalW=timeW+4+ampmW;const startX=120-totalW/2;"
+        "ctx.font='bold 32px sans-serif';ctx.fillText(t.time,startX,28);"
+        "ctx.font='14px sans-serif';ctx.fillText(t.ampm,startX+timeW+4,20);"
+
+        // Info row: Globe + Location (left), Calendar + Date (right)
+        "const infoY=42;"
+        "drawGlobeIcon(15,infoY-6,C.GRAY);"
+        "ctx.fillStyle=C.GRAY;ctx.font='14px sans-serif';ctx.textAlign='left';"
+        "ctx.fillText(loc.location||'Unknown',32,infoY+6);"
+        "const dateStr=fmtDate();"
+        "ctx.textAlign='right';const dateW=ctx.measureText(dateStr).width;"
+        "drawCalIcon(225-dateW-16,infoY-6,C.GRAY);"
+        "ctx.fillText(dateStr,225,infoY+6);"
+
+        // Main content: Two columns
+        // Left column (0-119): Weather icon (64x64) + condition text
+        "drawWmoIco(w.weatherCode||0,28,58,64);"
         "ctx.fillStyle=C.WHITE;ctx.font='14px sans-serif';ctx.textAlign='center';"
         "const cond=w.condition||'Unknown';"
-        "ctx.fillText(cond.length>12?cond.substring(0,12):cond,55,195);"
-        // Right column: temp centered, hi/lo below, precip at bottom
+        "ctx.fillText(cond.length>12?cond.substring(0,12):cond,60,138);"
+
+        // Right column: Large temperature with unit
         "const temp=w.temperature||0;"
-        "ctx.fillStyle=tempCol(temp);ctx.font='bold 56px sans-serif';"
-        "ctx.fillText(fmtTemp(temp,useC),170,155);"
-        // Hi/Lo centered below temp
+        "const tempVal=useC?Math.round(temp):Math.round(temp*9/5+32);"
+        "ctx.fillStyle=C.WHITE;ctx.font='bold 56px sans-serif';ctx.textAlign='center';"
+        "const tempStr=tempVal+'°';"
+        "ctx.fillText(tempStr,175,115);"
+        "ctx.font='bold 18px sans-serif';ctx.fillText(useC?'C':'F',210,82);"
+
+        // Detail bar at bottom with rounded rectangle background
+        "ctx.fillStyle=C.CARD;"
+        "ctx.beginPath();ctx.roundRect(8,175,224,36,4);ctx.fill();"
+
         "const fc=loc.forecast||[];if(fc.length>0){"
         "const today=fc[0];"
-        "ctx.font='14px sans-serif';"
-        "ctx.fillStyle=C.ORANGE;ctx.fillText('↑'+fmtTemp(today.tempMax||0,useC),145,183);"
-        "ctx.fillStyle=C.BLUE;ctx.fillText('↓'+fmtTemp(today.tempMin||0,useC),195,183);"
-        // Precipitation below hi/lo
+        "const hi=useC?Math.round(today.tempMax||0):Math.round((today.tempMax||0)*9/5+32);"
+        "const lo=useC?Math.round(today.tempMin||0):Math.round((today.tempMin||0)*9/5+32);"
+
+        // Three sections: High, Low, Precip
+        "const secW=74,sec1X=12,sec2X=86,sec3X=160,contentY=185;"
+        "drawUpArrow(sec1X,contentY,C.ORANGE);"
+        "ctx.fillStyle=C.ORANGE;ctx.font='bold 16px sans-serif';ctx.textAlign='left';"
+        "ctx.fillText(hi,sec1X+14,contentY+14);"
+
+        "drawDownArrow(sec2X,contentY,C.BLUE);"
+        "ctx.fillStyle=C.BLUE;ctx.fillText(lo,sec2X+14,contentY+14);"
+
         "const pp=today.precipProbability||today.precipitationProb||0;"
-        "ctx.fillStyle=pp>0?C.BLUE:C.GRAY;ctx.font='12px sans-serif';"
-        "ctx.fillText((pp>0?'💧':'')+Math.round(pp)+'%',170,203);}"
+        "const pColor=pp>30?C.CYAN:C.GRAY;"
+        "drawDropIcon(sec3X,contentY,pColor);"
+        "ctx.fillStyle=pColor;ctx.fillText(Math.round(pp)+'%',sec3X+14,contentY+14);}"
+
         // Screen dots
         "drawDots();}"
 
@@ -2323,39 +2384,53 @@ void handleDisplayPreview() {
         "const loc=locs[currentLoc]||locs[0],fc=loc.forecast||[];"
         "const useC=weatherData.useCelsius!==false;"
         "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
-        // Compact header with time and location
+
+        // Header: Time left (cyan) with smaller AM/PM, Globe + Location right (grey)
         "const t=fmtTime();"
-        "ctx.fillStyle=C.CYAN;ctx.font='bold 20px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText(t.time+' '+t.ampm+' • '+(loc.location||'?'),120,20);"
+        "ctx.fillStyle=C.CYAN;ctx.font='bold 18px sans-serif';ctx.textAlign='left';"
+        "ctx.fillText(t.time,8,18);"
+        "const timeW=ctx.measureText(t.time).width;"
+        "ctx.font='12px sans-serif';ctx.fillText(t.ampm,12+timeW,14);"
+
+        // Globe + Location (right aligned, grey)
+        "ctx.fillStyle=C.GRAY;ctx.font='14px sans-serif';ctx.textAlign='right';"
+        "const locName=loc.location||'Unknown';"
+        "ctx.fillText(locName,232,16);"
+        "const locW=ctx.measureText(locName).width;"
+        "drawGlobeIcon(232-locW-18,4,C.GRAY);"
+
         // 3 forecast cards (skip day 0 which is today, so startIdx+1)
-        "const cw=76,ch=195,sp=4,sx=(240-3*cw-2*sp)/2;"
+        "const cw=75,ch=180,sp=5,sx=(240-3*cw-2*sp)/2;"
         "for(let i=0;i<3;i++){"
         "const fi=startIdx+i+1;"  // +1 to skip today
         "if(fi>=fc.length)continue;"
         "const day=fc[fi],cx=sx+i*(cw+sp);"
         "ctx.fillStyle=C.CARD;"
-        "ctx.beginPath();ctx.roundRect(cx,30,cw,ch,6);ctx.fill();"
-        // Day name + date (compact at top)
-        "const tm=getTomorrow(startIdx+i);"
-        "ctx.fillStyle=C.CYAN;ctx.font='bold 14px sans-serif';"
-        "ctx.fillText(day.day||tm.day,cx+cw/2,46);"
-        "ctx.fillStyle=C.GRAY;ctx.font='12px sans-serif';"
-        "ctx.fillText(tm.date,cx+cw/2,62);"
-        // Icon - 48x48 with more space from date
-        "drawWmoIco(day.weatherCode||0,cx+(cw-48)/2,78,48);"
-        // High/Low temps (moved down to match icon shift)
-        "ctx.fillStyle=C.ORANGE;ctx.font='bold 16px sans-serif';"
-        "ctx.fillText('↑'+fmtTemp(day.tempMax||0,useC),cx+cw/2,148);"
-        "ctx.fillStyle=C.BLUE;ctx.font='14px sans-serif';"
-        "ctx.fillText('↓'+fmtTemp(day.tempMin||0,useC),cx+cw/2,168);"
-        // Precip
+        "ctx.beginPath();ctx.roundRect(cx,35,cw,ch,4);ctx.fill();"
+
+        // Day name at top
+        "ctx.fillStyle=C.CYAN;ctx.font='bold 14px sans-serif';ctx.textAlign='center';"
+        "ctx.fillText(day.day||'---',cx+cw/2,52);"
+
+        // Icon - 32x32 centered
+        "drawWmoIco(day.weatherCode||0,cx+(cw-32)/2,62,32);"
+
+        // High/Low temps with arrow icons
+        "const hi=useC?Math.round(day.tempMax||0):Math.round((day.tempMax||0)*9/5+32);"
+        "const lo=useC?Math.round(day.tempMin||0):Math.round((day.tempMin||0)*9/5+32);"
+        "drawUpArrow(cx+8,110,C.ORANGE);"
+        "ctx.fillStyle=C.ORANGE;ctx.font='bold 14px sans-serif';ctx.textAlign='center';"
+        "ctx.fillText(hi,cx+cw/2+8,124);"
+        "drawDownArrow(cx+8,135,C.BLUE);"
+        "ctx.fillStyle=C.BLUE;ctx.fillText(lo,cx+cw/2+8,149);"
+
+        // Precip with droplet icon
         "const pp=day.precipProbability||day.precipitationProb||0;"
-        "ctx.fillStyle=pp>0?C.BLUE:C.GRAY;ctx.font='12px sans-serif';"
-        "ctx.fillText((pp>0?'💧':'')+Math.round(pp)+'%',cx+cw/2,188);"
-        // Condition
-        "ctx.fillStyle=C.GRAY;ctx.font='11px sans-serif';"
-        "const cond=day.condition||'?';"
-        "ctx.fillText(cond.length>9?cond.substring(0,9):cond,cx+cw/2,206);}"
+        "const pColor=pp>30?C.CYAN:C.GRAY;"
+        "drawDropIcon(cx+8,165,pColor);"
+        "ctx.fillStyle=pColor;ctx.font='12px sans-serif';"
+        "ctx.fillText(Math.round(pp)+'%',cx+cw/2+8,180);}"
+
         // Screen dots
         "drawDots();}"
 
@@ -2477,7 +2552,6 @@ void handleDisplayPreview() {
         "darkMode=!darkMode;C=darkMode?DARK:LIGHT;"
         "document.getElementById('themeBtn').textContent='Theme: '+(darkMode?'Dark':'Light');"
         "document.getElementById('themeBtn').className=darkMode?'':'active';"
-        "document.body.style.background=darkMode?'#0d0d1a':'#f0f5fa';"
         "render();}"
 
         "function startAuto(){stopAuto();autoTimer=setInterval(nextScreen,screenCycleTime*1000);}"
