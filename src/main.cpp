@@ -1162,15 +1162,16 @@ void drawCustomScreen() {
         tft.setTextDatum(TL_DATUM);
         tft.setTextColor(grayColor);
 
-        // Draw star icon (5-pointed star) to the left of the header text
-        int starX = 232 - headerW - 14;  // 14px left of text (star width + gap)
-        int starY = 14 + yOff;  // Center vertically with text
-        int starSize = 5;
-        // Draw a simple 5-pointed star using triangles
-        tft.fillTriangle(starX, starY - starSize, starX - 3, starY + 2, starX + 3, starY + 2, cyanColor);  // Top triangle
-        tft.fillTriangle(starX - starSize, starY - 1, starX + starSize, starY - 1, starX, starY + 4, cyanColor);  // Bottom triangle
+        // Draw star icon to the left of the header text (same gray color as text)
+        int textX = 232 - headerW;  // Right edge of text
+        int starX = textX - 12;     // 12px gap left of text for star
+        int starY = 14 + yOff;      // Center vertically with text
+        int starSize = 4;           // Slightly smaller star
+        // Draw a simple 5-pointed star using two overlapping triangles (gray to match text)
+        tft.fillTriangle(starX, starY - starSize, starX - 3, starY + 2, starX + 3, starY + 2, grayColor);  // Top triangle
+        tft.fillTriangle(starX - starSize, starY - 1, starX + starSize, starY - 1, starX, starY + 3, grayColor);  // Bottom triangle
 
-        tft.drawString(headerText, 232 - headerW, 8 + yOff, GFXFF);
+        tft.drawString(headerText, textX, 8 + yOff, GFXFF);
     }
 
     // ========== Body: Dynamic text sizing ==========
@@ -1341,14 +1342,7 @@ void updateTftDisplay() {
         if (showForecast) screensPerLoc += 2;  // Add forecast screens
         if (showCustom) screensPerLoc += 1;    // Add custom screen at end
 
-        // Advance screen
-        currentDisplayScreen++;
-        if (currentDisplayScreen >= screensPerLoc) {
-            currentDisplayScreen = 0;
-            currentDisplayLocation = (currentDisplayLocation + 1) % numLocations;
-        }
-
-        // Draw appropriate screen
+        // Draw appropriate screen FIRST (before incrementing)
         ESP.wdtFeed();
         yield();
 
@@ -1381,6 +1375,13 @@ void updateTftDisplay() {
 
         Serial.printf("[TFT] Screen %d, Location %d\n",
                       currentDisplayScreen, currentDisplayLocation);
+
+        // Advance screen for NEXT cycle
+        currentDisplayScreen++;
+        if (currentDisplayScreen >= screensPerLoc) {
+            currentDisplayScreen = 0;
+            currentDisplayLocation = (currentDisplayLocation + 1) % numLocations;
+        }
     }
 }
 #endif

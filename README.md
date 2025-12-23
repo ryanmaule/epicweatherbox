@@ -27,8 +27,8 @@ The display automatically cycles through multiple screens for each location:
 2. **3-Day Forecast** - Days 1-3 with weather icons and temperature ranges
 3. **Extended Forecast** - Days 4-6 with weather icons and temperature ranges
 4. **Custom Screen** (optional) - Configurable text message after each location's weather screens
-   - **Header**: Current time (left) + custom text (right, max 16 chars)
-   - **Body**: Centered text with dynamic font sizing (max 160 chars)
+   - **Header**: Current time (left) + custom text (right, max 16 chars) + cyan star icon
+   - **Body**: Centered text with dynamic font sizing based on length (max 160 chars)
    - **Footer**: Rounded box with custom text (max 30 chars)
 
 > **Tip**: Visit `http://<device-ip>/preview` for a live browser simulation of the display!
@@ -84,10 +84,11 @@ Access the admin panel at `http://<device-ip>/admin` to configure:
 
 - **Locations** - Add up to 5 cities with geocoded search
 - **Custom Screen** - Optional text screen that appears after each location's weather
-  - Configurable header text (shows alongside time)
-  - Body text with automatic font sizing based on length
-  - Footer text in a styled rounded box
+  - Header text with cyan star icon (max 16 chars, shows alongside time)
+  - Body text with automatic font sizing based on length (max 160 chars)
+  - Footer text in a styled rounded box (max 30 chars)
   - Enable/disable toggle
+  - Improved line spacing and vertical centering
 - **Temperature Units** - Celsius or Fahrenheit
 - **Display Settings** - Brightness, screen cycle time
 - **Night Mode** - Start/end hours, dimmed brightness
@@ -198,10 +199,14 @@ Contributions are welcome! Please feel free to submit issues and pull requests.
 ### v1.1.0 (2025-12-23)
 - **New Feature**: Custom Text Screen
   - Configurable screen that appears after each location's weather screens
-  - Header: Time (left) + custom text (right, max 16 chars)
+  - Header: Time (left) + custom text (right, max 16 chars) with cyan star icon
   - Body: Centered text with dynamic font sizing (max 160 chars)
+    - Large text (≤40 chars): 38px line spacing
+    - Medium text (≤80 chars): 30px line spacing
+    - Small text (>80 chars): 26px line spacing
   - Footer: Rounded box with custom text (max 30 chars)
   - Configure via Admin panel → Custom tab
+  - Improved vertical centering and line spacing
 - **UI Improvements**:
   - Fixed Safe Mode screen layout to prevent IP address cutoff with UI nudge
   - Added Project Links section to home page (GitHub repo, releases, issues)
