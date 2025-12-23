@@ -71,6 +71,7 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <div class="tabs">
 <div class="tab active" data-tab="location">Location</div>
 <div class="tab" data-tab="display">Display</div>
+<div class="tab" data-tab="custom">Custom</div>
 <div class="tab" data-tab="system">System</div>
 </div>
 <div id="location" class="tab-content active">
@@ -135,6 +136,30 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 </div>
 <div id="display-status"></div>
 </div>
+<div id="custom" class="tab-content">
+<div class="form-group">
+<label><input type="checkbox" id="custom-enabled"> Enable Custom Screen</label>
+</div>
+<div id="custom-fields">
+<div class="form-group">
+<label>Header Text (max 16 chars, top-right)</label>
+<input type="text" id="custom-header" maxlength="16" placeholder="e.g., My Quote">
+</div>
+<div class="form-group">
+<label>Body Text (max 160 chars, centered)</label>
+<textarea id="custom-body" maxlength="160" rows="4" style="width:100%;padding:8px;border:1px solid #333;border-radius:6px;background:#2a2a4e;color:#eee;font-size:0.9em;resize:vertical" placeholder="Your custom message..."></textarea>
+<div style="font-size:0.75em;color:#666;margin-top:4px"><span id="body-count">0</span>/160 chars</div>
+</div>
+<div class="form-group">
+<label>Footer Text (max 30 chars, bottom bar)</label>
+<input type="text" id="custom-footer" maxlength="30" placeholder="e.g., Have a great day!">
+</div>
+</div>
+<div class="btn-row">
+<button class="btn btn-primary" onclick="saveCustomScreen()">Save Custom Screen</button>
+</div>
+<div id="custom-status"></div>
+</div>
 <div id="system" class="tab-content">
 <div class="form-group">
 <label>Device Info</label>
@@ -157,7 +182,7 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 </div>
 <script>
 let currentScreen=0;
-const screens=['current','forecast','dual'];
+const screens=['current','forecast','dual','custom'];
 const canvas=document.getElementById('preview');
 const ctx=canvas.getContext('2d');
 
@@ -178,6 +203,16 @@ document.getElementById('loc2-fields').style.display=e.target.checked?'block':'n
 // Brightness slider
 document.getElementById('brightness').oninput=e=>{
 document.getElementById('brightness-val').textContent=e.target.value+'%';
+};
+
+// Custom screen toggle
+document.getElementById('custom-enabled').onchange=e=>{
+document.getElementById('custom-fields').style.opacity=e.target.checked?'1':'0.5';
+};
+
+// Body character counter
+document.getElementById('custom-body').oninput=e=>{
+document.getElementById('body-count').textContent=e.target.value.length;
 };
 
 // Load initial data
@@ -241,6 +276,17 @@ document.getElementById('cycle-time').value=c.display.cycle||10;
 document.getElementById('brightness').value=c.display.brightness||80;
 document.getElementById('brightness-val').textContent=(c.display.brightness||80)+'%';
 }
+// Custom screen settings
+if(c.customScreenEnabled!==undefined){
+document.getElementById('custom-enabled').checked=c.customScreenEnabled;
+document.getElementById('custom-fields').style.opacity=c.customScreenEnabled?'1':'0.5';
+}
+if(c.customScreenHeader)document.getElementById('custom-header').value=c.customScreenHeader;
+if(c.customScreenBody){
+document.getElementById('custom-body').value=c.customScreenBody;
+document.getElementById('body-count').textContent=c.customScreenBody.length;
+}
+if(c.customScreenFooter)document.getElementById('custom-footer').value=c.customScreenFooter;
 }
 
 function drawPreview(data){
@@ -256,7 +302,8 @@ return;
 const w=data.primary;
 if(currentScreen===0)drawCurrentWeather(w);
 else if(currentScreen===1)drawForecast(w);
-else drawDualLocation(data);
+else if(currentScreen===2)drawDualLocation(data);
+else drawCustomPreview();
 }
 
 function drawCurrentWeather(w){
@@ -348,8 +395,89 @@ ctx.font='14px sans-serif';
 ctx.fillText(now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),120,220);
 }
 
+function drawCustomPreview(){
+ctx.fillStyle='#1a1a2e';
+ctx.fillRect(0,0,240,240);
+const now=new Date();
+// Header: time left
+ctx.fillStyle='#00d4ff';
+ctx.font='bold 14px sans-serif';
+ctx.textAlign='left';
+ctx.fillText(now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),8,20);
+// Header: custom text right
+const header=document.getElementById('custom-header').value||'';
+if(header){
+ctx.fillStyle='#888';
+ctx.font='12px sans-serif';
+ctx.textAlign='right';
+ctx.fillText(header,232,20);
+}
+// Body: custom text centered with word wrap
+const body=document.getElementById('custom-body').value||'';
+if(body){
+ctx.fillStyle='#fff';
+ctx.textAlign='center';
+const len=body.length;
+const fontSize=len<=40?24:len<=80?16:12;
+ctx.font=`${fontSize}px sans-serif`;
+const lines=wrapText(body,len<=40?14:len<=80?22:30);
+let y=len<=40?90:70;
+const lineH=fontSize+4;
+lines.slice(0,6).forEach(line=>{
+ctx.fillText(line,120,y);
+y+=lineH;
+});
+}
+// Footer bar
+ctx.fillStyle='#2a2a4e';
+roundRect(8,175,224,36,4);
+const footer=document.getElementById('custom-footer').value||'';
+if(footer){
+ctx.fillStyle='#00d4ff';
+ctx.font='bold 14px sans-serif';
+ctx.textAlign='center';
+ctx.fillText(footer,120,198);
+}
+// Dot indicator
+ctx.fillStyle='#00d4ff';
+ctx.beginPath();
+ctx.arc(120,230,4,0,Math.PI*2);
+ctx.fill();
+}
+
+function wrapText(text,maxChars){
+const words=text.split(' ');
+const lines=[];
+let line='';
+words.forEach(word=>{
+if((line+word).length>maxChars){
+if(line)lines.push(line.trim());
+line=word+' ';
+}else{
+line+=word+' ';
+}
+});
+if(line)lines.push(line.trim());
+return lines;
+}
+
+function roundRect(x,y,w,h,r){
+ctx.beginPath();
+ctx.moveTo(x+r,y);
+ctx.lineTo(x+w-r,y);
+ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+ctx.lineTo(x+w,y+h-r);
+ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+ctx.lineTo(x+r,y+h);
+ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+ctx.lineTo(x,y+r);
+ctx.quadraticCurveTo(x,y,x+r,y);
+ctx.closePath();
+ctx.fill();
+}
+
 function cycleScreen(){
-currentScreen=(currentScreen+1)%3;
+currentScreen=(currentScreen+1)%4;
 fetch('/api/weather').then(r=>r.json()).then(drawPreview);
 }
 
@@ -390,6 +518,20 @@ const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'applic
 const result=await r.json();
 showStatus('display-status',result.success?'success':'error',result.message);
 }catch(e){showStatus('display-status','error','Failed to save');}
+}
+
+async function saveCustomScreen(){
+const data={
+customScreenEnabled:document.getElementById('custom-enabled').checked,
+customScreenHeader:document.getElementById('custom-header').value,
+customScreenBody:document.getElementById('custom-body').value,
+customScreenFooter:document.getElementById('custom-footer').value
+};
+try{
+const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+const result=await r.json();
+showStatus('custom-status',result.success?'success':'error',result.message);
+}catch(e){showStatus('custom-status','error','Failed to save');}
 }
 
 async function refreshWeather(){

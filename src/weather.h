@@ -359,4 +359,36 @@ void setThemeMode(int mode);
 int getUiNudgeY();
 void setUiNudgeY(int nudge);
 
+// =============================================================================
+// CUSTOM SCREEN SETTINGS
+// =============================================================================
+
+/**
+ * Custom text screen - appears after weather screens in rotation
+ * Global setting (same content shown after every location)
+ */
+bool getCustomScreenEnabled();
+void setCustomScreenEnabled(bool enabled);
+
+/**
+ * Custom screen header text (max 16 chars)
+ * Displayed in top-right corner next to time
+ */
+const char* getCustomScreenHeader();
+void setCustomScreenHeader(const char* text);
+
+/**
+ * Custom screen body text (max 160 chars)
+ * Displayed centered with dynamic font sizing based on length
+ */
+const char* getCustomScreenBody();
+void setCustomScreenBody(const char* text);
+
+/**
+ * Custom screen footer text (max 30 chars)
+ * Displayed in rounded bar at bottom
+ */
+const char* getCustomScreenFooter();
+void setCustomScreenFooter(const char* text);
+
 #endif // WEATHER_H

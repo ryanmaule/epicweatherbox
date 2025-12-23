@@ -43,6 +43,12 @@ static int themeMode = 0;  // 0=auto, 1=dark, 2=light
 static bool gifScreenEnabled = false;  // Show GIF screen in rotation
 static int uiNudgeY = 0;  // UI vertical offset in pixels (positive=up, negative=down)
 
+// Custom screen settings
+static bool customScreenEnabled = false;
+static char customScreenHeader[17] = "";   // 16 chars + null
+static char customScreenBody[161] = "";    // 160 chars + null
+static char customScreenFooter[31] = "";   // 30 chars + null
+
 // Timing
 static unsigned long lastUpdateTime = 0;
 static bool initialized = false;
@@ -623,6 +629,40 @@ void setGifScreenEnabled(bool enabled) { gifScreenEnabled = enabled; }
 int getUiNudgeY() { return uiNudgeY; }
 void setUiNudgeY(int nudge) { uiNudgeY = constrain(nudge, -20, 20); }
 
+// Custom screen getters/setters
+bool getCustomScreenEnabled() { return customScreenEnabled; }
+void setCustomScreenEnabled(bool enabled) { customScreenEnabled = enabled; }
+
+const char* getCustomScreenHeader() { return customScreenHeader; }
+void setCustomScreenHeader(const char* text) {
+    if (text) {
+        strncpy(customScreenHeader, text, sizeof(customScreenHeader) - 1);
+        customScreenHeader[sizeof(customScreenHeader) - 1] = '\0';
+    } else {
+        customScreenHeader[0] = '\0';
+    }
+}
+
+const char* getCustomScreenBody() { return customScreenBody; }
+void setCustomScreenBody(const char* text) {
+    if (text) {
+        strncpy(customScreenBody, text, sizeof(customScreenBody) - 1);
+        customScreenBody[sizeof(customScreenBody) - 1] = '\0';
+    } else {
+        customScreenBody[0] = '\0';
+    }
+}
+
+const char* getCustomScreenFooter() { return customScreenFooter; }
+void setCustomScreenFooter(const char* text) {
+    if (text) {
+        strncpy(customScreenFooter, text, sizeof(customScreenFooter) - 1);
+        customScreenFooter[sizeof(customScreenFooter) - 1] = '\0';
+    } else {
+        customScreenFooter[0] = '\0';
+    }
+}
+
 /**
  * Check if currently in night mode based on hour
  */
@@ -669,6 +709,12 @@ bool saveWeatherConfig() {
     doc["themeMode"] = themeMode;
     doc["gifScreenEnabled"] = gifScreenEnabled;
     doc["uiNudgeY"] = uiNudgeY;
+
+    // Custom screen settings
+    doc["customScreenEnabled"] = customScreenEnabled;
+    doc["customScreenHeader"] = customScreenHeader;
+    doc["customScreenBody"] = customScreenBody;
+    doc["customScreenFooter"] = customScreenFooter;
 
     File file = LittleFS.open(WEATHER_CONFIG_FILE, "w");
     if (!file) {
@@ -794,6 +840,27 @@ bool loadWeatherConfig() {
     themeMode = doc["themeMode"] | 0;
     gifScreenEnabled = doc["gifScreenEnabled"] | false;
     uiNudgeY = doc["uiNudgeY"] | 0;
+
+    // Custom screen settings
+    customScreenEnabled = doc["customScreenEnabled"] | false;
+
+    const char* header = doc["customScreenHeader"];
+    if (header) {
+        strncpy(customScreenHeader, header, sizeof(customScreenHeader) - 1);
+        customScreenHeader[sizeof(customScreenHeader) - 1] = '\0';
+    }
+
+    const char* body = doc["customScreenBody"];
+    if (body) {
+        strncpy(customScreenBody, body, sizeof(customScreenBody) - 1);
+        customScreenBody[sizeof(customScreenBody) - 1] = '\0';
+    }
+
+    const char* footer = doc["customScreenFooter"];
+    if (footer) {
+        strncpy(customScreenFooter, footer, sizeof(customScreenFooter) - 1);
+        customScreenFooter[sizeof(customScreenFooter) - 1] = '\0';
+    }
 
     // Log loaded locations
     for (int i = 0; i < locationCount; i++) {

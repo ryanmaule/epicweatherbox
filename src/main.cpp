@@ -957,7 +957,9 @@ void drawCurrentWeather() {
     // Screen dots at bottom (one per screen, not per location)
     int numLocs = getLocationCount();
     bool showForecastFlag = getShowForecast();
+    bool customEnabled = getCustomScreenEnabled();
     int screensPerLoc = showForecastFlag ? 3 : 1;
+    if (customEnabled) screensPerLoc++;
     int totalScreens = numLocs * screensPerLoc;
     int currentScreen = currentDisplayLocation * screensPerLoc + currentDisplayScreen;
 
@@ -1099,7 +1101,9 @@ void drawForecast(int startDay) {
     // Screen dots at bottom (one per screen, not per location)
     int numLocs = getLocationCount();
     bool showForecastFlag = getShowForecast();
+    bool customEnabled = getCustomScreenEnabled();
     int screensPerLoc = showForecastFlag ? 3 : 1;
+    if (customEnabled) screensPerLoc++;
     int totalScreens = numLocs * screensPerLoc;
     int currentScreen = currentDisplayLocation * screensPerLoc + currentDisplayScreen;
 
@@ -1108,6 +1112,164 @@ void drawForecast(int startDay) {
         int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
         int dotY = 230 + yOff;
         if (dotY > 236) dotY = 236;  // Don't go off screen
+        for (int i = 0; i < totalScreens; i++) {
+            uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
+            tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
+        }
+    }
+}
+
+// Draw custom text screen
+void drawCustomScreen() {
+    // Get theme-aware colors
+    int yOff = -getUiNudgeY();
+    uint16_t bgColor = getThemeBg();
+    uint16_t cardColor = getThemeCard();
+    uint16_t cyanColor = getThemeCyan();
+    uint16_t grayColor = getThemeGray();
+    uint16_t textColor = getThemeText();
+
+    tft.fillScreen(bgColor);
+
+    // ========== Header: Time (left) + Custom header text (right) ==========
+    // Get time from NTP
+    const WeatherData& primaryWeather = getWeather(0);
+    long localEpoch = timeClient.getEpochTime() + primaryWeather.utcOffsetSeconds;
+    int hours = (localEpoch % 86400L) / 3600;
+    int minutes = (localEpoch % 3600) / 60;
+    int h12 = hours % 12;
+    if (h12 == 0) h12 = 12;
+    const char* ampm = (hours < 12) ? "AM" : "PM";
+
+    // Draw time (left aligned, matches forecast header style)
+    char timeNumStr[16];
+    snprintf(timeNumStr, sizeof(timeNumStr), "%d:%02d", h12, minutes);
+    tft.setFreeFont(FSSB12);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(cyanColor);
+    tft.drawString(timeNumStr, 8, 8 + yOff, GFXFF);
+
+    int16_t timeNumW = tft.textWidth(timeNumStr, GFXFF);
+    tft.setFreeFont(FSS9);
+    tft.drawString(ampm, 8 + timeNumW + 4, 8 + yOff, GFXFF);
+
+    // Custom header text (right aligned, gray)
+    const char* headerText = getCustomScreenHeader();
+    if (strlen(headerText) > 0) {
+        tft.setFreeFont(FSS9);
+        int16_t headerW = tft.textWidth(headerText, GFXFF);
+        tft.setTextDatum(TL_DATUM);
+        tft.setTextColor(grayColor);
+        tft.drawString(headerText, 232 - headerW, 8 + yOff, GFXFF);
+    }
+
+    // ========== Body: Dynamic text sizing ==========
+    const char* bodyText = getCustomScreenBody();
+    if (strlen(bodyText) > 0) {
+        int bodyY = 40 + yOff;
+        int bodyW = 224;  // Width (8px margin each side)
+
+        // Determine font size based on text length
+        const GFXfont* font;
+        int lineHeight;
+
+        int len = strlen(bodyText);
+        if (len <= 40) {
+            // Short text: large font
+            font = FSSB18;
+            lineHeight = 28;
+        } else if (len <= 80) {
+            // Medium text: medium font
+            font = FSSB12;
+            lineHeight = 20;
+        } else {
+            // Long text: small font
+            font = FSS9;
+            lineHeight = 16;
+        }
+
+        tft.setFreeFont(font);
+        tft.setTextColor(textColor);
+        tft.setTextDatum(TL_DATUM);
+
+        // Word-wrap and draw text (centered)
+        char buffer[161];
+        strncpy(buffer, bodyText, sizeof(buffer) - 1);
+        buffer[sizeof(buffer) - 1] = '\0';
+
+        int y = bodyY;
+        int maxY = 165 + yOff;  // Stop before footer
+        char* lineStart = buffer;
+        char* lastSpace = NULL;
+        char* p = buffer;
+
+        while (*p && y < maxY) {
+            if (*p == ' ') {
+                lastSpace = p;
+            }
+
+            // Check line width
+            char saved = *(p + 1);
+            *(p + 1) = '\0';
+            int16_t lineW = tft.textWidth(lineStart, GFXFF);
+            *(p + 1) = saved;
+
+            if (lineW > bodyW || *p == '\n') {
+                // Need to wrap
+                char* breakPoint = (lastSpace && lastSpace > lineStart) ? lastSpace : p;
+                char savedChar = *breakPoint;
+                *breakPoint = '\0';
+
+                // Center the line
+                int16_t actualW = tft.textWidth(lineStart, GFXFF);
+                int centeredX = 120 - actualW / 2;
+                tft.drawString(lineStart, centeredX, y, GFXFF);
+
+                *breakPoint = savedChar;
+                y += lineHeight;
+                lineStart = (*breakPoint == ' ' || *breakPoint == '\n') ? breakPoint + 1 : breakPoint;
+                lastSpace = NULL;
+            }
+            p++;
+        }
+
+        // Draw remaining text
+        if (*lineStart && y < maxY) {
+            int16_t actualW = tft.textWidth(lineStart, GFXFF);
+            int centeredX = 120 - actualW / 2;
+            tft.drawString(lineStart, centeredX, y, GFXFF);
+        }
+    }
+
+    // ========== Footer: Rounded rectangle with custom text ==========
+    const char* footerText = getCustomScreenFooter();
+    int barY = 175 + yOff;
+    int barH = 36;
+    int barMargin = 8;
+
+    tft.fillRoundRect(barMargin, barY, 240 - 2*barMargin, barH, 4, cardColor);
+
+    if (strlen(footerText) > 0) {
+        tft.setFreeFont(FSSB12);
+        tft.setTextDatum(TC_DATUM);
+        tft.setTextColor(cyanColor);
+        tft.drawString(footerText, 120, barY + 10, GFXFF);
+    }
+
+    // ========== Screen dots ==========
+    int numLocs = getLocationCount();
+    bool showForecastFlag = getShowForecast();
+    bool customEnabled = getCustomScreenEnabled();
+    int screensPerLoc = showForecastFlag ? 3 : 1;
+    if (customEnabled) screensPerLoc++;
+    int totalScreens = numLocs * screensPerLoc;
+    int currentScreen = currentDisplayLocation * screensPerLoc + currentDisplayScreen;
+
+    if (totalScreens > 1) {
+        int dotSpacing = 10;
+        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = 230 + yOff;
+        if (dotY > 236) dotY = 236;
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
             tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
@@ -1126,13 +1288,13 @@ void updateTftDisplay() {
 
         // Determine screens to show per location
         bool showForecast = getShowForecast();
-        // GIF disabled - don't include in rotation even if setting is on
-        // bool showGif = getGifScreenEnabled();
+        bool showCustom = getCustomScreenEnabled();
         int numLocations = getLocationCount();
 
-        // Screens per location: current, (forecast1, forecast2)
-        // GIF screen removed from rotation due to memory constraints
-        int screensPerLoc = showForecast ? 3 : 1;
+        // Screens per location: current, (forecast1, forecast2), (custom)
+        int screensPerLoc = 1;  // Always have current weather
+        if (showForecast) screensPerLoc += 2;  // Add forecast screens
+        if (showCustom) screensPerLoc += 1;    // Add custom screen at end
 
         // Advance screen
         currentDisplayScreen++;
@@ -1145,17 +1307,31 @@ void updateTftDisplay() {
         ESP.wdtFeed();
         yield();
 
-        // Screen order: 0=current, 1=forecast1-3, 2=forecast4-6
-        switch (currentDisplayScreen) {
-            case 0:
+        // Screen order depends on which screens are enabled
+        // With forecast: 0=current, 1=forecast1-3, 2=forecast4-6, 3=custom
+        // Without forecast: 0=current, 1=custom
+        if (showForecast) {
+            switch (currentDisplayScreen) {
+                case 0:
+                    drawCurrentWeather();
+                    break;
+                case 1:
+                    drawForecast(0);  // Days 1-3
+                    break;
+                case 2:
+                    drawForecast(3);  // Days 4-6
+                    break;
+                case 3:
+                    if (showCustom) drawCustomScreen();
+                    break;
+            }
+        } else {
+            // No forecast screens
+            if (currentDisplayScreen == 0) {
                 drawCurrentWeather();
-                break;
-            case 1:
-                drawForecast(0);  // Days 1-3
-                break;
-            case 2:
-                drawForecast(3);  // Days 4-6
-                break;
+            } else if (currentDisplayScreen == 1 && showCustom) {
+                drawCustomScreen();
+            }
         }
 
         Serial.printf("[TFT] Screen %d, Location %d\n",
@@ -1498,6 +1674,12 @@ void setupWebServer() {
         doc["themeMode"] = getThemeMode();
         doc["uiNudgeY"] = getUiNudgeY();
 
+        // Custom screen settings
+        doc["customScreenEnabled"] = getCustomScreenEnabled();
+        doc["customScreenHeader"] = getCustomScreenHeader();
+        doc["customScreenBody"] = getCustomScreenBody();
+        doc["customScreenFooter"] = getCustomScreenFooter();
+
         // GIF support disabled
         doc["gifSupported"] = false;
 
@@ -1615,6 +1797,20 @@ void setupWebServer() {
         }
         if (doc["uiNudgeY"].is<int>()) {
             setUiNudgeY(doc["uiNudgeY"] | 0);
+        }
+
+        // Custom screen settings
+        if (doc["customScreenEnabled"].is<bool>()) {
+            setCustomScreenEnabled(doc["customScreenEnabled"] | false);
+        }
+        if (doc["customScreenHeader"].is<const char*>()) {
+            setCustomScreenHeader(doc["customScreenHeader"]);
+        }
+        if (doc["customScreenBody"].is<const char*>()) {
+            setCustomScreenBody(doc["customScreenBody"]);
+        }
+        if (doc["customScreenFooter"].is<const char*>()) {
+            setCustomScreenFooter(doc["customScreenFooter"]);
         }
 
         // Save and refresh weather
