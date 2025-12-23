@@ -46,6 +46,29 @@ extern "C" {
 #if ENABLE_TFT_TEST
 #include <TFT_eSPI.h>
 #include <NTPClient.h>
+
+// FreeSans smooth fonts - already defined by TFT_eSPI when LOAD_GFXFF=1
+// Just need extern declarations to reference them
+extern const GFXfont FreeSans9pt7b;
+extern const GFXfont FreeSans12pt7b;
+extern const GFXfont FreeSans18pt7b;
+extern const GFXfont FreeSans24pt7b;
+extern const GFXfont FreeSansBold9pt7b;
+extern const GFXfont FreeSansBold12pt7b;
+extern const GFXfont FreeSansBold18pt7b;
+extern const GFXfont FreeSansBold24pt7b;
+
+// Font aliases for convenience
+#define FSS9  &FreeSans9pt7b
+#define FSS12 &FreeSans12pt7b
+#define FSS18 &FreeSans18pt7b
+#define FSS24 &FreeSans24pt7b
+#define FSSB9  &FreeSansBold9pt7b
+#define FSSB12 &FreeSansBold12pt7b
+#define FSSB18 &FreeSansBold18pt7b
+#define FSSB24 &FreeSansBold24pt7b
+#define GFXFF 1  // GFX Free Font render mode
+
 static TFT_eSPI tft = TFT_eSPI();
 #define TFT_BL_PIN 5  // Backlight PWM pin
 
@@ -65,6 +88,213 @@ static int currentDisplayLocation = 0;
 #define COLOR_GRAY     0x8410
 #define COLOR_ORANGE   0xFD20
 #define COLOR_BLUE     0x5D9F
+
+// Icon colors (pixel art style - BGR565 format)
+// BGR565: BBBBB GGGGGG RRRRR (5-6-5 bits)
+#define ICON_SUN       0x07FF  // Yellow (cyan in RGB, yellow in BGR display)
+#define ICON_CLOUD     0xFFFF  // White cloud
+#define ICON_CLOUD_DARK 0xC618 // Gray cloud
+#define ICON_RAIN      0xFD00  // Light blue rain drops
+#define ICON_SNOW      0xFFFF  // White snow
+#define ICON_LIGHTNING 0x07FF  // Yellow lightning bolt
+
+// ============================================================================
+// PROCEDURAL PIXEL-ART WEATHER ICONS
+// ============================================================================
+// Based on reference: weather-line-icons-pixel-art-set
+// Each icon is drawn at specified x,y with given size (default 32x32)
+
+// Helper: Draw a pixel block (scaled pixel)
+inline void drawPixel(int x, int y, int px, int py, int scale, uint16_t color) {
+    tft.fillRect(x + px * scale, y + py * scale, scale, scale, color);
+}
+
+// Draw sun icon (golden circle with rays)
+void drawIconSun(int x, int y, int size = 32) {
+    int s = size / 16;  // Scale factor (2 for 32px icon)
+    uint16_t c = ICON_SUN;
+
+    // Center circle (4x4 at center)
+    for (int py = 6; py < 10; py++) {
+        for (int px = 6; px < 10; px++) {
+            drawPixel(x, y, px, py, s, c);
+        }
+    }
+
+    // Rays (extending outward)
+    // Top ray
+    drawPixel(x, y, 7, 2, s, c); drawPixel(x, y, 8, 2, s, c);
+    drawPixel(x, y, 7, 3, s, c); drawPixel(x, y, 8, 3, s, c);
+    // Bottom ray
+    drawPixel(x, y, 7, 12, s, c); drawPixel(x, y, 8, 12, s, c);
+    drawPixel(x, y, 7, 13, s, c); drawPixel(x, y, 8, 13, s, c);
+    // Left ray
+    drawPixel(x, y, 2, 7, s, c); drawPixel(x, y, 2, 8, s, c);
+    drawPixel(x, y, 3, 7, s, c); drawPixel(x, y, 3, 8, s, c);
+    // Right ray
+    drawPixel(x, y, 12, 7, s, c); drawPixel(x, y, 12, 8, s, c);
+    drawPixel(x, y, 13, 7, s, c); drawPixel(x, y, 13, 8, s, c);
+    // Diagonal rays (smaller)
+    drawPixel(x, y, 4, 4, s, c); drawPixel(x, y, 11, 4, s, c);
+    drawPixel(x, y, 4, 11, s, c); drawPixel(x, y, 11, 11, s, c);
+}
+
+// Draw cloud icon (fluffy white cloud)
+void drawIconCloud(int x, int y, int size = 32, uint16_t color = ICON_CLOUD) {
+    int s = size / 16;
+
+    // Main cloud body - rounded shape
+    // Top bumps
+    for (int px = 5; px < 9; px++) drawPixel(x, y, px, 4, s, color);
+    for (int px = 9; px < 13; px++) drawPixel(x, y, px, 5, s, color);
+    // Middle section
+    for (int py = 5; py < 10; py++) {
+        for (int px = 3; px < 14; px++) {
+            drawPixel(x, y, px, py, s, color);
+        }
+    }
+    // Bottom flat
+    for (int px = 2; px < 14; px++) {
+        drawPixel(x, y, px, 10, s, color);
+        drawPixel(x, y, px, 11, s, color);
+    }
+}
+
+// Draw rain drops below a position
+void drawRainDrops(int x, int y, int size = 32) {
+    int s = size / 16;
+    uint16_t c = ICON_RAIN;
+
+    // 3 rain drops in a row
+    drawPixel(x, y, 4, 12, s, c); drawPixel(x, y, 4, 13, s, c);
+    drawPixel(x, y, 8, 13, s, c); drawPixel(x, y, 8, 14, s, c);
+    drawPixel(x, y, 12, 12, s, c); drawPixel(x, y, 12, 13, s, c);
+}
+
+// Draw snow flakes
+void drawSnowFlakes(int x, int y, int size = 32) {
+    int s = size / 16;
+    uint16_t c = ICON_SNOW;
+
+    // Small dots for snow
+    drawPixel(x, y, 4, 12, s, c);
+    drawPixel(x, y, 7, 14, s, c);
+    drawPixel(x, y, 11, 12, s, c);
+    drawPixel(x, y, 9, 13, s, c);
+    drawPixel(x, y, 5, 14, s, c);
+}
+
+// Draw lightning bolt
+void drawLightning(int x, int y, int size = 32) {
+    int s = size / 16;
+    uint16_t c = ICON_LIGHTNING;
+
+    // Zigzag bolt shape
+    drawPixel(x, y, 8, 8, s, c);
+    drawPixel(x, y, 7, 9, s, c);
+    drawPixel(x, y, 8, 9, s, c);
+    drawPixel(x, y, 6, 10, s, c);
+    drawPixel(x, y, 7, 10, s, c);
+    drawPixel(x, y, 8, 10, s, c);
+    drawPixel(x, y, 9, 10, s, c);
+    drawPixel(x, y, 7, 11, s, c);
+    drawPixel(x, y, 8, 11, s, c);
+    drawPixel(x, y, 6, 12, s, c);
+    drawPixel(x, y, 7, 12, s, c);
+    drawPixel(x, y, 5, 13, s, c);
+    drawPixel(x, y, 6, 13, s, c);
+}
+
+// Draw moon (crescent)
+void drawIconMoon(int x, int y, int size = 32) {
+    int s = size / 16;
+    uint16_t c = ICON_SUN;  // Yellow moon
+
+    // Crescent shape
+    for (int py = 4; py < 12; py++) {
+        for (int px = 5; px < 11; px++) {
+            // Full circle minus inner offset circle
+            int dx = px - 8;
+            int dy = py - 8;
+            int dx2 = px - 6;  // Offset for crescent cutout
+            if (dx*dx + dy*dy <= 16 && dx2*dx2 + dy*dy > 9) {
+                drawPixel(x, y, px, py, s, c);
+            }
+        }
+    }
+}
+
+// Draw fog lines
+void drawIconFog(int x, int y, int size = 32) {
+    int s = size / 16;
+    uint16_t c = COLOR_GRAY;
+
+    // Horizontal wavy lines
+    for (int px = 3; px < 13; px++) {
+        drawPixel(x, y, px, 6, s, c);
+        drawPixel(x, y, px, 9, s, c);
+        drawPixel(x, y, px, 12, s, c);
+    }
+}
+
+// Main icon dispatcher - draws weather icon based on condition
+void drawWeatherIcon(int x, int y, WeatherCondition condition, bool isDay = true, int size = 32) {
+    switch (condition) {
+        case WEATHER_CLEAR:
+            if (isDay) {
+                drawIconSun(x, y, size);
+            } else {
+                drawIconMoon(x, y, size);
+            }
+            break;
+
+        case WEATHER_PARTLY_CLOUDY:
+            // Sun/moon peeking behind cloud
+            if (isDay) {
+                drawIconSun(x - size/8, y - size/8, size * 3/4);
+            } else {
+                drawIconMoon(x - size/8, y - size/8, size * 3/4);
+            }
+            drawIconCloud(x + size/8, y + size/4, size * 3/4);
+            break;
+
+        case WEATHER_CLOUDY:
+            drawIconCloud(x, y, size);
+            break;
+
+        case WEATHER_FOG:
+            drawIconFog(x, y, size);
+            break;
+
+        case WEATHER_DRIZZLE:
+        case WEATHER_RAIN:
+            drawIconCloud(x, y - size/8, size);
+            drawRainDrops(x, y, size);
+            break;
+
+        case WEATHER_FREEZING_RAIN:
+            drawIconCloud(x, y - size/8, size, ICON_CLOUD_DARK);
+            drawRainDrops(x, y, size);
+            drawSnowFlakes(x + size/4, y, size);
+            break;
+
+        case WEATHER_SNOW:
+            drawIconCloud(x, y - size/8, size);
+            drawSnowFlakes(x, y, size);
+            break;
+
+        case WEATHER_THUNDERSTORM:
+            drawIconCloud(x, y - size/8, size, ICON_CLOUD_DARK);
+            drawLightning(x, y, size);
+            drawRainDrops(x + size/4, y, size);
+            break;
+
+        default:  // WEATHER_UNKNOWN
+            // Question mark or generic cloud
+            drawIconCloud(x, y, size, COLOR_GRAY);
+            break;
+    }
+}
 
 void initTftMinimal() {
     Serial.println(F("[TFT] Init starting..."));
@@ -88,15 +318,23 @@ void initTftMinimal() {
     ESP.wdtFeed();
     yield();
 
-    // Draw boot screen
+    // Draw boot screen with smooth fonts
     tft.fillScreen(COLOR_BG);
     tft.setTextDatum(MC_DATUM);  // Middle center
+
+    // "Epic" in bold 18pt cyan
+    tft.setFreeFont(FSSB18);
     tft.setTextColor(COLOR_CYAN);
-    tft.drawString("Epic", 120, 90, 4);
+    tft.drawString("Epic", 120, 95, GFXFF);
+
+    // "WeatherBox" in bold 18pt white
     tft.setTextColor(COLOR_WHITE);
-    tft.drawString("WeatherBox", 120, 130, 4);
+    tft.drawString("WeatherBox", 120, 130, GFXFF);
+
+    // Version in small gray
+    tft.setFreeFont(FSS9);
     tft.setTextColor(COLOR_GRAY);
-    tft.drawString("v" FIRMWARE_VERSION, 120, 170, 2);
+    tft.drawString("v" FIRMWARE_VERSION, 120, 165, GFXFF);
 
     Serial.println(F("[TFT] Boot screen displayed"));
     lastDisplayUpdate = millis();
@@ -121,50 +359,81 @@ void drawCurrentWeather() {
     if (h12 == 0) h12 = 12;
     const char* ampm = (hours < 12) ? "AM" : "PM";
 
-    // Time display - large centered
+    // Time display - large centered with smooth font
     char timeStr[16];
     snprintf(timeStr, sizeof(timeStr), "%d:%02d %s", h12, minutes, ampm);
     tft.setTextDatum(TC_DATUM);
+    tft.setFreeFont(FSSB18);
     tft.setTextColor(COLOR_CYAN);
-    tft.drawString(timeStr, 120, 15, 4);
+    tft.drawString(timeStr, 120, 15, GFXFF);
 
     // Location name
+    tft.setFreeFont(FSS9);
     tft.setTextColor(COLOR_GRAY);
-    tft.drawString(location.name, 120, 55, 2);
+    tft.drawString(location.name, 120, 48, GFXFF);
 
-    // Current temperature - BIG
+    // ========== Two-column layout: Icon (left) | Temp (right) ==========
+    // Row 2: Weather icon on left, temperature on right
+    int row2Y = 70;
+
+    // Weather icon (48x48) on left side
+    drawWeatherIcon(30, row2Y, weather.current.condition, weather.current.isDay, 48);
+
+    // Current temperature on right side
     float temp = weather.current.temperature;
     if (!useCelsius) {
         temp = temp * 9.0 / 5.0 + 32.0;
     }
     char tempStr[16];
-    snprintf(tempStr, sizeof(tempStr), "%.0f%c", temp, useCelsius ? 'C' : 'F');
+    snprintf(tempStr, sizeof(tempStr), "%.0f", temp);
 
-    // Color based on temp
+    // Color based on temp (Celsius thresholds)
+    float tempC = useCelsius ? temp : (temp - 32.0) * 5.0 / 9.0;
     uint16_t tempColor = COLOR_WHITE;
-    if (temp < 0) tempColor = COLOR_BLUE;
-    else if (temp < 10) tempColor = COLOR_CYAN;
-    else if (temp > 25) tempColor = COLOR_ORANGE;
+    if (tempC < 0) tempColor = COLOR_BLUE;
+    else if (tempC < 10) tempColor = COLOR_CYAN;
+    else if (tempC > 25) tempColor = COLOR_ORANGE;
 
+    // Large temperature on right side (using font 7 for big numbers)
+    tft.setTextDatum(ML_DATUM);  // Middle-left alignment
     tft.setTextColor(tempColor);
-    tft.drawString(tempStr, 120, 110, 7);  // Font 7 is large
+    tft.drawString(tempStr, 95, row2Y + 24, 7);
 
-    // Weather condition
+    // Degree symbol and unit (smaller, positioned after number)
+    tft.setTextDatum(TL_DATUM);
+    tft.setFreeFont(FSS12);
+    tft.drawString(useCelsius ? "C" : "F", 190, row2Y + 8, GFXFF);
+
+    // ========== Weather condition text ==========
+    tft.setTextDatum(TC_DATUM);
+    tft.setFreeFont(FSS12);
     tft.setTextColor(COLOR_WHITE);
-    tft.drawString(conditionToString(weather.current.condition), 120, 175, 2);
+    tft.drawString(conditionToString(weather.current.condition), 120, 145, GFXFF);
 
-    // Hi/Lo from forecast if available
+    // ========== Hi/Lo from forecast ==========
     if (weather.forecastDays > 0) {
-        char hiloStr[32];
         float hi = weather.forecast[0].tempMax;
         float lo = weather.forecast[0].tempMin;
         if (!useCelsius) {
             hi = hi * 9.0 / 5.0 + 32.0;
             lo = lo * 9.0 / 5.0 + 32.0;
         }
-        snprintf(hiloStr, sizeof(hiloStr), "H:%.0f  L:%.0f", hi, lo);
-        tft.setTextColor(COLOR_GRAY);
-        tft.drawString(hiloStr, 120, 205, 2);
+
+        // Two-column hi/lo display
+        tft.setFreeFont(FSS9);
+        tft.setTextDatum(TC_DATUM);
+
+        // High temp (orange, left of center)
+        tft.setTextColor(COLOR_ORANGE);
+        char hiStr[16];
+        snprintf(hiStr, sizeof(hiStr), "H: %.0f", hi);
+        tft.drawString(hiStr, 70, 180, GFXFF);
+
+        // Low temp (blue, right of center)
+        tft.setTextColor(COLOR_BLUE);
+        char loStr[16];
+        snprintf(loStr, sizeof(loStr), "L: %.0f", lo);
+        tft.drawString(loStr, 170, 180, GFXFF);
     }
 
     // Location dots at bottom
@@ -186,12 +455,11 @@ void drawForecast(int startDay) {
 
     tft.fillScreen(COLOR_BG);
 
-    // Header with location
+    // Header with location name only
     tft.setTextDatum(TC_DATUM);
+    tft.setFreeFont(FSSB12);
     tft.setTextColor(COLOR_CYAN);
-    char header[32];
-    snprintf(header, sizeof(header), "%s %d-%d", location.name, startDay + 1, startDay + 3);
-    tft.drawString(header, 120, 8, 2);
+    tft.drawString(location.name, 120, 10, GFXFF);
 
     // Draw 3 forecast cards
     int cardW = 75;
@@ -210,12 +478,16 @@ void drawForecast(int startDay) {
         // Card background
         tft.fillRoundRect(x, y, cardW, cardH, 4, COLOR_CARD);
 
-        // Day name
+        // Day name - smooth font at top of card
         tft.setTextDatum(TC_DATUM);
+        tft.setFreeFont(FSSB9);
         tft.setTextColor(COLOR_CYAN);
-        tft.drawString(day.dayName, x + cardW/2, y + 8, 2);
+        tft.drawString(day.dayName, x + cardW/2, y + 10, GFXFF);
 
-        // Temperature high
+        // Weather icon (32x32 centered, with more spacing from day name)
+        drawWeatherIcon(x + (cardW - 32)/2, y + 35, day.condition, true, 32);
+
+        // Temperature high/low
         float hi = day.tempMax;
         float lo = day.tempMin;
         if (!useCelsius) {
@@ -227,17 +499,21 @@ void drawForecast(int startDay) {
         snprintf(hiStr, sizeof(hiStr), "%.0f", hi);
         snprintf(loStr, sizeof(loStr), "%.0f", lo);
 
+        // High temp - bold 12pt below icon
+        tft.setFreeFont(FSSB12);
         tft.setTextColor(COLOR_ORANGE);
-        tft.drawString(hiStr, x + cardW/2, y + 60, 4);
+        tft.drawString(hiStr, x + cardW/2, y + 95, GFXFF);
 
+        // Low temp - bold 12pt
         tft.setTextColor(COLOR_BLUE);
-        tft.drawString(loStr, x + cardW/2, y + 100, 4);
+        tft.drawString(loStr, x + cardW/2, y + 125, GFXFF);
 
         // Precipitation %
         char precip[8];
         snprintf(precip, sizeof(precip), "%d%%", (int)day.precipitationProb);
+        tft.setFreeFont(FSS9);
         tft.setTextColor(day.precipitationProb > 30 ? COLOR_CYAN : COLOR_GRAY);
-        tft.drawString(precip, x + cardW/2, y + 145, 2);
+        tft.drawString(precip, x + cardW/2, y + 158, GFXFF);
     }
 
     // Location dots
