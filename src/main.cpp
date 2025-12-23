@@ -237,6 +237,26 @@ void drawIconFog(int x, int y, int size = 32) {
     }
 }
 
+// Indicator icons for forecast cards (taller arrows to match font height)
+
+// Up arrow for high temp (10px wide, 16px tall)
+void drawArrowUp(int x, int y, uint16_t color) {
+    tft.fillTriangle(x+5, y, x, y+6, x+10, y+6, color);  // Arrow head
+    tft.fillRect(x+2, y+6, 7, 10, color);                 // Tall stem
+}
+
+// Down arrow for low temp (10px wide, 16px tall)
+void drawArrowDown(int x, int y, uint16_t color) {
+    tft.fillRect(x+2, y, 7, 10, color);                   // Tall stem
+    tft.fillTriangle(x+5, y+16, x, y+10, x+10, y+10, color);  // Arrow head
+}
+
+// Small raindrop for precipitation
+void drawRaindrop(int x, int y, uint16_t color) {
+    tft.fillTriangle(x+4, y, x+1, y+5, x+7, y+5, color);
+    tft.fillCircle(x+4, y+6, 3, color);
+}
+
 // Main icon dispatcher - draws weather icon based on condition
 void drawWeatherIcon(int x, int y, WeatherCondition condition, bool isDay = true, int size = 32) {
     switch (condition) {
@@ -373,19 +393,23 @@ void drawCurrentWeather() {
     tft.drawString(location.name, 120, 48, GFXFF);
 
     // ========== Two-column layout: Icon (left) | Temp (right) ==========
-    // Row 2: Weather icon on left, temperature on right
-    int row2Y = 70;
+    // Layout spread across full screen height for better spacing
+    int iconY = 70;
 
     // Weather icon (48x48) on left side
-    drawWeatherIcon(30, row2Y, weather.current.condition, weather.current.isDay, 48);
+    drawWeatherIcon(20, iconY, weather.current.condition, weather.current.isDay, 48);
+
+    // Condition text under icon
+    tft.setTextDatum(TC_DATUM);
+    tft.setFreeFont(FSS9);
+    tft.setTextColor(COLOR_WHITE);
+    tft.drawString(conditionToString(weather.current.condition), 44, iconY + 55, GFXFF);
 
     // Current temperature on right side
     float temp = weather.current.temperature;
     if (!useCelsius) {
         temp = temp * 9.0 / 5.0 + 32.0;
     }
-    char tempStr[16];
-    snprintf(tempStr, sizeof(tempStr), "%.0f", temp);
 
     // Color based on temp (Celsius thresholds)
     float tempC = useCelsius ? temp : (temp - 32.0) * 5.0 / 9.0;
@@ -394,23 +418,16 @@ void drawCurrentWeather() {
     else if (tempC < 10) tempColor = COLOR_CYAN;
     else if (tempC > 25) tempColor = COLOR_ORANGE;
 
-    // Large temperature on right side (using font 7 for big numbers)
-    tft.setTextDatum(ML_DATUM);  // Middle-left alignment
-    tft.setTextColor(tempColor);
-    tft.drawString(tempStr, 95, row2Y + 24, 7);
-
-    // Degree symbol and unit (smaller, positioned after number)
-    tft.setTextDatum(TL_DATUM);
-    tft.setFreeFont(FSS12);
-    tft.drawString(useCelsius ? "C" : "F", 190, row2Y + 8, GFXFF);
-
-    // ========== Weather condition text ==========
+    // Large temperature with unit - centered in right half
+    char tempStr[16];
+    snprintf(tempStr, sizeof(tempStr), "%.0f%c", temp, useCelsius ? 'C' : 'F');
     tft.setTextDatum(TC_DATUM);
-    tft.setFreeFont(FSS12);
-    tft.setTextColor(COLOR_WHITE);
-    tft.drawString(conditionToString(weather.current.condition), 120, 145, GFXFF);
+    tft.setTextColor(tempColor);
+    tft.drawString(tempStr, 165, iconY + 8, 7);
 
-    // ========== Hi/Lo from forecast ==========
+    // ========== Hi/Lo/Precip row with icons (below main content) ==========
+    int detailY = 155;
+
     if (weather.forecastDays > 0) {
         float hi = weather.forecast[0].tempMax;
         float lo = weather.forecast[0].tempMin;
@@ -419,30 +436,46 @@ void drawCurrentWeather() {
             lo = lo * 9.0 / 5.0 + 32.0;
         }
 
-        // Two-column hi/lo display
-        tft.setFreeFont(FSS9);
-        tft.setTextDatum(TC_DATUM);
+        tft.setFreeFont(FSSB12);
 
-        // High temp (orange, left of center)
+        // High temp with up arrow icon (left third)
+        drawArrowUp(30, detailY + 2, COLOR_ORANGE);
+        tft.setTextDatum(TL_DATUM);
         tft.setTextColor(COLOR_ORANGE);
-        char hiStr[16];
-        snprintf(hiStr, sizeof(hiStr), "H: %.0f", hi);
-        tft.drawString(hiStr, 70, 180, GFXFF);
+        char hiStr[8];
+        snprintf(hiStr, sizeof(hiStr), "%.0f", hi);
+        tft.drawString(hiStr, 44, detailY, GFXFF);
 
-        // Low temp (blue, right of center)
+        // Low temp with down arrow icon (middle)
+        drawArrowDown(100, detailY + 2, COLOR_BLUE);
         tft.setTextColor(COLOR_BLUE);
-        char loStr[16];
-        snprintf(loStr, sizeof(loStr), "L: %.0f", lo);
-        tft.drawString(loStr, 170, 180, GFXFF);
+        char loStr[8];
+        snprintf(loStr, sizeof(loStr), "%.0f", lo);
+        tft.drawString(loStr, 114, detailY, GFXFF);
+
+        // Precipitation with raindrop icon (right third)
+        int precipVal = (int)weather.forecast[0].precipitationProb;
+        uint16_t precipColor = precipVal > 30 ? COLOR_CYAN : COLOR_GRAY;
+        drawRaindrop(168, detailY, precipColor);
+        tft.setTextColor(precipColor);
+        char precip[8];
+        snprintf(precip, sizeof(precip), "%d%%", precipVal);
+        tft.drawString(precip, 184, detailY, GFXFF);
     }
 
-    // Location dots at bottom
+    // Screen dots at bottom (one per screen, not per location)
     int numLocs = getLocationCount();
-    if (numLocs > 1) {
-        int startX = 120 - (numLocs - 1) * 6;
-        for (int i = 0; i < numLocs; i++) {
-            uint16_t dotColor = (i == currentDisplayLocation) ? COLOR_CYAN : COLOR_GRAY;
-            tft.fillCircle(startX + i * 12, 230, 3, dotColor);
+    bool showForecast = getShowForecast();
+    int screensPerLoc = showForecast ? 3 : 1;
+    int totalScreens = numLocs * screensPerLoc;
+    int currentScreen = currentDisplayLocation * screensPerLoc + currentDisplayScreen;
+
+    if (totalScreens > 1) {
+        int dotSpacing = 10;
+        int startX = 120 - (totalScreens - 1) * dotSpacing / 2;
+        for (int i = 0; i < totalScreens; i++) {
+            uint16_t dotColor = (i == currentScreen) ? COLOR_CYAN : COLOR_GRAY;
+            tft.fillCircle(startX + i * dotSpacing, 230, 3, dotColor);
         }
     }
 }
@@ -455,24 +488,39 @@ void drawForecast(int startDay) {
 
     tft.fillScreen(COLOR_BG);
 
-    // Header with location name only
-    tft.setTextDatum(TC_DATUM);
+    // Header: Location left, Time right
     tft.setFreeFont(FSSB12);
+
+    // Location name (left aligned)
+    tft.setTextDatum(TL_DATUM);
     tft.setTextColor(COLOR_CYAN);
-    tft.drawString(location.name, 120, 10, GFXFF);
+    tft.drawString(location.name, 8, 8, GFXFF);
+
+    // Time (right aligned)
+    unsigned long epoch = timeClient.getEpochTime();
+    int hours = (epoch % 86400L) / 3600;
+    int minutes = (epoch % 3600) / 60;
+    int h12 = hours % 12;
+    if (h12 == 0) h12 = 12;
+    const char* ampm = (hours < 12) ? "AM" : "PM";
+    char timeStr[16];
+    snprintf(timeStr, sizeof(timeStr), "%d:%02d %s", h12, minutes, ampm);
+    tft.setTextDatum(TR_DATUM);
+    tft.setTextColor(COLOR_GRAY);
+    tft.drawString(timeStr, 232, 8, GFXFF);
 
     // Draw 3 forecast cards
     int cardW = 75;
     int cardH = 180;
     int gap = 5;
-    int startX = (240 - 3 * cardW - 2 * gap) / 2;
+    int cardStartX = (240 - 3 * cardW - 2 * gap) / 2;
 
     for (int i = 0; i < 3; i++) {
         int dayIdx = startDay + i;
         if (dayIdx >= weather.forecastDays) continue;
 
         const ForecastDay& day = weather.forecast[dayIdx];
-        int x = startX + i * (cardW + gap);
+        int x = cardStartX + i * (cardW + gap);
         int y = 35;
 
         // Card background
@@ -484,8 +532,8 @@ void drawForecast(int startDay) {
         tft.setTextColor(COLOR_CYAN);
         tft.drawString(day.dayName, x + cardW/2, y + 10, GFXFF);
 
-        // Weather icon (32x32 centered, with more spacing from day name)
-        drawWeatherIcon(x + (cardW - 32)/2, y + 35, day.condition, true, 32);
+        // Weather icon (32x32 centered, pushed down more from day name)
+        drawWeatherIcon(x + (cardW - 32)/2, y + 42, day.condition, true, 32);
 
         // Temperature high/low
         float hi = day.tempMax;
@@ -499,30 +547,41 @@ void drawForecast(int startDay) {
         snprintf(hiStr, sizeof(hiStr), "%.0f", hi);
         snprintf(loStr, sizeof(loStr), "%.0f", lo);
 
-        // High temp - bold 12pt below icon
+        // High temp with up arrow icon
+        drawArrowUp(x + 12, y + 95, COLOR_ORANGE);
         tft.setFreeFont(FSSB12);
         tft.setTextColor(COLOR_ORANGE);
-        tft.drawString(hiStr, x + cardW/2, y + 95, GFXFF);
+        tft.setTextDatum(TL_DATUM);
+        tft.drawString(hiStr, x + 24, y + 93, GFXFF);
 
-        // Low temp - bold 12pt
+        // Low temp with down arrow icon
+        drawArrowDown(x + 12, y + 118, COLOR_BLUE);
         tft.setTextColor(COLOR_BLUE);
-        tft.drawString(loStr, x + cardW/2, y + 125, GFXFF);
+        tft.drawString(loStr, x + 24, y + 118, GFXFF);
 
-        // Precipitation %
+        // Precipitation % with raindrop icon
         char precip[8];
         snprintf(precip, sizeof(precip), "%d%%", (int)day.precipitationProb);
+        uint16_t precipColor = day.precipitationProb > 30 ? COLOR_CYAN : COLOR_GRAY;
+        drawRaindrop(x + 15, y + 145, precipColor);
         tft.setFreeFont(FSS9);
-        tft.setTextColor(day.precipitationProb > 30 ? COLOR_CYAN : COLOR_GRAY);
-        tft.drawString(precip, x + cardW/2, y + 158, GFXFF);
+        tft.setTextColor(precipColor);
+        tft.drawString(precip, x + 30, y + 148, GFXFF);
     }
 
-    // Location dots
+    // Screen dots at bottom (one per screen, not per location)
     int numLocs = getLocationCount();
-    if (numLocs > 1) {
-        int dotX = 120 - (numLocs - 1) * 6;
-        for (int i = 0; i < numLocs; i++) {
-            uint16_t dotColor = (i == currentDisplayLocation) ? COLOR_CYAN : COLOR_GRAY;
-            tft.fillCircle(dotX + i * 12, 230, 3, dotColor);
+    bool showForecast = getShowForecast();
+    int screensPerLoc = showForecast ? 3 : 1;
+    int totalScreens = numLocs * screensPerLoc;
+    int currentScreen = currentDisplayLocation * screensPerLoc + currentDisplayScreen;
+
+    if (totalScreens > 1) {
+        int dotSpacing = 10;
+        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
+        for (int i = 0; i < totalScreens; i++) {
+            uint16_t dotColor = (i == currentScreen) ? COLOR_CYAN : COLOR_GRAY;
+            tft.fillCircle(dotStartX + i * dotSpacing, 230, 3, dotColor);
         }
     }
 }
