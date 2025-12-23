@@ -35,7 +35,263 @@ extern "C" {
 #include "config.h"
 #include "ota.h"
 #include "weather.h"
-// #include "display.h"  // TODO: Phase C
+
+// ============================================================================
+// TFT DISPLAY - MINIMAL SAFE TEST
+// ============================================================================
+// This is a minimal, safe TFT test that avoids the full display.cpp
+// to prevent crashes. We'll enable features incrementally.
+#define ENABLE_TFT_TEST 1  // Set to 0 to disable TFT completely
+
+#if ENABLE_TFT_TEST
+#include <TFT_eSPI.h>
+#include <NTPClient.h>
+static TFT_eSPI tft = TFT_eSPI();
+#define TFT_BL_PIN 5  // Backlight PWM pin
+
+// Forward declare timeClient (defined below)
+extern NTPClient timeClient;
+
+// Display state
+static unsigned long lastDisplayUpdate = 0;
+static int currentDisplayScreen = 0;
+static int currentDisplayLocation = 0;
+
+// Colors (dark theme)
+#define COLOR_BG       0x0841  // Very dark blue-gray
+#define COLOR_CARD     0x2104  // Dark card background
+#define COLOR_CYAN     0x07FF  // Bright cyan
+#define COLOR_WHITE    0xFFFF
+#define COLOR_GRAY     0x8410
+#define COLOR_ORANGE   0xFD20
+#define COLOR_BLUE     0x5D9F
+
+void initTftMinimal() {
+    Serial.println(F("[TFT] Init starting..."));
+
+    // Setup backlight pin FIRST
+    pinMode(TFT_BL_PIN, OUTPUT);
+    analogWriteRange(100);
+    analogWriteFreq(1000);
+    analogWrite(TFT_BL_PIN, getBrightness());
+    Serial.println(F("[TFT] Backlight on"));
+
+    ESP.wdtFeed();
+    yield();
+
+    // Initialize TFT
+    Serial.println(F("[TFT] Calling tft.init()..."));
+    tft.init();
+    tft.setRotation(0);
+    Serial.println(F("[TFT] tft.init() complete"));
+
+    ESP.wdtFeed();
+    yield();
+
+    // Draw boot screen
+    tft.fillScreen(COLOR_BG);
+    tft.setTextDatum(MC_DATUM);  // Middle center
+    tft.setTextColor(COLOR_CYAN);
+    tft.drawString("Epic", 120, 90, 4);
+    tft.setTextColor(COLOR_WHITE);
+    tft.drawString("WeatherBox", 120, 130, 4);
+    tft.setTextColor(COLOR_GRAY);
+    tft.drawString("v" FIRMWARE_VERSION, 120, 170, 2);
+
+    Serial.println(F("[TFT] Boot screen displayed"));
+    lastDisplayUpdate = millis();
+}
+
+// Draw current weather screen (no sprites - direct to TFT)
+void drawCurrentWeather() {
+    const WeatherData& weather = getWeather(currentDisplayLocation);
+    const WeatherLocation& location = getLocation(currentDisplayLocation);
+    bool useCelsius = getUseCelsius();
+
+    // Background
+    tft.fillScreen(COLOR_BG);
+
+    // Get time from NTP
+    unsigned long epoch = timeClient.getEpochTime();
+    int hours = (epoch % 86400L) / 3600;
+    int minutes = (epoch % 3600) / 60;
+
+    // 12-hour format
+    int h12 = hours % 12;
+    if (h12 == 0) h12 = 12;
+    const char* ampm = (hours < 12) ? "AM" : "PM";
+
+    // Time display - large centered
+    char timeStr[16];
+    snprintf(timeStr, sizeof(timeStr), "%d:%02d %s", h12, minutes, ampm);
+    tft.setTextDatum(TC_DATUM);
+    tft.setTextColor(COLOR_CYAN);
+    tft.drawString(timeStr, 120, 15, 4);
+
+    // Location name
+    tft.setTextColor(COLOR_GRAY);
+    tft.drawString(location.name, 120, 55, 2);
+
+    // Current temperature - BIG
+    float temp = weather.current.temperature;
+    if (!useCelsius) {
+        temp = temp * 9.0 / 5.0 + 32.0;
+    }
+    char tempStr[16];
+    snprintf(tempStr, sizeof(tempStr), "%.0f%c", temp, useCelsius ? 'C' : 'F');
+
+    // Color based on temp
+    uint16_t tempColor = COLOR_WHITE;
+    if (temp < 0) tempColor = COLOR_BLUE;
+    else if (temp < 10) tempColor = COLOR_CYAN;
+    else if (temp > 25) tempColor = COLOR_ORANGE;
+
+    tft.setTextColor(tempColor);
+    tft.drawString(tempStr, 120, 110, 7);  // Font 7 is large
+
+    // Weather condition
+    tft.setTextColor(COLOR_WHITE);
+    tft.drawString(conditionToString(weather.current.condition), 120, 175, 2);
+
+    // Hi/Lo from forecast if available
+    if (weather.forecastDays > 0) {
+        char hiloStr[32];
+        float hi = weather.forecast[0].tempMax;
+        float lo = weather.forecast[0].tempMin;
+        if (!useCelsius) {
+            hi = hi * 9.0 / 5.0 + 32.0;
+            lo = lo * 9.0 / 5.0 + 32.0;
+        }
+        snprintf(hiloStr, sizeof(hiloStr), "H:%.0f  L:%.0f", hi, lo);
+        tft.setTextColor(COLOR_GRAY);
+        tft.drawString(hiloStr, 120, 205, 2);
+    }
+
+    // Location dots at bottom
+    int numLocs = getLocationCount();
+    if (numLocs > 1) {
+        int startX = 120 - (numLocs - 1) * 6;
+        for (int i = 0; i < numLocs; i++) {
+            uint16_t dotColor = (i == currentDisplayLocation) ? COLOR_CYAN : COLOR_GRAY;
+            tft.fillCircle(startX + i * 12, 230, 3, dotColor);
+        }
+    }
+}
+
+// Draw 3-day forecast screen
+void drawForecast(int startDay) {
+    const WeatherData& weather = getWeather(currentDisplayLocation);
+    const WeatherLocation& location = getLocation(currentDisplayLocation);
+    bool useCelsius = getUseCelsius();
+
+    tft.fillScreen(COLOR_BG);
+
+    // Header with location
+    tft.setTextDatum(TC_DATUM);
+    tft.setTextColor(COLOR_CYAN);
+    char header[32];
+    snprintf(header, sizeof(header), "%s %d-%d", location.name, startDay + 1, startDay + 3);
+    tft.drawString(header, 120, 8, 2);
+
+    // Draw 3 forecast cards
+    int cardW = 75;
+    int cardH = 180;
+    int gap = 5;
+    int startX = (240 - 3 * cardW - 2 * gap) / 2;
+
+    for (int i = 0; i < 3; i++) {
+        int dayIdx = startDay + i;
+        if (dayIdx >= weather.forecastDays) continue;
+
+        const ForecastDay& day = weather.forecast[dayIdx];
+        int x = startX + i * (cardW + gap);
+        int y = 35;
+
+        // Card background
+        tft.fillRoundRect(x, y, cardW, cardH, 4, COLOR_CARD);
+
+        // Day name
+        tft.setTextDatum(TC_DATUM);
+        tft.setTextColor(COLOR_CYAN);
+        tft.drawString(day.dayName, x + cardW/2, y + 8, 2);
+
+        // Temperature high
+        float hi = day.tempMax;
+        float lo = day.tempMin;
+        if (!useCelsius) {
+            hi = hi * 9.0 / 5.0 + 32.0;
+            lo = lo * 9.0 / 5.0 + 32.0;
+        }
+
+        char hiStr[8], loStr[8];
+        snprintf(hiStr, sizeof(hiStr), "%.0f", hi);
+        snprintf(loStr, sizeof(loStr), "%.0f", lo);
+
+        tft.setTextColor(COLOR_ORANGE);
+        tft.drawString(hiStr, x + cardW/2, y + 60, 4);
+
+        tft.setTextColor(COLOR_BLUE);
+        tft.drawString(loStr, x + cardW/2, y + 100, 4);
+
+        // Precipitation %
+        char precip[8];
+        snprintf(precip, sizeof(precip), "%d%%", (int)day.precipitationProb);
+        tft.setTextColor(day.precipitationProb > 30 ? COLOR_CYAN : COLOR_GRAY);
+        tft.drawString(precip, x + cardW/2, y + 145, 2);
+    }
+
+    // Location dots
+    int numLocs = getLocationCount();
+    if (numLocs > 1) {
+        int dotX = 120 - (numLocs - 1) * 6;
+        for (int i = 0; i < numLocs; i++) {
+            uint16_t dotColor = (i == currentDisplayLocation) ? COLOR_CYAN : COLOR_GRAY;
+            tft.fillCircle(dotX + i * 12, 230, 3, dotColor);
+        }
+    }
+}
+
+// Main display update - call from loop()
+void updateTftDisplay() {
+    unsigned long now = millis();
+    unsigned long cycleMs = (unsigned long)getScreenCycleTime() * 1000;
+
+    // Check if time to change screen
+    if (now - lastDisplayUpdate >= cycleMs) {
+        lastDisplayUpdate = now;
+
+        // Determine screens to show
+        bool showForecast = getShowForecast();
+        int numLocations = getLocationCount();
+        int screensPerLoc = showForecast ? 3 : 1;  // current + 2 forecast pages
+
+        // Advance screen
+        currentDisplayScreen++;
+        if (currentDisplayScreen >= screensPerLoc) {
+            currentDisplayScreen = 0;
+            currentDisplayLocation = (currentDisplayLocation + 1) % numLocations;
+        }
+
+        // Draw appropriate screen
+        ESP.wdtFeed();
+        yield();
+
+        switch (currentDisplayScreen) {
+            case 0:
+                drawCurrentWeather();
+                break;
+            case 1:
+                drawForecast(0);  // Days 1-3
+                break;
+            case 2:
+                drawForecast(3);  // Days 4-6
+                break;
+        }
+
+        Serial.printf("[TFT] Screen %d, Location %d\n", currentDisplayScreen, currentDisplayLocation);
+    }
+}
+#endif
 
 // Note: FIRMWARE_VERSION and DEVICE_NAME are defined in config.h
 
@@ -87,10 +343,13 @@ void setup() {
 
     feedWatchdog();
 
-    // Initialize display
-    // TODO: Phase 2 - Display driver
-    // setupDisplay();
-    Serial.println(F("[BOOT] Display: TODO (Phase 2)"));
+    // Initialize display - MINIMAL SAFE TEST
+#if ENABLE_TFT_TEST
+    Serial.println(F("[BOOT] Initializing TFT (minimal test)..."));
+    initTftMinimal();
+#else
+    Serial.println(F("[BOOT] Display: DISABLED"));
+#endif
 
     // Initialize WiFi (this can take a while)
     Serial.println(F("[BOOT] Starting WiFi..."));
@@ -163,8 +422,10 @@ void loop() {
     // Update weather data (checks interval internally)
     updateWeather();
 
-    // TODO: Phase C - Update display
-    // updateDisplay();
+    // Update TFT display
+#if ENABLE_TFT_TEST
+    updateTftDisplay();
+#endif
 
     // Small yield to prevent watchdog issues
     yield();
