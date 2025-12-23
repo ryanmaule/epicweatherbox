@@ -351,4 +351,12 @@ void setGifScreenEnabled(bool enabled);
 int getThemeMode();
 void setThemeMode(int mode);
 
+/**
+ * UI vertical nudge in pixels
+ * Positive values move UI up, negative values move UI down
+ * Range: -20 to +20 pixels
+ */
+int getUiNudgeY();
+void setUiNudgeY(int nudge);
+
 #endif // WEATHER_H

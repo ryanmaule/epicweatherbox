@@ -41,6 +41,7 @@ static bool showForecast = true;  // true = show forecast screens, false = curre
 static int screenCycleTime = 10;  // seconds between screen changes (5-60)
 static int themeMode = 0;  // 0=auto, 1=dark, 2=light
 static bool gifScreenEnabled = false;  // Show GIF screen in rotation
+static int uiNudgeY = 0;  // UI vertical offset in pixels (positive=up, negative=down)
 
 // Timing
 static unsigned long lastUpdateTime = 0;
@@ -619,6 +620,9 @@ void setThemeMode(int mode) { themeMode = constrain(mode, 0, 2); }
 bool getGifScreenEnabled() { return gifScreenEnabled; }
 void setGifScreenEnabled(bool enabled) { gifScreenEnabled = enabled; }
 
+int getUiNudgeY() { return uiNudgeY; }
+void setUiNudgeY(int nudge) { uiNudgeY = constrain(nudge, -20, 20); }
+
 /**
  * Check if currently in night mode based on hour
  */
@@ -664,6 +668,7 @@ bool saveWeatherConfig() {
     doc["screenCycleTime"] = screenCycleTime;
     doc["themeMode"] = themeMode;
     doc["gifScreenEnabled"] = gifScreenEnabled;
+    doc["uiNudgeY"] = uiNudgeY;
 
     File file = LittleFS.open(WEATHER_CONFIG_FILE, "w");
     if (!file) {
@@ -788,6 +793,7 @@ bool loadWeatherConfig() {
     screenCycleTime = doc["screenCycleTime"] | 10;
     themeMode = doc["themeMode"] | 0;
     gifScreenEnabled = doc["gifScreenEnabled"] | false;
+    uiNudgeY = doc["uiNudgeY"] | 0;
 
     // Log loaded locations
     for (int i = 0; i < locationCount; i++) {

@@ -92,6 +92,9 @@ static unsigned long lastDisplayUpdate = 0;
 static int currentDisplayScreen = 0;
 static int currentDisplayLocation = 0;
 
+// Emergency safe mode - stops normal operation to allow recovery
+static bool emergencySafeMode = false;
+
 // Colors (dark theme)
 // Dark theme (night)
 #define COLOR_BG_DARK      0x0841  // Very dark blue-gray
@@ -712,11 +715,47 @@ void drawGifScreen() {
     tft.drawString("for animated GIF playback", 120, 160, GFXFF);
 }
 
+// Draw emergency safe mode screen
+void drawSafeModeScreen() {
+    // Yellow/orange warning background
+    tft.fillScreen(0xFD20);  // Orange
+
+    tft.setTextDatum(TC_DATUM);
+    tft.setTextColor(TFT_BLACK);
+
+    // Warning icon (triangle with !)
+    tft.fillTriangle(120, 20, 80, 80, 160, 80, TFT_BLACK);
+    tft.fillTriangle(120, 28, 88, 75, 152, 75, 0xFD20);
+    tft.setFreeFont(FSSB18);
+    tft.drawString("!", 120, 42, GFXFF);
+
+    // Title
+    tft.setFreeFont(FSSB12);
+    tft.drawString("SAFE MODE", 120, 100, GFXFF);
+
+    // Info
+    tft.setFreeFont(FSS9);
+    tft.drawString("Device is paused", 120, 130, GFXFF);
+    tft.drawString("Web server active", 120, 150, GFXFF);
+
+    // Instructions
+    tft.setFreeFont(FSS9);
+    tft.drawString("Visit device IP to", 120, 180, GFXFF);
+    tft.drawString("upload new firmware", 120, 198, GFXFF);
+
+    // IP address
+    tft.setFreeFont(FSSB9);
+    tft.drawString(WiFi.localIP().toString().c_str(), 120, 225, GFXFF);
+}
+
 // Draw current weather screen (no sprites - direct to TFT)
 void drawCurrentWeather() {
     const WeatherData& weather = getWeather(currentDisplayLocation);
     const WeatherLocation& location = getLocation(currentDisplayLocation);
     bool useCelsius = getUseCelsius();
+
+    // UI nudge - positive moves content up, negative moves down
+    int yOff = -getUiNudgeY();  // Negate because we subtract from Y coords
 
     // Background - use theme color based on day/night
     uint16_t bgColor = getThemeBg();
@@ -779,14 +818,14 @@ void drawCurrentWeather() {
     // Draw time numbers
     tft.setFreeFont(FSSB18);
     tft.setTextDatum(TL_DATUM);
-    tft.drawString(timeNumStr, timeStartX, 6, GFXFF);
+    tft.drawString(timeNumStr, timeStartX, 6 + yOff, GFXFF);
 
     // Draw AM/PM smaller, vertically centered with time
     tft.setFreeFont(FSS9);
-    tft.drawString(ampm, timeStartX + timeNumW + timeSpacing, 12, GFXFF);
+    tft.drawString(ampm, timeStartX + timeNumW + timeSpacing, 12 + yOff, GFXFF);
 
     // ========== Info row: Globe + Location | Calendar + Date ==========
-    int infoY = 42;  // More space below time
+    int infoY = 42 + yOff;  // More space below time
 
     // Globe icon + Location name (left side)
     drawGlobe(15, infoY, grayColor);
@@ -808,7 +847,7 @@ void drawCurrentWeather() {
     // Left column (0-119): Weather icon + condition text
     // Right column (120-239): Large temperature
 
-    int mainY = 58;
+    int mainY = 58 + yOff;
     int leftColCenter = 60;   // Center of left column
     int rightColCenter = 180; // Center of right column
 
@@ -858,7 +897,7 @@ void drawCurrentWeather() {
     tft.drawString(unitStr, tempStartX + tempW + tempSpacing, tempY + 5, GFXFF);
 
     // ========== Detail bar at bottom with rounded rectangle background ==========
-    int barY = 175;
+    int barY = 175 + yOff;
     int barH = 36;
     int barMargin = 8;
     uint16_t cardColor = getThemeCard();
@@ -925,9 +964,11 @@ void drawCurrentWeather() {
     if (totalScreens > 1) {
         int dotSpacing = 10;
         int startX = 120 - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = 230 + yOff;  // Apply nudge to dots too
+        if (dotY > 236) dotY = 236;  // Don't go off screen
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
-            tft.fillCircle(startX + i * dotSpacing, 230, 3, dotColor);
+            tft.fillCircle(startX + i * dotSpacing, dotY, 3, dotColor);
         }
     }
 }
@@ -937,6 +978,9 @@ void drawForecast(int startDay) {
     const WeatherData& weather = getWeather(currentDisplayLocation);
     const WeatherLocation& location = getLocation(currentDisplayLocation);
     bool useCelsius = getUseCelsius();
+
+    // UI nudge - positive moves content up, negative moves down
+    int yOff = -getUiNudgeY();
 
     // Background - use theme color based on day/night
     uint16_t bgColor = getThemeBg();
@@ -965,21 +1009,21 @@ void drawForecast(int startDay) {
     tft.setFreeFont(FSSB12);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(cyanColor);
-    tft.drawString(timeNumStr, 8, 8, GFXFF);
+    tft.drawString(timeNumStr, 8, 8 + yOff, GFXFF);
 
     // Draw AM/PM smaller, top-aligned with time
     int16_t timeNumW = tft.textWidth(timeNumStr, GFXFF);
     tft.setFreeFont(FSS9);
-    tft.drawString(ampm, 8 + timeNumW + 4, 8, GFXFF);
+    tft.drawString(ampm, 8 + timeNumW + 4, 8 + yOff, GFXFF);
 
     // Globe icon + Location name (right aligned, grey)
     tft.setFreeFont(FSS9);
     int16_t locW = tft.textWidth(location.name, GFXFF);
     int locX = 232 - locW;
-    drawGlobe(locX - 16, 8, grayColor);
+    drawGlobe(locX - 16, 8 + yOff, grayColor);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(grayColor);
-    tft.drawString(location.name, locX, 8, GFXFF);
+    tft.drawString(location.name, locX, 8 + yOff, GFXFF);
 
     // Draw 3 forecast cards
     int cardW = 75;
@@ -993,7 +1037,7 @@ void drawForecast(int startDay) {
 
         const ForecastDay& day = weather.forecast[dayIdx];
         int x = cardStartX + i * (cardW + gap);
-        int y = 35;
+        int y = 35 + yOff;
 
         // Card background - use theme color
         tft.fillRoundRect(x, y, cardW, cardH, 4, cardColor);
@@ -1062,9 +1106,11 @@ void drawForecast(int startDay) {
     if (totalScreens > 1) {
         int dotSpacing = 10;
         int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = 230 + yOff;
+        if (dotY > 236) dotY = 236;  // Don't go off screen
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
-            tft.fillCircle(dotStartX + i * dotSpacing, 230, 3, dotColor);
+            tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
         }
     }
 }
@@ -1244,8 +1290,15 @@ void loop() {
         return;
     }
 
-    // Handle web server
+    // Handle web server - ALWAYS process, even in safe mode
     server.handleClient();
+
+    // In emergency safe mode, skip all other processing
+    // This keeps web server responsive for firmware upload
+    if (emergencySafeMode) {
+        yield();
+        return;
+    }
 
     // Update NTP (library handles update interval internally)
     timeClient.update();
@@ -1443,11 +1496,10 @@ void setupWebServer() {
         doc["showForecast"] = getShowForecast();
         doc["screenCycleTime"] = getScreenCycleTime();
         doc["themeMode"] = getThemeMode();
-        doc["gifScreenEnabled"] = getGifScreenEnabled();
+        doc["uiNudgeY"] = getUiNudgeY();
 
-        // GIF status
-        doc["bootGifExists"] = LittleFS.exists("/boot.gif");
-        doc["screenGifExists"] = LittleFS.exists("/screen.gif");
+        // GIF support disabled
+        doc["gifSupported"] = false;
 
         String response;
         serializeJson(doc, response);
@@ -1561,8 +1613,8 @@ void setupWebServer() {
         if (doc["themeMode"].is<int>()) {
             setThemeMode(doc["themeMode"] | 0);
         }
-        if (doc["gifScreenEnabled"].is<bool>()) {
-            setGifScreenEnabled(doc["gifScreenEnabled"] | false);
+        if (doc["uiNudgeY"].is<int>()) {
+            setUiNudgeY(doc["uiNudgeY"] | 0);
         }
 
         // Save and refresh weather
@@ -1684,136 +1736,35 @@ void setupWebServer() {
         server.send(200, "application/json", responseStr);
     });
 
-    // GIF file upload endpoints
-    // Boot GIF upload
-    server.on("/api/upload/bootgif", HTTP_POST, []() {
-        server.send(200, "application/json", "{\"success\":true,\"message\":\"Boot GIF uploaded\"}");
-    }, []() {
-        HTTPUpload& upload = server.upload();
-        static File uploadFile;
-
-        if (upload.status == UPLOAD_FILE_START) {
-            Serial.printf("[UPLOAD] Boot GIF: %s\n", upload.filename.c_str());
-            // Check file size limit (50KB max)
-            uploadFile = LittleFS.open("/boot.gif", "w");
-            if (!uploadFile) {
-                Serial.println(F("[UPLOAD] Failed to open file for writing"));
-            }
-        } else if (upload.status == UPLOAD_FILE_WRITE) {
-            if (uploadFile) {
-                // Check total size doesn't exceed 50KB
-                if (uploadFile.size() + upload.currentSize > 51200) {
-                    Serial.println(F("[UPLOAD] File too large (max 50KB)"));
-                    uploadFile.close();
-                    LittleFS.remove("/boot.gif");
-                    return;
-                }
-                uploadFile.write(upload.buf, upload.currentSize);
-            }
-        } else if (upload.status == UPLOAD_FILE_END) {
-            if (uploadFile) {
-                uploadFile.close();
-                Serial.printf("[UPLOAD] Boot GIF uploaded: %u bytes\n", upload.totalSize);
-            }
-        }
-    });
-
-    // Screen GIF upload
-    server.on("/api/upload/screengif", HTTP_POST, []() {
-        server.send(200, "application/json", "{\"success\":true,\"message\":\"Screen GIF uploaded\"}");
-    }, []() {
-        HTTPUpload& upload = server.upload();
-        static File uploadFile;
-
-        if (upload.status == UPLOAD_FILE_START) {
-            Serial.printf("[UPLOAD] Screen GIF: %s\n", upload.filename.c_str());
-            uploadFile = LittleFS.open("/screen.gif", "w");
-            if (!uploadFile) {
-                Serial.println(F("[UPLOAD] Failed to open file for writing"));
-            }
-        } else if (upload.status == UPLOAD_FILE_WRITE) {
-            if (uploadFile) {
-                // Check total size doesn't exceed 100KB
-                if (uploadFile.size() + upload.currentSize > 102400) {
-                    Serial.println(F("[UPLOAD] File too large (max 100KB)"));
-                    uploadFile.close();
-                    LittleFS.remove("/screen.gif");
-                    return;
-                }
-                uploadFile.write(upload.buf, upload.currentSize);
-            }
-        } else if (upload.status == UPLOAD_FILE_END) {
-            if (uploadFile) {
-                uploadFile.close();
-                Serial.printf("[UPLOAD] Screen GIF uploaded: %u bytes\n", upload.totalSize);
-            }
-        }
-    });
-
-    // Delete boot GIF
-    server.on("/api/delete/bootgif", HTTP_DELETE, []() {
-        if (LittleFS.exists("/boot.gif")) {
-            LittleFS.remove("/boot.gif");
-            server.send(200, "application/json", "{\"success\":true,\"message\":\"Boot GIF deleted\"}");
-        } else {
-            server.send(404, "application/json", "{\"success\":false,\"message\":\"No boot GIF found\"}");
-        }
-    });
-
-    // Delete screen GIF
-    server.on("/api/delete/screengif", HTTP_DELETE, []() {
-        if (LittleFS.exists("/screen.gif")) {
-            LittleFS.remove("/screen.gif");
-            server.send(200, "application/json", "{\"success\":true,\"message\":\"Screen GIF deleted\"}");
-        } else {
-            server.send(404, "application/json", "{\"success\":false,\"message\":\"No screen GIF found\"}");
-        }
-    });
-
-    // GIF status endpoint
+    // GIF support removed - AnimatedGIF library uses too much RAM for ESP8266
+    // Static endpoints for compatibility with admin UI (return disabled status)
     server.on("/api/gif/status", HTTP_GET, []() {
-        JsonDocument doc;
-        doc["bootGifExists"] = LittleFS.exists("/boot.gif");
-        doc["screenGifExists"] = LittleFS.exists("/screen.gif");
-        doc["gifScreenEnabled"] = getGifScreenEnabled();
+        server.send(200, "application/json",
+            "{\"gifSupported\":false,\"message\":\"GIF support disabled - ESP8266 memory constraints\"}");
+    });
 
-        // Get file sizes
-        if (LittleFS.exists("/boot.gif")) {
-            File f = LittleFS.open("/boot.gif", "r");
-            doc["bootGifSize"] = f.size();
-            f.close();
-        }
-        if (LittleFS.exists("/screen.gif")) {
-            File f = LittleFS.open("/screen.gif", "r");
-            doc["screenGifSize"] = f.size();
-            f.close();
-        }
+    // Emergency safe mode - stops normal operation for recovery
+    server.on("/api/safemode", HTTP_GET, []() {
+        emergencySafeMode = true;
+        drawSafeModeScreen();
+        server.send(200, "application/json",
+            "{\"success\":true,\"message\":\"Safe mode activated. Device paused.\"}");
+    });
 
-        String response;
-        serializeJson(doc, response);
+    // Exit safe mode
+    server.on("/api/safemode/exit", HTTP_GET, []() {
+        emergencySafeMode = false;
+        lastDisplayUpdate = 0;  // Force immediate screen redraw
+        server.send(200, "application/json",
+            "{\"success\":true,\"message\":\"Safe mode deactivated. Resuming normal operation.\"}");
+    });
+
+    // Safe mode status
+    server.on("/api/safemode/status", HTTP_GET, []() {
+        String response = emergencySafeMode ?
+            "{\"safeMode\":true,\"message\":\"Device is in safe mode\"}" :
+            "{\"safeMode\":false,\"message\":\"Normal operation\"}";
         server.send(200, "application/json", response);
-    });
-
-    // Serve boot GIF file
-    server.on("/api/gif/boot", HTTP_GET, []() {
-        if (LittleFS.exists("/boot.gif")) {
-            File f = LittleFS.open("/boot.gif", "r");
-            server.streamFile(f, "image/gif");
-            f.close();
-        } else {
-            server.send(404, "text/plain", "Not found");
-        }
-    });
-
-    // Serve screen GIF file
-    server.on("/api/gif/screen", HTTP_GET, []() {
-        if (LittleFS.exists("/screen.gif")) {
-            File f = LittleFS.open("/screen.gif", "r");
-            server.streamFile(f, "image/gif");
-            f.close();
-        } else {
-            server.send(404, "text/plain", "Not found");
-        }
     });
 
     // Reboot endpoint
@@ -2121,31 +2072,20 @@ void handleAdmin() {
     html += F("<button onclick='saveSettings()'>Save Settings</button>"
         "<div id='st' class='status'></div></div>");
 
-    // GIF Settings section
-    html += F("<div class='card'><h3>Animated GIFs</h3>"
-        "<p class='hint'>Upload GIF images for boot animation and screen rotation.</p>"
-
-        // Boot GIF
-        "<label>Boot Animation (max 50KB)</label>"
-        "<div id='bootGifStatus' style='margin-bottom:10px;color:#888'>Checking...</div>"
-        "<input type='file' id='bootGifFile' accept='.gif' style='display:none' onchange='uploadGif(\"boot\")'>"
-        "<button type='button' onclick='document.getElementById(\"bootGifFile\").click()' style='margin-top:0'>Upload Boot GIF</button>"
-        "<button type='button' onclick='deleteGif(\"boot\")' style='background:#dc3545;margin-left:10px'>Delete</button>"
-
-        // Screen GIF
-        "<label style='margin-top:20px'>Screen GIF (max 100KB)</label>"
-        "<div id='screenGifStatus' style='margin-bottom:10px;color:#888'>Checking...</div>"
-        "<input type='file' id='screenGifFile' accept='.gif' style='display:none' onchange='uploadGif(\"screen\")'>"
-        "<button type='button' onclick='document.getElementById(\"screenGifFile\").click()' style='margin-top:0'>Upload Screen GIF</button>"
-        "<button type='button' onclick='deleteGif(\"screen\")' style='background:#dc3545;margin-left:10px'>Delete</button>"
-
-        // GIF screen toggle
-        "<div class='toggle-row' style='margin-top:20px'><span>Show GIF screen in rotation</span><input type='checkbox' id='gifScreenEnabled'");
-    html += getGifScreenEnabled() ? " checked" : "";
-    html += F("></div>"
-        "<p class='hint'>When enabled and a screen GIF is uploaded, it will appear in the display rotation.</p>"
-        "<button type='button' onclick='saveGifSettings()' style='margin-top:10px'>Save GIF Settings</button>"
-        "<div id='gifSt' class='status'></div></div>");
+    // Display Position section
+    html += F("<div class='card'><h3>Display Position</h3>"
+        "<p class='hint'>Adjust the vertical position of the UI if your display is cut off by the frame.</p>"
+        "<label>UI Nudge (pixels)</label>"
+        "<div style='display:flex;align-items:center;gap:10px'>"
+        "<input type='range' id='uiNudgeY' min='-20' max='20' value='");
+    html += String(getUiNudgeY());
+    html += F("' style='flex:1' oninput='document.getElementById(\"nudgeVal\").textContent=this.value'>"
+        "<span id='nudgeVal' style='min-width:30px;text-align:center'>");
+    html += String(getUiNudgeY());
+    html += F("</span></div>"
+        "<p class='hint'>Positive = move up, Negative = move down. Range: -20 to +20.</p>"
+        "<button type='button' onclick='saveNudge()' style='margin-top:10px'>Apply Nudge</button>"
+        "<div id='nudgeSt' class='status'></div></div>");
 
     // Links
     html += F("<div class='card' style='text-align:center'>"
@@ -2222,8 +2162,7 @@ void handleAdmin() {
         "nightModeBrightness:parseInt(document.getElementById('nightBrightness').value),"
         "showForecast:document.getElementById('showForecast').checked,"
         "screenCycleTime:parseInt(document.getElementById('cycleTime').value),"
-        "themeMode:parseInt(document.getElementById('themeMode').value),"
-        "gifScreenEnabled:document.getElementById('gifScreenEnabled').checked};}"
+        "themeMode:parseInt(document.getElementById('themeMode').value)};}"
 
         // Save locations to server
         "async function saveLocations(){"
@@ -2245,52 +2184,20 @@ void handleAdmin() {
         "st.textContent=d.message;if(d.success){setTimeout(()=>location.reload(),2000);}"
         "}catch(e){st.className='status err';st.textContent='Error';}}"
 
-        // GIF upload function
-        "async function uploadGif(type){"
-        "const file=document.getElementById(type+'GifFile').files[0];"
-        "if(!file){return;}"
-        "const maxSize=type==='boot'?51200:102400;"
-        "if(file.size>maxSize){alert('File too large. Max '+(maxSize/1024)+'KB');return;}"
-        "const st=document.getElementById('gifSt');st.style.display='block';st.className='status';"
-        "st.textContent='Uploading...';"
-        "const form=new FormData();form.append('file',file);"
-        "try{const r=await fetch('/api/upload/'+type+'gif',{method:'POST',body:form});"
-        "const d=await r.json();st.className='status '+(d.success?'ok':'err');st.textContent=d.message;"
-        "if(d.success){setTimeout(updateGifStatus,1000);}"
-        "}catch(e){st.className='status err';st.textContent='Upload failed';}}"
-
-        // GIF delete function
-        "async function deleteGif(type){"
-        "if(!confirm('Delete '+type+' GIF?'))return;"
-        "const st=document.getElementById('gifSt');st.style.display='block';st.className='status';"
-        "st.textContent='Deleting...';"
-        "try{const r=await fetch('/api/delete/'+type+'gif',{method:'DELETE'});"
-        "const d=await r.json();st.className='status '+(d.success?'ok':'err');st.textContent=d.message;"
-        "updateGifStatus();"
-        "}catch(e){st.className='status err';st.textContent='Delete failed';}}"
-
-        // Save GIF settings only
-        "async function saveGifSettings(){"
-        "const st=document.getElementById('gifSt');st.style.display='block';st.className='status';"
-        "st.textContent='Saving...';"
+        // Save UI nudge setting
+        "async function saveNudge(){"
+        "const st=document.getElementById('nudgeSt');st.style.display='block';st.className='status';"
+        "st.textContent='Applying...';"
+        "const nudge=parseInt(document.getElementById('uiNudgeY').value);"
         "try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},"
-        "body:JSON.stringify(getSettings())});"
+        "body:JSON.stringify({uiNudgeY:nudge})});"
         "const d=await r.json();st.className='status '+(d.success?'ok':'err');"
-        "st.textContent=d.success?'GIF settings saved!':d.message;"
-        "}catch(e){st.className='status err';st.textContent='Error saving';}}"
-
-        // Update GIF status display
-        "async function updateGifStatus(){"
-        "try{const r=await fetch('/api/gif/status');const d=await r.json();"
-        "document.getElementById('bootGifStatus').textContent=d.bootGifExists?"
-        "'Uploaded ('+(d.bootGifSize/1024).toFixed(1)+'KB)':'No file uploaded';"
-        "document.getElementById('screenGifStatus').textContent=d.screenGifExists?"
-        "'Uploaded ('+(d.screenGifSize/1024).toFixed(1)+'KB)':'No file uploaded';"
-        "}catch(e){console.error('GIF status check failed');}}"
+        "st.textContent=d.success?'Applied! Screen will update on next cycle.':d.message;"
+        "}catch(e){st.className='status err';st.textContent='Error applying';}}"
 
         // Event listeners
         "document.getElementById('search').onkeypress=e=>{if(e.key==='Enter'){e.preventDefault();searchCity();}};"
-        "loadLocations();updateGifStatus();"
+        "loadLocations();"
         "</script>");
 
     html += F("</div></body></html>");
@@ -2349,9 +2256,8 @@ void handleDisplayPreview() {
         "ctx.imageSmoothingEnabled=false;"
         "bootCtx.imageSmoothingEnabled=false;"
         "let weatherData=null,config=null,currentLoc=0,currentScreen=0,autoPlay=true,autoTimer=null;"
-        "let showForecast=true,screenCycleTime=10,darkMode=true,gifScreenEnabled=false;"
-        "let bootGifExists=false,screenGifExists=false,bootGifImg=null,screenGifImg=null;"
-        "const SCREENS_PER_LOC=4;"
+        "let showForecast=true,screenCycleTime=10,darkMode=true;"
+        "const SCREENS_PER_LOC=3;"  // Current weather + 2 forecast screens (GIF removed)
 
         // Colors - dark and light themes
         "const DARK={BG:'#0a0a14',CARD:'#141428',WHITE:'#FFFFFF',GRAY:'#888888',CYAN:'#00D4FF',ORANGE:'#FF6B35',BLUE:'#4DA8DA',YELLOW:'#FFE000',GREEN:'#00FF88'};"
@@ -2595,37 +2501,10 @@ void handleDisplayPreview() {
         "bootCtx.fillStyle='#666';bootCtx.font='12px sans-serif';"
         "bootCtx.fillText('Connecting...',120,228);}"
 
-        // Draw GIF animation screen
-        "function drawGifScreen(){"
-        "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
-        // Time header
-        "const t=fmtTime();"
-        "ctx.fillStyle=C.WHITE;ctx.font='bold 24px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText(t.time+' '+t.ampm,120,35);"
-        // Separator line
-        "ctx.strokeStyle=C.GRAY;ctx.beginPath();ctx.moveTo(20,55);ctx.lineTo(220,55);ctx.stroke();"
-        // Show screen GIF if exists
-        "if(screenGifImg&&screenGifImg.complete){"
-        "const w=screenGifImg.width,h=screenGifImg.height;"
-        "const maxW=200,maxH=170;"
-        "const sc=Math.min(maxW/w,maxH/h,1);"
-        "const dw=w*sc,dh=h*sc;"
-        "ctx.drawImage(screenGifImg,(240-dw)/2,60+(maxH-dh)/2,dw,dh);"
-        "}else{"
-        // GIF placeholder area
-        "ctx.strokeStyle=C.CYAN;ctx.lineWidth=2;ctx.setLineDash([5,5]);"
-        "ctx.strokeRect(40,70,160,140);ctx.setLineDash([]);"
-        "ctx.fillStyle=C.GRAY;ctx.font='16px sans-serif';"
-        "ctx.fillText(screenGifExists?'Loading GIF...':'[No GIF Uploaded]',120,145);"
-        "ctx.font='12px sans-serif';ctx.fillStyle='#666';"
-        "ctx.fillText('Upload via Admin panel',120,170);}"
-        // Screen dots
-        "drawDots();}"
-
         // Draw screen indicator dots
         "function drawDots(){"
         "const locs=weatherData?.locations||[],nLocs=locs.length||1;"
-        "const screens=gifScreenEnabled?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
+        "const screens=SCREENS_PER_LOC;"
         "const total=nLocs*screens,cur=currentLoc*screens+Math.min(currentScreen,screens-1);"
         "const dotR=3,gap=10,sx=120-(total-1)*gap/2;"
         "for(let i=0;i<total;i++){"
@@ -2636,7 +2515,7 @@ void handleDisplayPreview() {
         "function updateHtmlDots(){"
         "const el=document.getElementById('screenDots');el.innerHTML='';"
         "const locs=weatherData?.locations||[],nLocs=locs.length||1;"
-        "const screens=gifScreenEnabled?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
+        "const screens=SCREENS_PER_LOC;"
         "const total=nLocs*screens,cur=currentLoc*screens+Math.min(currentScreen,screens-1);"
         "for(let i=0;i<total;i++){const d=document.createElement('div');"
         "d.className='dot'+(i===cur?' active':'');el.appendChild(d);}}"
@@ -2645,8 +2524,8 @@ void handleDisplayPreview() {
         "function render(){"
         "renderBootScreen();"  // Always render boot screen on left canvas
         "ctx.clearRect(0,0,240,240);"
-        "const names=['Current Weather','Forecast Days 1-3','Forecast Days 4-6','GIF Animation'];"
-        "document.getElementById('screenLabel').textContent=names[currentScreen]+(currentScreen===3&&!gifScreenEnabled?' (disabled)':'');"
+        "const names=['Current Weather','Forecast Days 1-3','Forecast Days 4-6'];"
+        "document.getElementById('screenLabel').textContent=names[currentScreen]||'Unknown';"
         "if(weatherData?.locations){"
         "const loc=weatherData.locations[currentLoc];"
         "document.getElementById('locName').textContent=loc?.location||'Unknown';"
@@ -2656,32 +2535,27 @@ void handleDisplayPreview() {
         "switch(currentScreen){"
         "case 0:drawCurrent();break;"
         "case 1:drawForecast(0);break;"
-        "case 2:drawForecast(3);break;"
-        "case 3:drawGifScreen();break;}}"
+        "case 2:drawForecast(3);break;}}"
 
         // Navigation - always cycles, but may skip forecast screens
         "function nextScreen(){"
         "const nLocs=weatherData?.locations?.length||1;"
-        "const hasGif=gifScreenEnabled;"
         "if(!showForecast){"
         // Only current weather, skip to next location
         "currentLoc=(currentLoc+1)%nLocs;currentScreen=0;}"
         "else{"
-        // Full rotation with forecast
-        "const maxScreens=hasGif?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
+        // Full rotation with forecast (3 screens per location)
         "currentScreen++;"
-        "if(currentScreen>=maxScreens){currentScreen=0;currentLoc=(currentLoc+1)%nLocs;}}"
+        "if(currentScreen>=SCREENS_PER_LOC){currentScreen=0;currentLoc=(currentLoc+1)%nLocs;}}"
         "render();}"
 
         "function prevScreen(){"
         "const nLocs=weatherData?.locations?.length||1;"
-        "const hasGif=gifScreenEnabled;"
         "if(!showForecast){"
         "currentLoc=(currentLoc+nLocs-1)%nLocs;currentScreen=0;}"
         "else{"
-        "const maxScreens=hasGif?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
         "currentScreen--;"
-        "if(currentScreen<0){currentScreen=maxScreens-1;currentLoc=(currentLoc+nLocs-1)%nLocs;}}"
+        "if(currentScreen<0){currentScreen=SCREENS_PER_LOC-1;currentLoc=(currentLoc+nLocs-1)%nLocs;}}"
         "render();}"
 
         "function toggleAuto(){"
@@ -2704,25 +2578,8 @@ void handleDisplayPreview() {
         "try{const r=await fetch('/api/config');config=await r.json();"
         "showForecast=config.showForecast!==false;"
         "screenCycleTime=config.screenCycleTime||10;"
-        "gifScreenEnabled=config.gifScreenEnabled||false;"
         "console.log('Config:',config);"
         "}catch(e){console.error('Config fetch failed',e);}}"
-
-        // Fetch GIF status and load images
-        "async function fetchGifStatus(){"
-        "try{const r=await fetch('/api/gif/status');const d=await r.json();"
-        "bootGifExists=d.bootGifExists||false;"
-        "screenGifExists=d.screenGifExists||false;"
-        "console.log('GIF status:',d);"
-        // Load boot GIF if exists
-        "if(bootGifExists){"
-        "bootGifImg=new Image();bootGifImg.onload=()=>render();"
-        "bootGifImg.src='/api/gif/boot?t='+Date.now();}"
-        // Load screen GIF if exists
-        "if(screenGifExists){"
-        "screenGifImg=new Image();screenGifImg.onload=()=>render();"
-        "screenGifImg.src='/api/gif/screen?t='+Date.now();}"
-        "}catch(e){console.error('GIF status fetch failed',e);}}"
 
         // Fetch weather
         "async function fetchWeather(){"
@@ -2733,7 +2590,7 @@ void handleDisplayPreview() {
         "function refreshWeather(){fetch('/api/weather/refresh').then(()=>setTimeout(fetchWeather,2000));}"
 
         // Init
-        "fetchConfig().then(()=>{fetchGifStatus();fetchWeather();});if(autoPlay)startAuto();setInterval(fetchWeather,60000);"
+        "fetchConfig().then(()=>{fetchWeather();});if(autoPlay)startAuto();setInterval(fetchWeather,60000);"
         "</script>");
 
     html += F("</div></body></html>");
