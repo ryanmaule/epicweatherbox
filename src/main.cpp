@@ -1261,53 +1261,41 @@ void handleDisplayPreview() {
         "const LIGHT={BG:'#E8F4FC',CARD:'#FFFFFF',WHITE:'#1a1a2e',GRAY:'#555555',CYAN:'#0088AA',ORANGE:'#E85520',BLUE:'#2980B9',YELLOW:'#D4A800',GREEN:'#00AA55'};"
         "let C=DARK;"
 
-        // WMO code to icon mapping (matches firmware icons)
-        "function wmoToIco(code,isDay){"
-        "if(code===0)return{ico:isDay?'sun':'moon',col:isDay?C.YELLOW:C.GRAY};"
-        "if(code<=2)return{ico:'partCloud',col:C.YELLOW};"  // Mainly clear, partly cloudy
-        "if(code===3)return{ico:'cloud',col:C.GRAY};"  // Overcast
-        "if(code<=48)return{ico:'fog',col:C.GRAY};"  // Fog/mist 45-48
-        "if(code<=57)return{ico:'drizzle',col:C.BLUE};"  // Drizzle 51-57
-        "if(code<=67)return{ico:'rain',col:C.BLUE};"  // Rain 61-67
-        "if(code<=77)return{ico:'snow',col:C.WHITE};"  // Snow 71-77
-        "if(code<=86)return{ico:'rain',col:C.BLUE};"  // Showers 80-86
-        "if(code>=95)return{ico:'thunder',col:C.YELLOW};"  // Thunderstorm 95-99
-        "return{ico:'unknown',col:C.GRAY};}"
+        // WMO weather icons from CDN (32x32 SVGs)
+        "const ICON_CDN='https://cdn.jsdelivr.net/gh/ryanmaule/epicweatherbox@main/images/open_meteo_weather_icons_32px_svg/';"
+        "const WMO_FILES={0:'wmo_0_clear.svg',1:'wmo_1_mainly_clear.svg',2:'wmo_2_partly_cloudy.svg',3:'wmo_3_overcast.svg',"
+        "45:'wmo_45_fog.svg',48:'wmo_48_rime_fog.svg',51:'wmo_51_drizzle_light.svg',53:'wmo_53_drizzle_mod.svg',"
+        "55:'wmo_55_drizzle_dense.svg',56:'wmo_56_freezing_drizzle_light.svg',57:'wmo_57_freezing_drizzle_dense.svg',"
+        "61:'wmo_61_rain_light.svg',63:'wmo_63_rain_mod.svg',65:'wmo_65_rain_heavy.svg',66:'wmo_66_freezing_rain_light.svg',"
+        "67:'wmo_67_freezing_rain_heavy.svg',71:'wmo_71_snow_light.svg',73:'wmo_73_snow_mod.svg',75:'wmo_75_snow_heavy.svg',"
+        "77:'wmo_77_snow_grains.svg',80:'wmo_80_rain_showers_light.svg',81:'wmo_81_rain_showers_mod.svg',"
+        "82:'wmo_82_rain_showers_violent.svg',85:'wmo_85_snow_showers_light.svg',86:'wmo_86_snow_showers_heavy.svg',"
+        "95:'wmo_95_thunderstorm.svg',96:'wmo_96_thunderstorm_hail.svg',99:'wmo_99_thunderstorm_hail_heavy.svg'};"
+        // Preload all icons
+        "const wmoImgs={};"
+        "Object.keys(WMO_FILES).forEach(k=>{const img=new Image();img.src=ICON_CDN+WMO_FILES[k];wmoImgs[k]=img;});"
 
-        // Simple pixel icons as 16x16 (smaller, cleaner)
-        "const ICO={"
-        // Sun with rays
-        "sun:'0000001100000000000011110000000011001100110000000110011000000000011111100000000111111110000001111111111000001111111111000000111111110000000011111100000000011001100000001100110011000000001111000000000000110000000000',"
-        // Moon crescent
-        "moon:'0000111100000000011111100000000111110000000001111100000000011111000000000111110000000001111100000000011111000000000111111000000000111111100000000011111110000000001111110000000000111100000000000011000000000000',"
-        // Partial cloud with sun
-        "partCloud:'0011000000000000011100000000001000100011000000100010111100001111111000110001111111000011001111111111111111111111111111111111111111110000000000000000000000000000000000000000000000000000000000000000000000000000',"
-        // Full cloud
-        "cloud:'0000000000000000000011110000000011111111000001110000111000011000000011001100000000110111000000001111111111111111111111111111111111111111110000000000000000000000000000000000000000000000000000000000000000000000',"
-        // Cloud with light rain
-        "drizzle:'0000011110000000001111111100000011000000110000110000000011001111111111111111111111111111110000000000000000001000100010000000100010001000000010001000100000000000000000000000000000000000000000000000000000000000',"
-        // Cloud with rain
-        "rain:'0000011110000000001111111100000011000000110000110000000011001111111111111111111111111111110000000000000000100100100100000010010010010000001001001001000000100100100100000010010010010000000000000000000000000000',"
-        // Cloud with snow
-        "snow:'0000011110000000001111111100000011000000110000110000000011001111111111111111111111111111110000000000000000010001000100000000100010000000001110111011100000000100010000000001000100010000000000000000000000000000',"
-        // Cloud with lightning
-        "thunder:'0000011110000000001111111100000011000000110000111111111111111111111111111111110000000000000000011110000000000001110000000000000111000000000111111000000000001110000000000000111000000000000011100000000000000100',"
-        // Fog lines
-        "fog:'0000000000000000111111111111110000000000000000000000000000000011111111111111111111111111111100000000000000000000000000000000111111111111111111111111111111000000000000000000000000000000001111111111111100000000000000',"
-        // Question mark
-        "unknown:'0001111111100000011111111111000011100000011100001100000000110000000000000110000000000001100000000000110000000000011000000000001100000000000110000000000000000000000000000000000000000000110000000000001111000000000000110000000000'};"
+        // Map any WMO code to available icon code
+        "function getWmoCode(code){"
+        "if(WMO_FILES[code])return code;"
+        "if(code<=2)return WMO_FILES[code]?code:0;"
+        "if(code===3)return 3;"
+        "if(code>=45&&code<=48)return 45;"
+        "if(code>=51&&code<=55)return 51;"
+        "if(code>=56&&code<=57)return 56;"
+        "if(code>=61&&code<=65)return 61;"
+        "if(code>=66&&code<=67)return 66;"
+        "if(code>=71&&code<=75)return 71;"
+        "if(code>=77&&code<=79)return 77;"
+        "if(code>=80&&code<=82)return 80;"
+        "if(code>=85&&code<=86)return 85;"
+        "if(code>=95)return 95;"
+        "return 3;}"  // Default to overcast
 
-        // Draw 16x16 icon
-        "function drawIco(name,x,y,sz,col){"
-        "const d=ICO[name]||ICO.unknown,sc=sz/16;"
-        "ctx.fillStyle=col;"
-        "for(let r=0;r<16;r++)for(let c=0;c<16;c++)"
-        "if(d[r*16+c]==='1')ctx.fillRect(x+c*sc,y+r*sc,sc,sc);}"
-
-        // Get icon from WMO code or condition string (backward compat)
-        "function getIco(wmoOrCond,isDay){"
-        "const code=typeof wmoOrCond==='number'?wmoOrCond:0;"
-        "return wmoToIco(code,isDay);}"
+        // Draw WMO icon from CDN (uses preloaded images)
+        "function drawWmoIco(code,x,y,sz){"
+        "const c=getWmoCode(code),img=wmoImgs[c];"
+        "if(img&&img.complete)ctx.drawImage(img,x,y,sz,sz);}"
 
         // Format time with AM/PM
         "function fmtTime(){"
@@ -1352,8 +1340,7 @@ void handleDisplayPreview() {
         // 2-column layout: left=icon+condition, right=temp+hi/lo+precip
         // Row 2 starts at y=105 (more space from header)
         // Left column: icon (80x80) + condition directly below
-        "const ico=getIco(w.weatherCode||0,isDay);"
-        "drawIco(ico.ico,15,105,80,ico.col);"
+        "drawWmoIco(w.weatherCode||0,15,105,80);"
         // Condition text tight under icon (just a few px gap)
         "ctx.fillStyle=C.WHITE;ctx.font='14px sans-serif';ctx.textAlign='center';"
         "const cond=w.condition||'Unknown';"
@@ -1401,8 +1388,7 @@ void handleDisplayPreview() {
         "ctx.fillStyle=C.GRAY;ctx.font='12px sans-serif';"
         "ctx.fillText(tm.date,cx+cw/2,62);"
         // Icon - 48x48 with more space from date
-        "const ico=getIco(day.weatherCode||0,true);"
-        "drawIco(ico.ico,cx+(cw-48)/2,78,48,ico.col);"
+        "drawWmoIco(day.weatherCode||0,cx+(cw-48)/2,78,48);"
         // High/Low temps (moved down to match icon shift)
         "ctx.fillStyle=C.ORANGE;ctx.font='bold 16px sans-serif';"
         "ctx.fillText('↑'+fmtTemp(day.tempMax||0,useC),cx+cw/2,148);"
