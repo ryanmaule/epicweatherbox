@@ -1217,6 +1217,7 @@ void handleDisplayPreview() {
         "<button onclick='nextScreen()'>Next ▶</button>"
         "<button onclick='toggleAuto()' id='autoBtn'>Auto: ON</button>"
         "<button onclick='toggleTheme()' id='themeBtn'>Theme: Dark</button>"
+        "<button onclick='showBoot()' id='bootBtn'>Boot</button>"
         "<button onclick='refreshWeather()'>Refresh Weather</button>"
         "<div class='info'>Screen updates every 10 seconds when Auto is ON</div></div>"
         "<div class='card'><strong>Location:</strong> <span id='locName'>-</span> "
@@ -1230,9 +1231,9 @@ void handleDisplayPreview() {
         "const ctx=canvas.getContext('2d');"
         "ctx.imageSmoothingEnabled=false;"
         "let weatherData=null,config=null,currentLoc=0,currentScreen=0,autoPlay=true,autoTimer=null;"
-        "let mainScreenOnly=false,darkMode=true,gifScreenEnabled=false;"
+        "let mainScreenOnly=false,darkMode=true,gifScreenEnabled=false,showingBoot=false;"
         "let bootGifExists=false,screenGifExists=false,bootGifImg=null,screenGifImg=null;"
-        "const SCREENS_PER_LOC=5;"
+        "const SCREENS_PER_LOC=4;"
 
         // Colors - dark and light themes
         "const DARK={BG:'#0a0a14',CARD:'#141428',WHITE:'#FFFFFF',GRAY:'#888888',CYAN:'#00D4FF',ORANGE:'#FF6B35',BLUE:'#4DA8DA',YELLOW:'#FFE000',GREEN:'#00FF88'};"
@@ -1384,24 +1385,27 @@ void handleDisplayPreview() {
         // Screen dots
         "drawDots();}"
 
-        // Draw boot screen
+        // Draw boot screen (special screen, not in rotation)
         "function drawBootScreen(){"
         "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
-        // Show boot GIF if exists, otherwise show logo
+        // Title and version at top
+        "ctx.fillStyle=C.CYAN;ctx.font='bold 28px sans-serif';ctx.textAlign='center';"
+        "ctx.fillText('EpicWeatherBox',120,45);"
+        "ctx.fillStyle=C.GRAY;ctx.font='16px sans-serif';"
+        "ctx.fillText('v0.2.0-dev',120,75);"
+        // Show boot GIF below title if exists (scaled to fit)
         "if(bootGifImg&&bootGifImg.complete){"
         "const w=bootGifImg.width,h=bootGifImg.height;"
-        "const sc=Math.min(200/w,200/h,1);"
+        "const maxW=160,maxH=130;"
+        "const sc=Math.min(maxW/w,maxH/h,1);"
         "const dw=w*sc,dh=h*sc;"
-        "ctx.drawImage(bootGifImg,(240-dw)/2,(240-dh)/2,dw,dh);"
-        "}else{"
-        // Default boot screen - title and version
-        "ctx.fillStyle=C.CYAN;ctx.font='bold 28px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText('EpicWeatherBox',120,100);"
-        "ctx.fillStyle=C.GRAY;ctx.font='16px sans-serif';"
-        "ctx.fillText('v0.2.0-dev',120,130);"
+        "ctx.drawImage(bootGifImg,(240-dw)/2,95+(maxH-dh)/2,dw,dh);"
+        "}else if(bootGifExists){"
         "ctx.font='12px sans-serif';ctx.fillStyle='#666';"
-        "ctx.fillText(bootGifExists?'Loading boot GIF...':'No boot GIF uploaded',120,170);}"
-        "drawDots();}"
+        "ctx.fillText('Loading...',120,160);}"
+        // B indicator at bottom instead of dots
+        "ctx.fillStyle=C.CYAN;ctx.font='bold 14px sans-serif';"
+        "ctx.fillText('B',120,232);}"
 
         // Draw GIF animation screen
         "function drawGifScreen(){"
@@ -1442,18 +1446,26 @@ void handleDisplayPreview() {
 
         // Update HTML dots
         "function updateHtmlDots(){"
+        "const el=document.getElementById('screenDots');el.innerHTML='';"
+        // Show B indicator for boot screen
+        "if(showingBoot){"
+        "const b=document.createElement('div');b.className='dot active';b.textContent='B';"
+        "b.style.cssText='width:auto;height:auto;border-radius:3px;padding:2px 6px;font-size:10px;font-weight:bold';el.appendChild(b);return;}"
         "const locs=weatherData?.locations||[],nLocs=locs.length||1;"
         "const screens=gifScreenEnabled?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
         "const total=nLocs*screens,cur=currentLoc*screens+Math.min(currentScreen,screens-1);"
-        "const el=document.getElementById('screenDots');el.innerHTML='';"
         "for(let i=0;i<total;i++){const d=document.createElement('div');"
         "d.className='dot'+(i===cur?' active':'');el.appendChild(d);}}"
 
         // Main render
         "function render(){"
         "ctx.clearRect(0,0,240,240);"
-        "const names=['Boot Screen','Current Weather','Forecast Days 1-3','Forecast Days 4-6','GIF Animation'];"
-        "document.getElementById('screenLabel').textContent=names[currentScreen]+(currentScreen===4&&!gifScreenEnabled?' (disabled)':'');"
+        // Handle boot screen separately (not in rotation)
+        "if(showingBoot){drawBootScreen();"
+        "document.getElementById('screenLabel').textContent='Boot Screen';"
+        "updateHtmlDots();return;}"
+        "const names=['Current Weather','Forecast Days 1-3','Forecast Days 4-6','GIF Animation'];"
+        "document.getElementById('screenLabel').textContent=names[currentScreen]+(currentScreen===3&&!gifScreenEnabled?' (disabled)':'');"
         "if(weatherData?.locations){"
         "const loc=weatherData.locations[currentLoc];"
         "document.getElementById('locName').textContent=loc?.location||'Unknown';"
@@ -1461,24 +1473,25 @@ void handleDisplayPreview() {
         "document.getElementById('locTotal').textContent=weatherData.locations.length;}"
         "updateHtmlDots();"
         "switch(currentScreen){"
-        "case 0:drawBootScreen();break;"
-        "case 1:drawCurrent();break;"
-        "case 2:drawForecast(0);break;"
-        "case 3:drawForecast(3);break;"
-        "case 4:drawGifScreen();break;}}"
+        "case 0:drawCurrent();break;"
+        "case 1:drawForecast(0);break;"
+        "case 2:drawForecast(3);break;"
+        "case 3:drawGifScreen();break;}}"
 
         // Navigation
         "function nextScreen(){"
+        "if(showingBoot){showingBoot=false;currentScreen=0;render();return;}"
         "const nLocs=weatherData?.locations?.length||1;"
         "const maxScreens=gifScreenEnabled?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
         "if(mainScreenOnly){"
-        "currentLoc=(currentLoc+1)%nLocs;currentScreen=0;}"  // Only change location, stay on main screen
+        "currentLoc=(currentLoc+1)%nLocs;currentScreen=0;}"
         "else{"
         "currentScreen++;"
         "if(currentScreen>=maxScreens){currentScreen=0;currentLoc=(currentLoc+1)%nLocs;}}"
         "render();}"
 
         "function prevScreen(){"
+        "if(showingBoot){showingBoot=false;currentScreen=0;render();return;}"
         "const nLocs=weatherData?.locations?.length||1;"
         "const maxScreens=gifScreenEnabled?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
         "if(mainScreenOnly){"
@@ -1487,6 +1500,9 @@ void handleDisplayPreview() {
         "currentScreen--;"
         "if(currentScreen<0){currentScreen=maxScreens-1;currentLoc=(currentLoc+nLocs-1)%nLocs;}}"
         "render();}"
+
+        // Toggle boot screen view
+        "function showBoot(){showingBoot=true;render();}"
 
         "function toggleAuto(){"
         "autoPlay=!autoPlay;"
