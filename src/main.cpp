@@ -46,6 +46,7 @@ extern "C" {
 #if ENABLE_TFT_TEST
 #include <TFT_eSPI.h>
 #include <NTPClient.h>
+#include <AnimatedGIF.h>
 
 // FreeSans smooth fonts - already defined by TFT_eSPI when LOAD_GFXFF=1
 // Just need extern declarations to reference them
@@ -72,6 +73,13 @@ extern const GFXfont FreeSansBold24pt7b;
 static TFT_eSPI tft = TFT_eSPI();
 #define TFT_BL_PIN 5  // Backlight PWM pin
 
+// AnimatedGIF decoder for GIF screen
+static AnimatedGIF gif;
+static File gifFile;
+static bool gifPlaying = false;
+static unsigned long gifStartTime = 0;
+static int gifX = 0, gifY = 0;  // Position for centering
+
 // Forward declare timeClient (defined below)
 extern NTPClient timeClient;
 
@@ -86,8 +94,8 @@ static int currentDisplayLocation = 0;
 #define COLOR_CARD_DARK    0x2104  // Dark card background
 
 // Light theme (day)
-#define COLOR_BG_LIGHT     0xEF7D  // Light warm gray
-#define COLOR_CARD_LIGHT   0xFFFF  // White card
+#define COLOR_BG_LIGHT     0xC618  // Medium gray background (much darker than white)
+#define COLOR_CARD_LIGHT   0xEF7D  // Light gray cards (visible contrast from bg)
 
 // Current active colors (set by getThemeBg/getThemeCard)
 #define COLOR_BG       0x0841  // Default: dark (overridden by functions below)
@@ -110,11 +118,17 @@ static int currentDisplayLocation = 0;
 // Icon colors (pixel art style - BGR565 format)
 // BGR565: BBBBB GGGGGG RRRRR (5-6-5 bits)
 #define ICON_SUN       0x07FF  // Yellow (cyan in RGB, yellow in BGR display)
-#define ICON_CLOUD     0xFFFF  // White cloud
-#define ICON_CLOUD_DARK 0xC618 // Gray cloud
+#define ICON_CLOUD     0xFFFF  // White cloud (for dark mode)
+#define ICON_CLOUD_DARK 0xC618 // Gray cloud (for stormy weather)
 #define ICON_RAIN      0xFD00  // Light blue rain drops
-#define ICON_SNOW      0xFFFF  // White snow
+#define ICON_SNOW      0xFFFF  // White snow (dark mode)
 #define ICON_LIGHTNING 0x07FF  // Yellow lightning bolt
+
+// Light mode icon colors (darker for visibility)
+#define ICON_CLOUD_LIGHT     0x6B4D  // Dark gray cloud for light mode
+#define ICON_CLOUD_STORM_LIGHT 0x4208 // Very dark cloud for storms in light mode
+#define ICON_SNOW_LIGHT      0x4208  // Dark gray snow for light mode
+#define ICON_RAIN_LIGHT      0x4B0D  // Dark blue rain for light mode
 
 // ============================================================================
 // PROCEDURAL PIXEL-ART WEATHER ICONS
@@ -179,27 +193,25 @@ void drawIconCloud(int x, int y, int size = 32, uint16_t color = ICON_CLOUD) {
 }
 
 // Draw rain drops below a position
-void drawRainDrops(int x, int y, int size = 32) {
+void drawRainDrops(int x, int y, int size = 32, uint16_t color = ICON_RAIN) {
     int s = size / 16;
-    uint16_t c = ICON_RAIN;
 
     // 3 rain drops in a row
-    drawPixel(x, y, 4, 12, s, c); drawPixel(x, y, 4, 13, s, c);
-    drawPixel(x, y, 8, 13, s, c); drawPixel(x, y, 8, 14, s, c);
-    drawPixel(x, y, 12, 12, s, c); drawPixel(x, y, 12, 13, s, c);
+    drawPixel(x, y, 4, 12, s, color); drawPixel(x, y, 4, 13, s, color);
+    drawPixel(x, y, 8, 13, s, color); drawPixel(x, y, 8, 14, s, color);
+    drawPixel(x, y, 12, 12, s, color); drawPixel(x, y, 12, 13, s, color);
 }
 
 // Draw snow flakes
-void drawSnowFlakes(int x, int y, int size = 32) {
+void drawSnowFlakes(int x, int y, int size = 32, uint16_t color = ICON_SNOW) {
     int s = size / 16;
-    uint16_t c = ICON_SNOW;
 
     // Small dots for snow
-    drawPixel(x, y, 4, 12, s, c);
-    drawPixel(x, y, 7, 14, s, c);
-    drawPixel(x, y, 11, 12, s, c);
-    drawPixel(x, y, 9, 13, s, c);
-    drawPixel(x, y, 5, 14, s, c);
+    drawPixel(x, y, 4, 12, s, color);
+    drawPixel(x, y, 7, 14, s, color);
+    drawPixel(x, y, 11, 12, s, color);
+    drawPixel(x, y, 9, 13, s, color);
+    drawPixel(x, y, 5, 14, s, color);
 }
 
 // Draw lightning bolt
@@ -450,8 +462,27 @@ int getLargeNumberWidth(const char* numStr, int height) {
     return total - spacing;  // Remove last spacing
 }
 
+// Forward declarations for theme-aware functions (defined later)
+bool shouldUseDarkTheme();
+uint16_t getThemeBg();
+uint16_t getThemeCard();
+uint16_t getThemeCyan();
+uint16_t getThemeOrange();
+uint16_t getThemeBlue();
+uint16_t getThemeGray();
+uint16_t getIconCloud();
+uint16_t getIconCloudDark();
+uint16_t getIconSnow();
+uint16_t getIconRain();
+
 // Main icon dispatcher - draws weather icon based on condition
 void drawWeatherIcon(int x, int y, WeatherCondition condition, bool isDay = true, int size = 32) {
+    // Get theme-aware icon colors
+    uint16_t cloudColor = getIconCloud();
+    uint16_t cloudDarkColor = getIconCloudDark();
+    uint16_t rainColor = getIconRain();
+    uint16_t snowColor = getIconSnow();
+
     switch (condition) {
         case WEATHER_CLEAR:
             if (isDay) {
@@ -468,11 +499,11 @@ void drawWeatherIcon(int x, int y, WeatherCondition condition, bool isDay = true
             } else {
                 drawIconMoon(x - size/8, y - size/8, size * 3/4);
             }
-            drawIconCloud(x + size/8, y + size/4, size * 3/4);
+            drawIconCloud(x + size/8, y + size/4, size * 3/4, cloudColor);
             break;
 
         case WEATHER_CLOUDY:
-            drawIconCloud(x, y, size);
+            drawIconCloud(x, y, size, cloudColor);
             break;
 
         case WEATHER_FOG:
@@ -481,30 +512,30 @@ void drawWeatherIcon(int x, int y, WeatherCondition condition, bool isDay = true
 
         case WEATHER_DRIZZLE:
         case WEATHER_RAIN:
-            drawIconCloud(x, y - size/8, size);
-            drawRainDrops(x, y, size);
+            drawIconCloud(x, y - size/8, size, cloudColor);
+            drawRainDrops(x, y, size, rainColor);
             break;
 
         case WEATHER_FREEZING_RAIN:
-            drawIconCloud(x, y - size/8, size, ICON_CLOUD_DARK);
-            drawRainDrops(x, y, size);
-            drawSnowFlakes(x + size/4, y, size);
+            drawIconCloud(x, y - size/8, size, cloudDarkColor);
+            drawRainDrops(x, y, size, rainColor);
+            drawSnowFlakes(x + size/4, y, size, snowColor);
             break;
 
         case WEATHER_SNOW:
-            drawIconCloud(x, y - size/8, size);
-            drawSnowFlakes(x, y, size);
+            drawIconCloud(x, y - size/8, size, cloudColor);
+            drawSnowFlakes(x, y, size, snowColor);
             break;
 
         case WEATHER_THUNDERSTORM:
-            drawIconCloud(x, y - size/8, size, ICON_CLOUD_DARK);
+            drawIconCloud(x, y - size/8, size, cloudDarkColor);
             drawLightning(x, y, size);
-            drawRainDrops(x + size/4, y, size);
+            drawRainDrops(x + size/4, y, size, rainColor);
             break;
 
         default:  // WEATHER_UNKNOWN
             // Question mark or generic cloud
-            drawIconCloud(x, y, size, COLOR_GRAY);
+            drawIconCloud(x, y, size, getThemeGray());
             break;
     }
 }
@@ -560,13 +591,29 @@ void initTftMinimal() {
 // Update boot screen status text at bottom
 void updateBootScreenStatus(const char* status) {
     // Clear the status area
-    tft.fillRect(0, 210, 240, 30, COLOR_BG_DARK);
+    tft.fillRect(0, 200, 240, 40, COLOR_BG_DARK);
 
     // Draw new status
     tft.setTextDatum(MC_DATUM);
     tft.setFreeFont(FSS9);
     tft.setTextColor(COLOR_GRAY);
-    tft.drawString(status, 120, 228, GFXFF);
+    tft.drawString(status, 120, 218, GFXFF);
+}
+
+// Show IP address on boot screen (called after WiFi connects)
+void showBootScreenIP(const char* ip) {
+    // Clear bottom area for IP
+    tft.fillRect(0, 200, 240, 40, COLOR_BG_DARK);
+
+    // Draw "Connected" status
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FSS9);
+    tft.setTextColor(COLOR_GRAY);
+    tft.drawString("Connected", 120, 210, GFXFF);
+
+    // Draw IP address in cyan
+    tft.setTextColor(COLOR_CYAN);
+    tft.drawString(ip, 120, 228, GFXFF);
 }
 
 // Determine if we should use dark theme based on theme setting and time
@@ -611,6 +658,169 @@ uint16_t getThemeBlue() {
 
 uint16_t getThemeGray() {
     return shouldUseDarkTheme() ? COLOR_GRAY : COLOR_GRAY_LIGHT;
+}
+
+// Get theme-aware icon colors
+uint16_t getIconCloud() {
+    return shouldUseDarkTheme() ? ICON_CLOUD : ICON_CLOUD_LIGHT;
+}
+
+uint16_t getIconCloudDark() {
+    return shouldUseDarkTheme() ? ICON_CLOUD_DARK : ICON_CLOUD_STORM_LIGHT;
+}
+
+uint16_t getIconSnow() {
+    return shouldUseDarkTheme() ? ICON_SNOW : ICON_SNOW_LIGHT;
+}
+
+uint16_t getIconRain() {
+    return shouldUseDarkTheme() ? ICON_RAIN : ICON_RAIN_LIGHT;
+}
+
+// ============================================================================
+// ANIMATED GIF SUPPORT
+// ============================================================================
+
+// File operations callback for AnimatedGIF library
+void* gifOpen(const char *filename, int32_t *size) {
+    gifFile = LittleFS.open(filename, "r");
+    if (!gifFile) return nullptr;
+    *size = gifFile.size();
+    return &gifFile;
+}
+
+void gifClose(void *handle) {
+    if (gifFile) gifFile.close();
+}
+
+int32_t gifRead(GIFFILE *pFile, uint8_t *pBuf, int32_t len) {
+    if (!gifFile) return 0;
+    return gifFile.read(pBuf, len);
+}
+
+int32_t gifSeek(GIFFILE *pFile, int32_t pos) {
+    if (!gifFile) return 0;
+    return gifFile.seek(pos);
+}
+
+// Draw callback - draws each line of the GIF frame to the TFT
+void gifDraw(GIFDRAW *pDraw) {
+    uint8_t *s = pDraw->pPixels;
+    uint16_t *d, *usPalette;
+    int x, y, width;
+
+    usPalette = pDraw->pPalette;
+    y = pDraw->iY + pDraw->y + gifY;  // Apply offset for centering
+    width = pDraw->iWidth;
+    x = pDraw->iX + gifX;  // Apply offset for centering
+
+    if (y >= 240 || x >= 240) return;  // Clip to screen
+
+    // Allocate line buffer on stack (max 240 pixels)
+    static uint16_t lineBuffer[240];
+    d = lineBuffer;
+
+    // Convert palette indices to RGB565 pixels
+    for (int i = 0; i < width; i++) {
+        if (pDraw->ucHasTransparency && s[i] == pDraw->ucTransparent) {
+            // Skip transparent pixels by not drawing them
+            // (for simplicity, we'll just use background color)
+            d[i] = getThemeBg();
+        } else {
+            d[i] = usPalette[s[i]];
+        }
+    }
+
+    // Push the line to the display
+    int actualWidth = min(width, 240 - x);
+    if (actualWidth > 0 && y < 240) {
+        tft.pushImage(x, y, actualWidth, 1, lineBuffer);
+    }
+}
+
+// Start playing a GIF file
+bool startGif(const char* filename) {
+    gif.begin(GIF_PALETTE_RGB565_BE);  // Use big-endian RGB565 for TFT
+
+    if (gif.open(filename, gifOpen, gifClose, gifRead, gifSeek, gifDraw)) {
+        // Calculate centering offset
+        int gifWidth = gif.getCanvasWidth();
+        int gifHeight = gif.getCanvasHeight();
+        gifX = (240 - gifWidth) / 2;
+        gifY = (240 - gifHeight) / 2;
+        if (gifX < 0) gifX = 0;
+        if (gifY < 0) gifY = 0;
+
+        gifPlaying = true;
+        gifStartTime = millis();
+        Serial.printf("[GIF] Started: %dx%d at (%d,%d)\n", gifWidth, gifHeight, gifX, gifY);
+        return true;
+    }
+
+    Serial.println(F("[GIF] Failed to open file"));
+    return false;
+}
+
+// Play one frame of the GIF, returns false if finished
+bool playGifFrame() {
+    if (!gifPlaying) return false;
+
+    int result = gif.playFrame(true, nullptr);
+    if (result == 0) {
+        // GIF finished or error
+        gif.close();
+        gifPlaying = false;
+        return false;
+    }
+    return true;
+}
+
+// Stop the GIF playback
+void stopGif() {
+    if (gifPlaying) {
+        gif.close();
+        gifPlaying = false;
+    }
+}
+
+// Draw GIF screen - plays the screen.gif
+void drawGifScreen() {
+    // Clear screen with theme background
+    tft.fillScreen(getThemeBg());
+
+    // Check if screen.gif exists
+    if (!LittleFS.exists("/screen.gif")) {
+        // Draw placeholder
+        tft.setTextDatum(MC_DATUM);
+        tft.setFreeFont(FSS12);
+        tft.setTextColor(getThemeGray());
+        tft.drawString("No GIF Uploaded", 120, 120, GFXFF);
+
+        tft.setFreeFont(FSS9);
+        tft.drawString("Upload via Admin Panel", 120, 150, GFXFF);
+        return;
+    }
+
+    // Start the GIF
+    if (!startGif("/screen.gif")) {
+        tft.setTextDatum(MC_DATUM);
+        tft.setFreeFont(FSS12);
+        tft.setTextColor(COLOR_ORANGE);
+        tft.drawString("GIF Error", 120, 120, GFXFF);
+        return;
+    }
+
+    // Play the first frame
+    playGifFrame();
+}
+
+// Continue playing the GIF (call from loop when on GIF screen)
+void updateGifScreen() {
+    if (gifPlaying) {
+        playGifFrame();
+        ESP.wdtFeed();  // Keep watchdog happy during GIF playback
+        yield();
+    }
 }
 
 // Draw current weather screen (no sprites - direct to TFT)
@@ -975,14 +1185,29 @@ void updateTftDisplay() {
     unsigned long now = millis();
     unsigned long cycleMs = (unsigned long)getScreenCycleTime() * 1000;
 
+    // If currently playing a GIF, keep updating it
+    if (gifPlaying) {
+        updateGifScreen();
+        // Check if screen time exceeded, but let at least one loop of GIF play
+        if (now - lastDisplayUpdate >= cycleMs && !gif.playFrame(false, nullptr)) {
+            stopGif();
+            lastDisplayUpdate = now;
+        }
+        return;  // Don't advance screen while GIF is playing
+    }
+
     // Check if time to change screen
     if (now - lastDisplayUpdate >= cycleMs) {
         lastDisplayUpdate = now;
 
-        // Determine screens to show
+        // Determine screens to show per location
         bool showForecast = getShowForecast();
+        bool showGif = getGifScreenEnabled();
         int numLocations = getLocationCount();
-        int screensPerLoc = showForecast ? 3 : 1;  // current + 2 forecast pages
+
+        // Screens per location: current, (forecast1, forecast2), (gif)
+        int weatherScreens = showForecast ? 3 : 1;  // current + 2 forecast pages
+        int screensPerLoc = weatherScreens + (showGif ? 1 : 0);
 
         // Advance screen
         currentDisplayScreen++;
@@ -995,19 +1220,27 @@ void updateTftDisplay() {
         ESP.wdtFeed();
         yield();
 
-        switch (currentDisplayScreen) {
-            case 0:
-                drawCurrentWeather();
-                break;
-            case 1:
-                drawForecast(0);  // Days 1-3
-                break;
-            case 2:
-                drawForecast(3);  // Days 4-6
-                break;
+        // Screen order: 0=current, 1=forecast1-3, 2=forecast4-6, 3=gif (if enabled)
+        if (currentDisplayScreen == 0) {
+            stopGif();  // Ensure any previous GIF is stopped
+            drawCurrentWeather();
+        } else if (currentDisplayScreen == 1 && showForecast) {
+            stopGif();
+            drawForecast(0);  // Days 1-3
+        } else if (currentDisplayScreen == 2 && showForecast) {
+            stopGif();
+            drawForecast(3);  // Days 4-6
+        } else if ((showForecast && currentDisplayScreen == 3) ||
+                   (!showForecast && currentDisplayScreen == 1)) {
+            // GIF screen (only if enabled)
+            if (showGif) {
+                drawGifScreen();
+            }
         }
 
-        Serial.printf("[TFT] Screen %d, Location %d\n", currentDisplayScreen, currentDisplayLocation);
+        Serial.printf("[TFT] Screen %d, Location %d, GIF: %s\n",
+                      currentDisplayScreen, currentDisplayLocation,
+                      gifPlaying ? "playing" : "no");
     }
 }
 #endif
@@ -1117,9 +1350,10 @@ void setup() {
         Serial.printf_P(PSTR("[BOOT] Web UI: http://%s/\n"), WiFi.localIP().toString().c_str());
         Serial.printf_P(PSTR("[BOOT] OTA Update: http://%s/update\n"), WiFi.localIP().toString().c_str());
 
-        // Give user time to see the IP address on boot screen
+        // Show IP address on boot screen and give user time to see it
 #if ENABLE_TFT_TEST
-        delay(2000);
+        showBootScreenIP(WiFi.localIP().toString().c_str());
+        delay(3000);  // Give user 3 seconds to see the IP address
 #endif
     }
     Serial.println(F("================================================"));
@@ -2471,23 +2705,22 @@ void handleDisplayPreview() {
         "drawDots();}"
 
         // Draw boot screen on separate canvas (always visible)
+        // Layout matches actual TFT: centered vertically with text and optional GIF
         "function renderBootScreen(){"
         "bootCtx.fillStyle=C.BG;bootCtx.fillRect(0,0,240,240);"
-        // Title and version at top
-        "bootCtx.fillStyle=C.CYAN;bootCtx.font='bold 28px sans-serif';bootCtx.textAlign='center';"
-        "bootCtx.fillText('EpicWeatherBox',120,45);"
-        "bootCtx.fillStyle=C.GRAY;bootCtx.font='16px sans-serif';"
-        "bootCtx.fillText('v1.0.0',120,75);"
-        // Show boot GIF below title if exists (scaled to fit)
-        "if(bootGifImg&&bootGifImg.complete){"
-        "const w=bootGifImg.width,h=bootGifImg.height;"
-        "const maxW=160,maxH=130;"
-        "const sc=Math.min(maxW/w,maxH/h,1);"
-        "const dw=w*sc,dh=h*sc;"
-        "bootCtx.drawImage(bootGifImg,(240-dw)/2,95+(maxH-dh)/2,dw,dh);"
-        "}else if(bootGifExists){"
-        "bootCtx.font='12px sans-serif';bootCtx.fillStyle='#666';"
-        "bootCtx.fillText('Loading...',120,160);}}"
+        "bootCtx.textAlign='center';"
+        // "Epic" in cyan at y=95 (matches TFT)
+        "bootCtx.fillStyle=C.CYAN;bootCtx.font='bold 24px sans-serif';"
+        "bootCtx.fillText('Epic',120,95);"
+        // "WeatherBox" in white at y=130 (matches TFT)
+        "bootCtx.fillStyle='#fff';bootCtx.font='bold 24px sans-serif';"
+        "bootCtx.fillText('WeatherBox',120,130);"
+        // Version in gray at y=165 (matches TFT)
+        "bootCtx.fillStyle=C.GRAY;bootCtx.font='14px sans-serif';"
+        "bootCtx.fillText('v1.0.0',120,165);"
+        // Show "Connecting..." at bottom y=228 (matches TFT)
+        "bootCtx.fillStyle='#666';bootCtx.font='12px sans-serif';"
+        "bootCtx.fillText('Connecting...',120,228);}"
 
         // Draw GIF animation screen
         "function drawGifScreen(){"
