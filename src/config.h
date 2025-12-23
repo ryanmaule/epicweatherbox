@@ -151,7 +151,7 @@
 #define FEATURE_DUAL_LOCATION 1       // New feature: dual location weather
 #define FEATURE_EXTENDED_FORECAST 1   // New feature: 7-day forecast
 #define FEATURE_PHOTO_ALBUM 1
-#define FEATURE_GIF_ANIMATION 1
+#define FEATURE_GIF_ANIMATION 0       // Disabled - ESP8266 memory constraints
 #define FEATURE_NIGHT_MODE 1
 #define FEATURE_OTA_UPDATE 1
 

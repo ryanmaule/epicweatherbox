@@ -18,13 +18,15 @@ Custom open-source firmware for the GeekMagic SmallTV-Ultra, transforming it int
 - **No API Key Required** - Uses free Open-Meteo weather API
 - **Open Source** - Fully customizable, MIT licensed
 
-## Screenshots
+## Display Screens
 
-The display cycles through multiple screens:
+The display automatically cycles through multiple screens for each location:
 
-| Current Weather | 3-Day Forecast | Extended Forecast |
-|-----------------|----------------|-------------------|
-| Large temp display, conditions, hi/lo | Days 1-3 with icons | Days 4-6 with icons |
+1. **Current Weather** - Large temperature display, weather condition, high/low temps, and current time
+2. **3-Day Forecast** - Days 1-3 with weather icons and temperature ranges
+3. **Extended Forecast** - Days 4-6 with weather icons and temperature ranges
+
+> **Tip**: Visit `http://<device-ip>/preview` for a live browser simulation of the display!
 
 ## Hardware
 
