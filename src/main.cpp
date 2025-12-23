@@ -723,29 +723,30 @@ void drawSafeModeScreen() {
     tft.setTextDatum(TC_DATUM);
     tft.setTextColor(TFT_BLACK);
 
-    // Warning icon (triangle with !)
-    tft.fillTriangle(120, 20, 80, 80, 160, 80, TFT_BLACK);
-    tft.fillTriangle(120, 28, 88, 75, 152, 75, 0xFD20);
-    tft.setFreeFont(FSSB18);
-    tft.drawString("!", 120, 42, GFXFF);
+    // Warning icon (smaller triangle)
+    tft.fillTriangle(120, 10, 90, 55, 150, 55, TFT_BLACK);
+    tft.fillTriangle(120, 16, 96, 51, 144, 51, 0xFD20);
+    tft.setFreeFont(FSSB12);
+    tft.drawString("!", 120, 28, GFXFF);
 
     // Title
     tft.setFreeFont(FSSB12);
-    tft.drawString("SAFE MODE", 120, 100, GFXFF);
+    tft.drawString("SAFE MODE", 120, 70, GFXFF);
 
-    // Info
+    // Info (combined into one line)
     tft.setFreeFont(FSS9);
-    tft.drawString("Device is paused", 120, 130, GFXFF);
-    tft.drawString("Web server active", 120, 150, GFXFF);
+    tft.drawString("Device paused - web active", 120, 100, GFXFF);
 
     // Instructions
-    tft.setFreeFont(FSS9);
-    tft.drawString("Visit device IP to", 120, 180, GFXFF);
-    tft.drawString("upload new firmware", 120, 198, GFXFF);
+    tft.drawString("Visit IP for firmware update:", 120, 130, GFXFF);
 
-    // IP address
-    tft.setFreeFont(FSSB9);
-    tft.drawString(WiFi.localIP().toString().c_str(), 120, 225, GFXFF);
+    // IP address (larger, more prominent)
+    tft.setFreeFont(FSSB12);
+    tft.drawString(WiFi.localIP().toString().c_str(), 120, 160, GFXFF);
+
+    // Additional info
+    tft.setFreeFont(FSS9);
+    tft.drawString("or go to /update", 120, 190, GFXFF);
 }
 
 // Draw current weather screen (no sprites - direct to TFT)
@@ -2084,15 +2085,15 @@ void handleRoot() {
         "<p><a href='/api/status'>/api/status</a> - Device status</p>"
         "</div>");
 
-    html += F("<div class='card'><h3>Development Status</h3>"
-        "<p>Custom weather station firmware for SmallTV hardware.</p>"
-        "<ul>"
-        "<li>Phase 1: OTA Updates - <strong style='color:#00ff88'>Complete</strong></li>"
-        "<li>Phase A: Weather API - <strong style='color:#00ff88'>Complete</strong></li>"
-        "<li>Phase B: Admin Panel - <strong style='color:#00ff88'>Complete</strong></li>"
-        "<li>Phase C: Display Preview - <strong style='color:#00ff88'>Complete</strong></li>"
-        "<li>Phase D: TFT Display Driver - <strong style='color:#ffc107'>In Progress</strong></li>"
-        "</ul></div>");
+    html += F("<div class='card'><h3>Project Links</h3>"
+        "<p><a href='https://github.com/ryanmaule/epicweatherbox' target='_blank'>GitHub Repository</a> - Source code &amp; documentation</p>"
+        "<p><a href='https://github.com/ryanmaule/epicweatherbox/releases' target='_blank'>Releases</a> - Download latest firmware</p>"
+        "<p><a href='https://github.com/ryanmaule/epicweatherbox/issues' target='_blank'>Issues</a> - Report bugs or request features</p>"
+        "<p style='margin-top:15px;padding-top:10px;border-top:1px solid #333'>"
+        "<strong>Current Version:</strong> " FIRMWARE_VERSION "<br>"
+        "<span style='color:#888;font-size:0.9em'>Check <a href='https://github.com/ryanmaule/epicweatherbox/releases/latest' target='_blank'>latest release</a> for updates. "
+        "Use <a href='/update'>/update</a> to upload new firmware.</span></p>"
+        "</div>");
 
     html += F("</div></body></html>");
 
