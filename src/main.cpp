@@ -453,13 +453,13 @@ void drawCurrentWeather() {
         snprintf(loStr, sizeof(loStr), "%.0f", lo);
         tft.drawString(loStr, 114, detailY, GFXFF);
 
-        // Precipitation with raindrop icon (right third)
+        // Precipitation with raindrop icon (right third - icon indicates it's precip)
         int precipVal = (int)weather.forecast[0].precipitationProb;
         uint16_t precipColor = precipVal > 30 ? COLOR_CYAN : COLOR_GRAY;
         drawRaindrop(168, detailY, precipColor);
         tft.setTextColor(precipColor);
         char precip[8];
-        snprintf(precip, sizeof(precip), "%d%%", precipVal);
+        snprintf(precip, sizeof(precip), "%d", precipVal);
         tft.drawString(precip, 184, detailY, GFXFF);
     }
 
@@ -559,14 +559,15 @@ void drawForecast(int startDay) {
         tft.setTextColor(COLOR_BLUE);
         tft.drawString(loStr, x + 24, y + 118, GFXFF);
 
-        // Precipitation % with raindrop icon
-        char precip[8];
-        snprintf(precip, sizeof(precip), "%d%%", (int)day.precipitationProb);
-        uint16_t precipColor = day.precipitationProb > 30 ? COLOR_CYAN : COLOR_GRAY;
+        // Precipitation % with raindrop icon (raindrop indicates it's precip)
+        int precipVal = (int)day.precipitationProb;
+        uint16_t precipColor = precipVal > 30 ? COLOR_CYAN : COLOR_GRAY;
         drawRaindrop(x + 15, y + 145, precipColor);
-        tft.setFreeFont(FSS9);
+        tft.setFreeFont(FSSB12);
         tft.setTextColor(precipColor);
-        tft.drawString(precip, x + 30, y + 148, GFXFF);
+        char precip[8];
+        snprintf(precip, sizeof(precip), "%d", precipVal);
+        tft.drawString(precip, x + 30, y + 145, GFXFF);
     }
 
     // Screen dots at bottom (one per screen, not per location)
