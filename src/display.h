@@ -169,13 +169,12 @@ void drawForecastScreen(int locationIndex, int startDay);
 // =============================================================================
 
 /**
- * Draw a weather icon at position
- * @param condition Weather condition enum
+ * Draw a weather icon at position using WMO weather code
+ * @param wmoCode WMO weather interpretation code (0-99)
  * @param x, y Position (top-left corner)
  * @param size Icon size (32 or 64)
- * @param isDay Day or night variant
  */
-void drawWeatherIcon(WeatherCondition condition, int x, int y, int size, bool isDay);
+void drawWeatherIcon(int wmoCode, int x, int y, int size);
 
 /**
  * Draw temperature with appropriate color

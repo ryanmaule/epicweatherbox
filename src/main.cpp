@@ -887,6 +887,9 @@ void handleAdmin() {
         ".loc-item .remove:hover{background:#c82333}"
         ".add-btn{background:#28a745;width:100%}.add-btn:hover{background:#218838}"
         ".pending{border:2px dashed #00d4ff;background:rgba(0,212,255,0.1)}"
+        ".toggle-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0}"
+        ".toggle-row span{color:#eee;font-size:0.95em}"
+        ".toggle-row input[type='checkbox']{width:auto;margin:0}"
         "</style></head><body><div class='c'><h1>EpicWeatherBox</h1>");
 
     // Current weather for all locations
@@ -964,9 +967,9 @@ void handleAdmin() {
         "<p class='hint'>Seconds between screen changes (5-60)</p>");
 
     // Show Forecast
-    html += F("<label><input type='checkbox' id='showForecast'");
+    html += F("<div class='toggle-row'><span>Show Forecast Screens</span><input type='checkbox' id='showForecast'");
     html += getShowForecast() ? " checked" : "";
-    html += F("> Show Forecast Screens</label>"
+    html += F("></div>"
         "<p class='hint'>Include 7-day forecast in screen rotation (always cycles between locations)</p>");
 
     // Theme Mode
@@ -987,9 +990,9 @@ void handleAdmin() {
     html += F("' oninput='document.getElementById(\"brtVal\").textContent=this.value'>");
 
     // Night Mode
-    html += F("<label><input type='checkbox' id='nightMode'");
+    html += F("<div class='toggle-row'><span>Enable Night Mode</span><input type='checkbox' id='nightMode'");
     html += getNightModeEnabled() ? " checked" : "";
-    html += F("> Enable Night Mode</label>"
+    html += F("></div>"
         "<p class='hint'>Automatically dims display and uses dark theme during night hours</p>"
         "<div class='row'><div><label>Night Start</label><select id='nightStart'>");
     for (int h = 0; h < 24; h++) {
@@ -1040,9 +1043,9 @@ void handleAdmin() {
         "<button type='button' onclick='deleteGif(\"screen\")' style='background:#dc3545;margin-left:10px'>Delete</button>"
 
         // GIF screen toggle
-        "<label style='margin-top:20px'><input type='checkbox' id='gifScreenEnabled'");
+        "<div class='toggle-row' style='margin-top:20px'><span>Show GIF screen in rotation</span><input type='checkbox' id='gifScreenEnabled'");
     html += getGifScreenEnabled() ? " checked" : "";
-    html += F("> Show GIF screen in rotation</label>"
+    html += F("></div>"
         "<p class='hint'>When enabled and a screen GIF is uploaded, it will appear in the display rotation.</p>"
         "<button type='button' onclick='saveGifSettings()' style='margin-top:10px'>Save GIF Settings</button>"
         "<div id='gifSt' class='status'></div></div>");

@@ -35,33 +35,10 @@ static bool needsRedraw = true;
 
 // =============================================================================
 // RGB565 COLOR WEATHER ICONS (32x32)
-// Icons are defined in weather_icons_rgb565.h
-// Mapping: condition -> icon array pointer
+// Icons are defined in weather_icons_rgb565.h with direct WMO code mapping
 // =============================================================================
 
-static const uint16_t* getIconForCondition(WeatherCondition condition, bool isDay) {
-    switch (condition) {
-        case WEATHER_CLEAR:
-            return isDay ? icon_sun : icon_sun;  // Use sun for both (no separate moon icon)
-        case WEATHER_PARTLY_CLOUDY:
-            return icon_partly_cloudy;
-        case WEATHER_CLOUDY:
-            return icon_cloud;
-        case WEATHER_FOG:
-            return icon_wind;  // Use wind icon for fog
-        case WEATHER_DRIZZLE:
-            return icon_rain;
-        case WEATHER_RAIN:
-        case WEATHER_FREEZING_RAIN:
-            return icon_rain;
-        case WEATHER_SNOW:
-            return icon_snow;
-        case WEATHER_THUNDERSTORM:
-            return icon_thunder;
-        default:
-            return icon_cloud;  // Fallback
-    }
-}
+// Note: getIconForWMOCode() is defined in weather_icons_rgb565.h
 
 // =============================================================================
 // INITIALIZATION
@@ -241,7 +218,7 @@ void drawCurrentWeatherScreen(int locationIndex) {
     // Draw weather icon (centered, large)
     int iconX = (SCREEN_WIDTH - 64) / 2;
     int iconY = 95;
-    drawWeatherIcon(weather.current.condition, iconX, iconY, 64, weather.current.isDay);
+    drawWeatherIcon(weather.current.weatherCode, iconX, iconY, 64);
 
     // Current temperature (big)
     sprite.setTextDatum(TC_DATUM);
@@ -311,7 +288,7 @@ void drawForecastScreen(int locationIndex, int startDay) {
         // Weather icon
         int iconX = cardX + (cardWidth - 32) / 2;
         int iconY = cardY + 35;
-        drawWeatherIcon(day.condition, iconX, iconY, 32, true);
+        drawWeatherIcon(day.weatherCode, iconX, iconY, 32);
 
         // High temp
         sprite.setTextDatum(TC_DATUM);
@@ -351,8 +328,9 @@ void drawForecastScreen(int locationIndex, int startDay) {
 // UTILITY FUNCTIONS
 // =============================================================================
 
-void drawWeatherIcon(WeatherCondition condition, int x, int y, int size, bool isDay) {
-    const uint16_t* icon = getIconForCondition(condition, isDay);
+void drawWeatherIcon(int wmoCode, int x, int y, int size) {
+    const uint16_t* icon = getIconForWMOCode(wmoCode);
+    if (!icon) return;
 
     if (size == 32) {
         // Draw 32x32 RGB565 icon with transparency (0x0000 = transparent)
