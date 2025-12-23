@@ -320,12 +320,19 @@ void setNightModeBrightness(int brightness);
 bool isNightModeActive(int currentHour);
 
 /**
- * Screen cycling mode
- * false = cycle through all screens (current + forecasts)
- * true = show only main weather screen (no forecast cycling)
+ * Show forecast screens in rotation
+ * true = show forecast screens (current + forecast days)
+ * false = show only current weather screens (still cycles between locations)
  */
-bool getMainScreenOnly();
-void setMainScreenOnly(bool mainOnly);
+bool getShowForecast();
+void setShowForecast(bool show);
+
+/**
+ * Screen cycle time in seconds (5-60)
+ * How long to display each screen before switching
+ */
+int getScreenCycleTime();
+void setScreenCycleTime(int seconds);
 
 /**
  * GIF screen settings

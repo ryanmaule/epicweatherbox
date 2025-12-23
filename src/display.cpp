@@ -109,17 +109,17 @@ void updateDisplay() {
 
     unsigned long now = millis();
 
-    // Check if it's time to change screen
-    if (now - lastScreenChange >= SCREEN_DISPLAY_TIME_MS) {
+    // Check if it's time to change screen (use configurable cycle time)
+    if (now - lastScreenChange >= (unsigned long)(getScreenCycleTime() * 1000)) {
         lastScreenChange = now;
         needsRedraw = true;
 
         // Determine how many screens to cycle through
         bool gifEnabled = getGifScreenEnabled() && gifFileExists("/screen.gif");
-        bool mainOnly = getMainScreenOnly();
+        bool forecastEnabled = getShowForecast();
 
-        if (mainOnly) {
-            // Main screen only mode - stay on current weather
+        if (!forecastEnabled) {
+            // Forecast disabled - stay on current weather, cycle locations only
             currentScreen = SCREEN_CURRENT_WEATHER;
             // Cycle through locations
             int locationCount = getLocationCount();
@@ -127,7 +127,7 @@ void updateDisplay() {
                 currentLocationIndex = (currentLocationIndex + 1) % locationCount;
             }
         } else {
-            // Normal cycling mode
+            // Forecast enabled - cycle through all screens
             // Advance to next screen
             currentScreen = (ScreenType)((currentScreen + 1) % SCREEN_TYPE_COUNT);
 

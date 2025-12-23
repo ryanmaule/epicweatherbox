@@ -37,7 +37,8 @@ static bool nightModeEnabled = true;
 static int nightModeStartHour = 22;  // 10 PM
 static int nightModeEndHour = 7;     // 7 AM
 static int nightModeBrightness = 20;
-static bool mainScreenOnly = false;  // false = cycle all, true = main only
+static bool showForecast = true;  // true = show forecast screens, false = current weather only
+static int screenCycleTime = 10;  // seconds between screen changes (5-60)
 static int themeMode = 0;  // 0=auto, 1=dark, 2=light
 static bool gifScreenEnabled = false;  // Show GIF screen in rotation
 
@@ -603,8 +604,11 @@ void setNightModeEndHour(int hour) { nightModeEndHour = constrain(hour, 0, 23); 
 int getNightModeBrightness() { return nightModeBrightness; }
 void setNightModeBrightness(int b) { nightModeBrightness = constrain(b, 0, 100); }
 
-bool getMainScreenOnly() { return mainScreenOnly; }
-void setMainScreenOnly(bool mainOnly) { mainScreenOnly = mainOnly; }
+bool getShowForecast() { return showForecast; }
+void setShowForecast(bool show) { showForecast = show; }
+
+int getScreenCycleTime() { return screenCycleTime; }
+void setScreenCycleTime(int seconds) { screenCycleTime = constrain(seconds, 5, 60); }
 
 int getThemeMode() { return themeMode; }
 void setThemeMode(int mode) { themeMode = constrain(mode, 0, 2); }
@@ -653,7 +657,8 @@ bool saveWeatherConfig() {
     doc["nightModeStartHour"] = nightModeStartHour;
     doc["nightModeEndHour"] = nightModeEndHour;
     doc["nightModeBrightness"] = nightModeBrightness;
-    doc["mainScreenOnly"] = mainScreenOnly;
+    doc["showForecast"] = showForecast;
+    doc["screenCycleTime"] = screenCycleTime;
     doc["themeMode"] = themeMode;
     doc["gifScreenEnabled"] = gifScreenEnabled;
 
@@ -776,7 +781,8 @@ bool loadWeatherConfig() {
     nightModeStartHour = doc["nightModeStartHour"] | 22;
     nightModeEndHour = doc["nightModeEndHour"] | 7;
     nightModeBrightness = doc["nightModeBrightness"] | 20;
-    mainScreenOnly = doc["mainScreenOnly"] | false;
+    showForecast = doc["showForecast"] | true;
+    screenCycleTime = doc["screenCycleTime"] | 10;
     themeMode = doc["themeMode"] | 0;
     gifScreenEnabled = doc["gifScreenEnabled"] | false;
 

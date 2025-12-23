@@ -343,7 +343,8 @@ void setupWebServer() {
         doc["nightModeStartHour"] = getNightModeStartHour();
         doc["nightModeEndHour"] = getNightModeEndHour();
         doc["nightModeBrightness"] = getNightModeBrightness();
-        doc["mainScreenOnly"] = getMainScreenOnly();
+        doc["showForecast"] = getShowForecast();
+        doc["screenCycleTime"] = getScreenCycleTime();
         doc["themeMode"] = getThemeMode();
         doc["gifScreenEnabled"] = getGifScreenEnabled();
 
@@ -454,8 +455,11 @@ void setupWebServer() {
         if (doc["nightModeBrightness"].is<int>()) {
             setNightModeBrightness(doc["nightModeBrightness"] | 20);
         }
-        if (doc["mainScreenOnly"].is<bool>()) {
-            setMainScreenOnly(doc["mainScreenOnly"] | false);
+        if (doc["showForecast"].is<bool>()) {
+            setShowForecast(doc["showForecast"] | true);
+        }
+        if (doc["screenCycleTime"].is<int>()) {
+            setScreenCycleTime(doc["screenCycleTime"] | 10);
         }
         if (doc["themeMode"].is<int>()) {
             setThemeMode(doc["themeMode"] | 0);
@@ -951,14 +955,19 @@ void handleAdmin() {
     html += celsius ? " selected" : "";
     html += F(">Celsius</option></select>");
 
-    // Display Mode
-    html += F("<label>Display Mode</label><select id='screenMode'>"
-        "<option value='0'");
-    html += getMainScreenOnly() ? "" : " selected";
-    html += F(">Cycle All Screens</option><option value='1'");
-    html += getMainScreenOnly() ? " selected" : "";
-    html += F(">Main Screen Only</option></select>"
-        "<p class='hint'>Cycle through weather + forecast screens, or show only main weather</p>");
+    // Screen Cycle Time
+    html += F("<label>Screen Cycle Time: <span id='cycleVal'>");
+    html += String(getScreenCycleTime());
+    html += F("</span>s</label><input type='range' id='cycleTime' min='5' max='60' value='");
+    html += String(getScreenCycleTime());
+    html += F("' oninput='document.getElementById(\"cycleVal\").textContent=this.value'>"
+        "<p class='hint'>Seconds between screen changes (5-60)</p>");
+
+    // Show Forecast
+    html += F("<label><input type='checkbox' id='showForecast'");
+    html += getShowForecast() ? " checked" : "";
+    html += F("> Show Forecast Screens</label>"
+        "<p class='hint'>Include 7-day forecast in screen rotation (always cycles between locations)</p>");
 
     // Theme Mode
     html += F("<label>Theme</label><select id='themeMode'>"
@@ -1111,7 +1120,8 @@ void handleAdmin() {
         "nightModeStartHour:parseInt(document.getElementById('nightStart').value),"
         "nightModeEndHour:parseInt(document.getElementById('nightEnd').value),"
         "nightModeBrightness:parseInt(document.getElementById('nightBrightness').value),"
-        "mainScreenOnly:document.getElementById('screenMode').value==='1',"
+        "showForecast:document.getElementById('showForecast').checked,"
+        "screenCycleTime:parseInt(document.getElementById('cycleTime').value),"
         "themeMode:parseInt(document.getElementById('themeMode').value),"
         "gifScreenEnabled:document.getElementById('gifScreenEnabled').checked};}"
 
@@ -1239,7 +1249,7 @@ void handleDisplayPreview() {
         "ctx.imageSmoothingEnabled=false;"
         "bootCtx.imageSmoothingEnabled=false;"
         "let weatherData=null,config=null,currentLoc=0,currentScreen=0,autoPlay=true,autoTimer=null;"
-        "let mainScreenOnly=false,darkMode=true,gifScreenEnabled=false;"
+        "let showForecast=true,screenCycleTime=10,darkMode=true,gifScreenEnabled=false;"
         "let bootGifExists=false,screenGifExists=false,bootGifImg=null,screenGifImg=null;"
         "const SCREENS_PER_LOC=4;"
 
@@ -1476,23 +1486,27 @@ void handleDisplayPreview() {
         "case 2:drawForecast(3);break;"
         "case 3:drawGifScreen();break;}}"
 
-        // Navigation
+        // Navigation - always cycles, but may skip forecast screens
         "function nextScreen(){"
         "const nLocs=weatherData?.locations?.length||1;"
-        "const maxScreens=gifScreenEnabled?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
-        "if(mainScreenOnly){"
+        "const hasGif=gifScreenEnabled;"
+        "if(!showForecast){"
+        // Only current weather, skip to next location
         "currentLoc=(currentLoc+1)%nLocs;currentScreen=0;}"
         "else{"
+        // Full rotation with forecast
+        "const maxScreens=hasGif?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
         "currentScreen++;"
         "if(currentScreen>=maxScreens){currentScreen=0;currentLoc=(currentLoc+1)%nLocs;}}"
         "render();}"
 
         "function prevScreen(){"
         "const nLocs=weatherData?.locations?.length||1;"
-        "const maxScreens=gifScreenEnabled?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
-        "if(mainScreenOnly){"
+        "const hasGif=gifScreenEnabled;"
+        "if(!showForecast){"
         "currentLoc=(currentLoc+nLocs-1)%nLocs;currentScreen=0;}"
         "else{"
+        "const maxScreens=hasGif?SCREENS_PER_LOC:SCREENS_PER_LOC-1;"
         "currentScreen--;"
         "if(currentScreen<0){currentScreen=maxScreens-1;currentLoc=(currentLoc+nLocs-1)%nLocs;}}"
         "render();}"
@@ -1510,13 +1524,14 @@ void handleDisplayPreview() {
         "document.body.style.background=darkMode?'#0d0d1a':'#f0f5fa';"
         "render();}"
 
-        "function startAuto(){stopAuto();autoTimer=setInterval(nextScreen,10000);}"
+        "function startAuto(){stopAuto();autoTimer=setInterval(nextScreen,screenCycleTime*1000);}"
         "function stopAuto(){if(autoTimer){clearInterval(autoTimer);autoTimer=null;}}"
 
         // Fetch config
         "async function fetchConfig(){"
         "try{const r=await fetch('/api/config');config=await r.json();"
-        "mainScreenOnly=config.mainScreenOnly||false;"
+        "showForecast=config.showForecast!==false;"
+        "screenCycleTime=config.screenCycleTime||10;"
         "gifScreenEnabled=config.gifScreenEnabled||false;"
         "console.log('Config:',config);"
         "}catch(e){console.error('Config fetch failed',e);}}"
