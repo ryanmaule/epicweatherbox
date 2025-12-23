@@ -1154,21 +1154,29 @@ void drawCustomScreen() {
     tft.setFreeFont(FSS9);
     tft.drawString(ampm, 8 + timeNumW + 4, 8 + yOff, GFXFF);
 
-    // Custom header text (right aligned, gray)
+    // Custom header text (right aligned, gray) with star icon
     const char* headerText = getCustomScreenHeader();
     if (strlen(headerText) > 0) {
         tft.setFreeFont(FSS9);
         int16_t headerW = tft.textWidth(headerText, GFXFF);
         tft.setTextDatum(TL_DATUM);
         tft.setTextColor(grayColor);
+
+        // Draw star icon (5-pointed star) to the left of the header text
+        int starX = 232 - headerW - 14;  // 14px left of text (star width + gap)
+        int starY = 14 + yOff;  // Center vertically with text
+        int starSize = 5;
+        // Draw a simple 5-pointed star using triangles
+        tft.fillTriangle(starX, starY - starSize, starX - 3, starY + 2, starX + 3, starY + 2, cyanColor);  // Top triangle
+        tft.fillTriangle(starX - starSize, starY - 1, starX + starSize, starY - 1, starX, starY + 4, cyanColor);  // Bottom triangle
+
         tft.drawString(headerText, 232 - headerW, 8 + yOff, GFXFF);
     }
 
     // ========== Body: Dynamic text sizing ==========
     const char* bodyText = getCustomScreenBody();
     if (strlen(bodyText) > 0) {
-        int bodyY = 40 + yOff;
-        int bodyW = 224;  // Width (8px margin each side)
+        int bodyW = 220;  // Width (10px margin each side)
 
         // Determine font size based on text length
         const GFXfont* font;
@@ -1176,33 +1184,69 @@ void drawCustomScreen() {
 
         int len = strlen(bodyText);
         if (len <= 40) {
-            // Short text: large font
+            // Short text: large font with generous spacing
             font = FSSB18;
-            lineHeight = 28;
+            lineHeight = 34;  // Increased from 28
         } else if (len <= 80) {
-            // Medium text: medium font
+            // Medium text: medium font with good spacing
             font = FSSB12;
-            lineHeight = 20;
+            lineHeight = 26;  // Increased from 20
         } else {
-            // Long text: small font
+            // Long text: small font with comfortable spacing
             font = FSS9;
-            lineHeight = 16;
+            lineHeight = 22;  // Increased from 16
         }
 
         tft.setFreeFont(font);
         tft.setTextColor(textColor);
         tft.setTextDatum(TL_DATUM);
 
-        // Word-wrap and draw text (centered)
+        // First pass: count lines needed for vertical centering
         char buffer[161];
+        strncpy(buffer, bodyText, sizeof(buffer) - 1);
+        buffer[sizeof(buffer) - 1] = '\0';
+
+        // Count lines
+        int lineCount = 0;
+        char* lineStart = buffer;
+        char* lastSpace = NULL;
+        char* p = buffer;
+
+        while (*p) {
+            if (*p == ' ') lastSpace = p;
+
+            char saved = *(p + 1);
+            *(p + 1) = '\0';
+            int16_t lineW = tft.textWidth(lineStart, GFXFF);
+            *(p + 1) = saved;
+
+            if (lineW > bodyW || *p == '\n') {
+                char* breakPoint = (lastSpace && lastSpace > lineStart) ? lastSpace : p;
+                lineCount++;
+                lineStart = (*breakPoint == ' ' || *breakPoint == '\n') ? breakPoint + 1 : breakPoint;
+                lastSpace = NULL;
+            }
+            p++;
+        }
+        if (*lineStart) lineCount++;
+
+        // Calculate vertical centering
+        // Body area: y=32 to y=168 (136px available, leaves room for header and footer)
+        int bodyAreaTop = 32 + yOff;
+        int bodyAreaHeight = 136;
+        int totalTextHeight = lineCount * lineHeight;
+        int bodyY = bodyAreaTop + (bodyAreaHeight - totalTextHeight) / 2;
+        if (bodyY < bodyAreaTop) bodyY = bodyAreaTop;
+
+        // Second pass: actually draw the text
         strncpy(buffer, bodyText, sizeof(buffer) - 1);
         buffer[sizeof(buffer) - 1] = '\0';
 
         int y = bodyY;
         int maxY = 165 + yOff;  // Stop before footer
-        char* lineStart = buffer;
-        char* lastSpace = NULL;
-        char* p = buffer;
+        lineStart = buffer;
+        lastSpace = NULL;
+        p = buffer;
 
         while (*p && y < maxY) {
             if (*p == ' ') {
@@ -2285,6 +2329,42 @@ void handleAdmin() {
         "<button type='button' onclick='saveNudge()' style='margin-top:10px'>Apply Nudge</button>"
         "<div id='nudgeSt' class='status'></div></div>");
 
+    // Custom Screen section
+    html += F("<div class='card'><h3>Custom Screen</h3>"
+        "<p class='hint'>Add an optional custom text screen that appears after each location's weather screens.</p>"
+        "<div class='toggle-row'><span>Enable Custom Screen</span><input type='checkbox' id='customEnabled'");
+    html += getCustomScreenEnabled() ? " checked" : "";
+    html += F("></div>"
+        "<div id='customFields' style='opacity:");
+    html += getCustomScreenEnabled() ? "1" : "0.5";
+    html += F("'>"
+        "<label>Header Text (max 16 chars, top-right)</label>"
+        "<input type='text' id='customHeader' maxlength='16' placeholder='e.g., My Quote' value='");
+    // Escape any quotes in the header
+    String header = getCustomScreenHeader();
+    header.replace("'", "&#39;");
+    html += header;
+    html += F("'>"
+        "<label>Body Text (max 160 chars, centered)</label>"
+        "<textarea id='customBody' maxlength='160' rows='3' style='width:100%;padding:10px;border:1px solid #333;"
+        "border-radius:6px;background:#2a2a4e;color:#eee;resize:vertical' placeholder='Your custom message...'>");
+    String body = getCustomScreenBody();
+    body.replace("<", "&lt;");
+    body.replace(">", "&gt;");
+    html += body;
+    html += F("</textarea>"
+        "<div style='font-size:0.75em;color:#666;margin-top:4px'><span id='bodyCount'>");
+    html += String(strlen(getCustomScreenBody()));
+    html += F("</span>/160 chars</div>"
+        "<label>Footer Text (max 30 chars, bottom bar)</label>"
+        "<input type='text' id='customFooter' maxlength='30' placeholder='e.g., Have a great day!' value='");
+    String footer = getCustomScreenFooter();
+    footer.replace("'", "&#39;");
+    html += footer;
+    html += F("'></div>"
+        "<button type='button' onclick='saveCustom()' style='margin-top:10px'>Save Custom Screen</button>"
+        "<div id='customSt' class='status'></div></div>");
+
     // Links
     html += F("<div class='card' style='text-align:center'>"
         "<a href='/'>Home</a> | <a href='/preview'>Display Preview</a> | "
@@ -2393,8 +2473,26 @@ void handleAdmin() {
         "st.textContent=d.success?'Applied! Screen will update on next cycle.':d.message;"
         "}catch(e){st.className='status err';st.textContent='Error applying';}}"
 
+        // Save custom screen settings
+        "async function saveCustom(){"
+        "const st=document.getElementById('customSt');st.style.display='block';st.className='status';"
+        "st.textContent='Saving...';"
+        "const data={customScreenEnabled:document.getElementById('customEnabled').checked,"
+        "customScreenHeader:document.getElementById('customHeader').value,"
+        "customScreenBody:document.getElementById('customBody').value,"
+        "customScreenFooter:document.getElementById('customFooter').value};"
+        "try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify(data)});"
+        "const d=await r.json();st.className='status '+(d.success?'ok':'err');"
+        "st.textContent=d.success?'Saved! Custom screen updated.':d.message;"
+        "}catch(e){st.className='status err';st.textContent='Error saving';}}"
+
         // Event listeners
         "document.getElementById('search').onkeypress=e=>{if(e.key==='Enter'){e.preventDefault();searchCity();}};"
+        "document.getElementById('customEnabled').onchange=e=>{"
+        "document.getElementById('customFields').style.opacity=e.target.checked?'1':'0.5';};"
+        "document.getElementById('customBody').oninput=e=>{"
+        "document.getElementById('bodyCount').textContent=e.target.value.length;};"
         "loadLocations();"
         "</script>");
 
