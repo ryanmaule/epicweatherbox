@@ -4,12 +4,13 @@ Custom open-source firmware for the GeekMagic SmallTV-Ultra, transforming it int
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-ESP8266-orange.svg)
-![Version](https://img.shields.io/badge/version-1.0.0-green.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-green.svg)
 
 ## Features
 
 - **7-Day Weather Forecast** - Extended forecast with high/low temps and precipitation probability
 - **Multi-Location Support** - Monitor up to 5 locations, cycling through each automatically
+- **Custom Screen** - Display custom text messages in the rotation (header, body, footer)
 - **Beautiful Display** - Clean, modern UI with weather icons and smooth fonts
 - **Dark & Light Themes** - Auto-switches based on time of day, or set manually
 - **Web-Based Admin** - Full configuration via browser with live display preview
@@ -25,6 +26,7 @@ The display automatically cycles through multiple screens for each location:
 1. **Current Weather** - Large temperature display, weather condition, high/low temps, and current time
 2. **3-Day Forecast** - Days 1-3 with weather icons and temperature ranges
 3. **Extended Forecast** - Days 4-6 with weather icons and temperature ranges
+4. **Custom Screen** (optional) - Configurable text message with header, body, and footer
 
 > **Tip**: Visit `http://<device-ip>/preview` for a live browser simulation of the display!
 
@@ -78,6 +80,7 @@ pio run
 Access the admin panel at `http://<device-ip>/admin` to configure:
 
 - **Locations** - Add up to 5 cities with search
+- **Custom Screen** - Optional text screen with header, body, and footer
 - **Temperature Units** - Celsius or Fahrenheit
 - **Display Settings** - Brightness, screen cycle time
 - **Night Mode** - Start/end hours, dimmed brightness
