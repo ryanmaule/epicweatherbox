@@ -81,13 +81,25 @@ static int currentDisplayScreen = 0;
 static int currentDisplayLocation = 0;
 
 // Colors (dark theme)
-#define COLOR_BG       0x0841  // Very dark blue-gray
-#define COLOR_CARD     0x2104  // Dark card background
+// Dark theme (night)
+#define COLOR_BG_DARK      0x0841  // Very dark blue-gray
+#define COLOR_CARD_DARK    0x2104  // Dark card background
+
+// Light theme (day)
+#define COLOR_BG_LIGHT     0xE73C  // Light gray-blue
+#define COLOR_CARD_LIGHT   0xFFFF  // White card
+
+// Current active colors (set by getThemeBg/getThemeCard)
+#define COLOR_BG       0x0841  // Default: dark (overridden by functions below)
+#define COLOR_CARD     0x2104  // Default: dark
 #define COLOR_CYAN     0x07FF  // Bright cyan
 #define COLOR_WHITE    0xFFFF
 #define COLOR_GRAY     0x8410
 #define COLOR_ORANGE   0xFD20
 #define COLOR_BLUE     0x5D9F
+
+// Text colors for light theme
+#define COLOR_TEXT_DARK    0x2104  // Dark text for light backgrounds
 
 // Icon colors (pixel art style - BGR565 format)
 // BGR565: BBBBB GGGGGG RRRRR (5-6-5 bits)
@@ -531,8 +543,51 @@ void initTftMinimal() {
     tft.setTextColor(COLOR_GRAY);
     tft.drawString("v" FIRMWARE_VERSION, 120, 165, GFXFF);
 
+    // Status text at bottom
+    tft.setTextColor(0x4208);  // Dark gray
+    tft.drawString("Connecting...", 120, 228, GFXFF);
+
     Serial.println(F("[TFT] Boot screen displayed"));
     lastDisplayUpdate = millis();
+}
+
+// Update boot screen status text at bottom
+void updateBootScreenStatus(const char* status) {
+    // Clear the status area
+    tft.fillRect(0, 210, 240, 30, COLOR_BG_DARK);
+
+    // Draw new status
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(FSS9);
+    tft.setTextColor(COLOR_GRAY);
+    tft.drawString(status, 120, 228, GFXFF);
+}
+
+// Determine if we should use dark theme based on theme setting and time
+bool shouldUseDarkTheme() {
+    int themeMode = getThemeMode();
+
+    if (themeMode == 1) return true;   // Always dark
+    if (themeMode == 2) return false;  // Always light
+
+    // Auto mode: dark at night based on isDay from weather
+    const WeatherData& weather = getWeather(0);
+    return !weather.current.isDay;
+}
+
+// Get current theme background color
+uint16_t getThemeBg() {
+    return shouldUseDarkTheme() ? COLOR_BG_DARK : COLOR_BG_LIGHT;
+}
+
+// Get current theme card color
+uint16_t getThemeCard() {
+    return shouldUseDarkTheme() ? COLOR_CARD_DARK : COLOR_CARD_LIGHT;
+}
+
+// Get current theme text color (for text that needs to contrast with background)
+uint16_t getThemeText() {
+    return shouldUseDarkTheme() ? COLOR_WHITE : COLOR_TEXT_DARK;
 }
 
 // Draw current weather screen (no sprites - direct to TFT)
@@ -541,17 +596,21 @@ void drawCurrentWeather() {
     const WeatherLocation& location = getLocation(currentDisplayLocation);
     bool useCelsius = getUseCelsius();
 
-    // Background
-    tft.fillScreen(COLOR_BG);
+    // Background - use theme color based on day/night
+    uint16_t bgColor = getThemeBg();
+    uint16_t textColor = getThemeText();
+    tft.fillScreen(bgColor);
 
-    // Get time from NTP
-    unsigned long epoch = timeClient.getEpochTime();
-    int hours = (epoch % 86400L) / 3600;
-    int minutes = (epoch % 3600) / 60;
+    // Get time from NTP and apply timezone offset from primary location
+    // Note: Uses location 0's timezone, assuming that's where the device is located
+    const WeatherData& primaryWeather = getWeather(0);
+    long localEpoch = timeClient.getEpochTime() + primaryWeather.utcOffsetSeconds;
+    int hours = (localEpoch % 86400L) / 3600;
+    int minutes = (localEpoch % 3600) / 60;
 
     // Calculate date components
     // Simple day calculation from epoch (days since Jan 1, 1970)
-    unsigned long days = epoch / 86400;
+    unsigned long days = localEpoch / 86400;
     int year = 1970;
     while (true) {
         int daysInYear = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) ? 366 : 365;
@@ -748,28 +807,44 @@ void drawForecast(int startDay) {
     const WeatherLocation& location = getLocation(currentDisplayLocation);
     bool useCelsius = getUseCelsius();
 
-    tft.fillScreen(COLOR_BG);
+    // Background - use theme color based on day/night
+    uint16_t bgColor = getThemeBg();
+    uint16_t cardColor = getThemeCard();
+    tft.fillScreen(bgColor);
 
-    // Header: Location left, Time right
-    tft.setFreeFont(FSSB12);
+    // Header: Time left (blue) with smaller AM/PM, Globe + Location right (grey)
+    // Matches main screen style for consistency
 
-    // Location name (left aligned)
-    tft.setTextDatum(TL_DATUM);
-    tft.setTextColor(COLOR_CYAN);
-    tft.drawString(location.name, 8, 8, GFXFF);
-
-    // Time (right aligned)
-    unsigned long epoch = timeClient.getEpochTime();
-    int hours = (epoch % 86400L) / 3600;
-    int minutes = (epoch % 3600) / 60;
+    // Time (left aligned, blue)
+    const WeatherData& primaryWeather = getWeather(0);
+    long localEpoch = timeClient.getEpochTime() + primaryWeather.utcOffsetSeconds;
+    int hours = (localEpoch % 86400L) / 3600;
+    int minutes = (localEpoch % 3600) / 60;
     int h12 = hours % 12;
     if (h12 == 0) h12 = 12;
     const char* ampm = (hours < 12) ? "AM" : "PM";
-    char timeStr[16];
-    snprintf(timeStr, sizeof(timeStr), "%d:%02d %s", h12, minutes, ampm);
-    tft.setTextDatum(TR_DATUM);
+
+    // Draw time numbers
+    char timeNumStr[16];
+    snprintf(timeNumStr, sizeof(timeNumStr), "%d:%02d", h12, minutes);
+    tft.setFreeFont(FSSB12);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(COLOR_CYAN);
+    tft.drawString(timeNumStr, 8, 8, GFXFF);
+
+    // Draw AM/PM smaller, top-aligned with time
+    int16_t timeNumW = tft.textWidth(timeNumStr, GFXFF);
+    tft.setFreeFont(FSS9);
+    tft.drawString(ampm, 8 + timeNumW + 4, 8, GFXFF);
+
+    // Globe icon + Location name (right aligned, grey)
+    tft.setFreeFont(FSS9);
+    int16_t locW = tft.textWidth(location.name, GFXFF);
+    int locX = 232 - locW;
+    drawGlobe(locX - 16, 8, COLOR_GRAY);
+    tft.setTextDatum(TL_DATUM);
     tft.setTextColor(COLOR_GRAY);
-    tft.drawString(timeStr, 232, 8, GFXFF);
+    tft.drawString(location.name, locX, 8, GFXFF);
 
     // Draw 3 forecast cards
     int cardW = 75;
@@ -785,8 +860,8 @@ void drawForecast(int startDay) {
         int x = cardStartX + i * (cardW + gap);
         int y = 35;
 
-        // Card background
-        tft.fillRoundRect(x, y, cardW, cardH, 4, COLOR_CARD);
+        // Card background - use theme color
+        tft.fillRoundRect(x, y, cardW, cardH, 4, cardColor);
 
         // Day name - smooth font at top of card
         tft.setTextDatum(TC_DATUM);
@@ -1005,6 +1080,11 @@ void setup() {
         Serial.printf_P(PSTR("[BOOT] IP Address: %s\n"), WiFi.localIP().toString().c_str());
         Serial.printf_P(PSTR("[BOOT] Web UI: http://%s/\n"), WiFi.localIP().toString().c_str());
         Serial.printf_P(PSTR("[BOOT] OTA Update: http://%s/update\n"), WiFi.localIP().toString().c_str());
+
+        // Give user time to see the IP address on boot screen
+#if ENABLE_TFT_TEST
+        delay(2000);
+#endif
     }
     Serial.println(F("================================================"));
 }
@@ -1108,6 +1188,11 @@ void setupWiFi() {
     Serial.printf_P(PSTR("[WIFI] IP: %s\n"), WiFi.localIP().toString().c_str());
     Serial.printf_P(PSTR("[WIFI] RSSI: %d dBm\n"), WiFi.RSSI());
     Serial.printf_P(PSTR("[WIFI] MAC: %s\n"), WiFi.macAddress().c_str());
+
+    // Update boot screen with IP address
+#if ENABLE_TFT_TEST
+    updateBootScreenStatus(WiFi.localIP().toString().c_str());
+#endif
 }
 
 /**
@@ -1816,7 +1901,7 @@ void handleAdmin() {
     html += String(MAX_WEATHER_LOCATIONS);
     html += F(" locations. Current: ");
     html += String(locCount);
-    html += F("</p></div>");
+    html += F("</p><p class='hint'><strong>Note:</strong> Location 1 is used for the time display timezone.</p></div>");
 
     // Settings - Temperature
     html += F("<div class='card'><h3>Settings</h3>"

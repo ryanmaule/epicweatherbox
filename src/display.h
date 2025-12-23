@@ -98,6 +98,12 @@ void initDisplay();
 void drawBootScreen();
 
 /**
+ * Update boot screen status text (bottom line)
+ * Use to show "Connecting...", IP address, etc.
+ */
+void updateBootStatus(const char* status);
+
+/**
  * Play boot GIF animation (if uploaded)
  * @return true if GIF was played, false if no GIF exists
  */
@@ -108,6 +114,26 @@ bool playBootGif();
  * Shows time at top and animated GIF below
  */
 void drawGifScreen();
+
+/**
+ * Stop the loop GIF playback
+ * Call when switching away from GIF screen
+ */
+void stopLoopGif();
+
+/**
+ * Invalidate GIF cache to force re-validation
+ * Call after uploading new GIF files
+ */
+void invalidateGifCache();
+
+/**
+ * Check if a GIF file is valid and safe to play
+ * Validates: file size (<512KB), dimensions (<=240x240), GIF header, decodability
+ * @param path File path to check
+ * @return true if valid
+ */
+bool validateGif(const char* path);
 
 /**
  * Check if a GIF file exists

@@ -10,6 +10,7 @@
 #include "weather_icons_rgb565.h"
 #include <NTPClient.h>
 #include <LittleFS.h>
+#include <AnimatedGIF.h>
 
 // External NTP client (from main.cpp)
 extern NTPClient timeClient;
@@ -32,6 +33,102 @@ static unsigned long lastFrameTime = 0;
 static int displayBrightness = BRIGHTNESS_DEFAULT;
 static bool displayOn = true;
 static bool needsRedraw = true;
+
+// =============================================================================
+// ANIMATED GIF SUPPORT
+// =============================================================================
+
+static AnimatedGIF gif;
+static File gifFile;
+static int gifOffsetX = 0;  // X offset for centering GIF on screen
+static int gifOffsetY = 0;  // Y offset for GIF placement
+
+// GIF file callbacks for AnimatedGIF library
+void* GIFOpenFile(const char* fname, int32_t* pSize) {
+    gifFile = LittleFS.open(fname, "r");
+    if (!gifFile) {
+        Serial.printf("[GIF] Failed to open: %s\n", fname);
+        return nullptr;
+    }
+    *pSize = gifFile.size();
+    Serial.printf("[GIF] Opened %s, size: %d bytes\n", fname, *pSize);
+    return &gifFile;
+}
+
+void GIFCloseFile(void* pHandle) {
+    if (gifFile) {
+        gifFile.close();
+    }
+}
+
+int32_t GIFReadFile(GIFFILE* pFile, uint8_t* pBuf, int32_t iLen) {
+    int32_t iBytesRead = 0;
+    if (gifFile) {
+        iBytesRead = gifFile.read(pBuf, iLen);
+    }
+    return iBytesRead;
+}
+
+int32_t GIFSeekFile(GIFFILE* pFile, int32_t iPosition) {
+    if (gifFile) {
+        gifFile.seek(iPosition);
+        return iPosition;
+    }
+    return -1;
+}
+
+// Draw callback - called for each line of each frame
+void GIFDraw(GIFDRAW* pDraw) {
+    uint8_t* s;
+    uint16_t* d;
+    int x, y, iWidth;
+
+    iWidth = pDraw->iWidth;
+    if (iWidth + pDraw->iX > SCREEN_WIDTH)
+        iWidth = SCREEN_WIDTH - pDraw->iX;
+
+    if (iWidth <= 0) return;
+
+    // Calculate actual y position with offset
+    y = pDraw->iY + pDraw->y + gifOffsetY;
+    if (y < 0 || y >= SCREEN_HEIGHT) return;
+
+    s = pDraw->pPixels;
+
+    // Handle transparent pixels if needed
+    if (pDraw->ucDisposalMethod == 2) {
+        // Restore to background - draw transparent pixels
+        for (x = 0; x < iWidth; x++) {
+            if (s[x] == pDraw->ucTransparent) {
+                // Skip transparent pixels
+                continue;
+            }
+        }
+    }
+
+    // Draw the line directly to TFT using palette lookup
+    uint16_t lineBuffer[240];  // Max width line buffer
+    uint16_t* pPalette = pDraw->pPalette;
+
+    for (x = 0; x < iWidth; x++) {
+        if (pDraw->ucHasTransparency && s[x] == pDraw->ucTransparent) {
+            // For transparent pixels, keep existing - read from TFT would be slow
+            // so we just draw background color
+            lineBuffer[x] = 0x0841;  // Dark background
+        } else {
+            lineBuffer[x] = pPalette[s[x]];
+        }
+    }
+
+    // Draw the line at the correct position
+    int drawX = pDraw->iX + gifOffsetX;
+    if (drawX < 0) {
+        lineBuffer[0] = lineBuffer[-drawX];  // Adjust for negative offset
+        drawX = 0;
+    }
+
+    tft.pushImage(drawX, y, iWidth, 1, lineBuffer);
+}
 
 // =============================================================================
 // RGB565 COLOR WEATHER ICONS (32x32)
@@ -90,6 +187,11 @@ void updateDisplay() {
     if (now - lastScreenChange >= (unsigned long)(getScreenCycleTime() * 1000)) {
         lastScreenChange = now;
         needsRedraw = true;
+
+        // Stop loop GIF if we're switching away from GIF screen
+        if (currentScreen == SCREEN_GIF_ANIMATION) {
+            stopLoopGif();
+        }
 
         // Determine how many screens to cycle through
         bool gifEnabled = getGifScreenEnabled() && gifFileExists("/screen.gif");
@@ -424,13 +526,26 @@ void drawBootScreen() {
     tft.setTextColor(0x8410);  // Gray
     tft.drawString("v" FIRMWARE_VERSION, SCREEN_WIDTH / 2, 165);
 
-    // Small credit/loading text at bottom
+    // Status text at bottom (will be updated with IP)
     tft.setFreeFont(NULL);  // Default font
     tft.setTextSize(1);
     tft.setTextColor(0x4208);  // Dark gray
-    tft.drawString("Starting...", SCREEN_WIDTH / 2, 220);
+    tft.drawString("Connecting...", SCREEN_WIDTH / 2, 228);
 
     Serial.println(F("[DISPLAY] Boot screen displayed"));
+}
+
+// Update the boot screen status text (bottom line)
+void updateBootStatus(const char* status) {
+    // Clear the status area
+    tft.fillRect(0, 215, SCREEN_WIDTH, 25, 0x0841);
+
+    // Draw new status
+    tft.setFreeFont(NULL);
+    tft.setTextSize(1);
+    tft.setTextColor(0x8410);  // Brighter gray for IP
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString(status, SCREEN_WIDTH / 2, 228);
 }
 
 // =============================================================================
@@ -445,6 +560,97 @@ bool gifFileExists(const char* path) {
     return LittleFS.exists(path);
 }
 
+// GIF size limits to prevent memory issues
+#define MAX_GIF_FILE_SIZE (512 * 1024)   // 512KB max file size
+#define MAX_GIF_DIMENSION 240             // Max width/height (screen size)
+
+// Boot crash detection file
+#define BOOT_CRASH_FLAG "/boot_crash.flag"
+
+// Check if a GIF file is valid and safe to play
+bool validateGif(const char* path) {
+    if (!LittleFS.exists(path)) {
+        return false;
+    }
+
+    File f = LittleFS.open(path, "r");
+    if (!f) {
+        Serial.printf("[GIF] Cannot open %s for validation\n", path);
+        return false;
+    }
+
+    // Check file size
+    size_t fileSize = f.size();
+    if (fileSize > MAX_GIF_FILE_SIZE) {
+        Serial.printf("[GIF] %s too large: %d bytes (max %d)\n", path, fileSize, MAX_GIF_FILE_SIZE);
+        f.close();
+        return false;
+    }
+
+    // Check GIF header magic bytes
+    uint8_t header[6];
+    if (f.read(header, 6) != 6) {
+        Serial.printf("[GIF] %s: Cannot read header\n", path);
+        f.close();
+        return false;
+    }
+    f.close();
+
+    // Valid GIF starts with "GIF87a" or "GIF89a"
+    if (memcmp(header, "GIF87a", 6) != 0 && memcmp(header, "GIF89a", 6) != 0) {
+        Serial.printf("[GIF] %s: Invalid GIF header\n", path);
+        return false;
+    }
+
+    // Try to open with AnimatedGIF to validate dimensions
+    gif.begin(GIF_PALETTE_RGB565_BE);
+    if (gif.open(path, GIFOpenFile, GIFCloseFile, GIFReadFile, GIFSeekFile, GIFDraw)) {
+        int w = gif.getCanvasWidth();
+        int h = gif.getCanvasHeight();
+        gif.close();
+
+        if (w > MAX_GIF_DIMENSION || h > MAX_GIF_DIMENSION) {
+            Serial.printf("[GIF] %s: Dimensions too large: %dx%d (max %d)\n", path, w, h, MAX_GIF_DIMENSION);
+            return false;
+        }
+
+        Serial.printf("[GIF] %s validated: %dx%d, %d bytes\n", path, w, h, fileSize);
+        return true;
+    } else {
+        Serial.printf("[GIF] %s: Failed to decode, error: %d\n", path, gif.getLastError());
+        return false;
+    }
+}
+
+// Set boot crash flag before attempting GIF playback
+void setBootCrashFlag() {
+    File f = LittleFS.open(BOOT_CRASH_FLAG, "w");
+    if (f) {
+        f.write('1');
+        f.close();
+    }
+}
+
+// Clear boot crash flag after successful GIF playback
+void clearBootCrashFlag() {
+    if (LittleFS.exists(BOOT_CRASH_FLAG)) {
+        LittleFS.remove(BOOT_CRASH_FLAG);
+    }
+}
+
+// Check if last boot crashed during GIF playback
+bool checkBootCrashFlag() {
+    return LittleFS.exists(BOOT_CRASH_FLAG);
+}
+
+// Delete problematic GIF that caused boot crash
+void deleteProblematicGif(const char* path) {
+    if (LittleFS.exists(path)) {
+        LittleFS.remove(path);
+        Serial.printf("[GIF] Deleted problematic GIF: %s\n", path);
+    }
+}
+
 bool playBootGif() {
     // Check if boot GIF exists
     if (!gifFileExists(BOOT_GIF_PATH)) {
@@ -452,67 +658,177 @@ bool playBootGif() {
         return false;
     }
 
-    Serial.println(F("[DISPLAY] Playing boot GIF..."));
-
-    // TODO: Implement actual GIF playback with AnimatedGIF library
-    // For now, just indicate GIF would play here
-    // The actual implementation requires adding the AnimatedGIF library
-    // and implementing the callback system for TFT_eSPI
-
-    // Placeholder: Show "Loading..." text for now
-    tft.fillScreen(0x0841);
-    tft.setTextColor(0x07FF);
-    tft.setTextDatum(MC_DATUM);
-    tft.setFreeFont(&FreeSans12pt7b);
-    tft.drawString("Loading...", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
-
-    delay(1000);  // Placeholder delay
-
-    return true;
-}
-
-void drawGifScreen() {
-    // Get current time
-    unsigned long epochTime = timeClient.getEpochTime();
-    int hours = (epochTime % 86400L) / 3600;
-    int minutes = (epochTime % 3600) / 60;
-
-    // Clear background
-    sprite.fillSprite(0x0841);  // Dark background
-
-    // Draw time header (60px tall)
-    sprite.setTextColor(COLOR_TEXT_WHITE);
-    sprite.setTextDatum(TC_DATUM);
-    sprite.setFreeFont(&FreeSansBold18pt7b);
-
-    char timeStr[12];
-    int h12 = hours % 12;
-    if (h12 == 0) h12 = 12;
-    const char* ampm = (hours < 12) ? "AM" : "PM";
-    snprintf(timeStr, sizeof(timeStr), "%d:%02d %s", h12, minutes, ampm);
-    sprite.drawString(timeStr, SCREEN_WIDTH / 2, 15);
-
-    // Draw separator line
-    sprite.drawFastHLine(20, 55, SCREEN_WIDTH - 40, 0x2104);
-
-    // GIF area starts at y=60, height=180
-    // Check if screen GIF exists
-    if (!gifFileExists(SCREEN_GIF_PATH)) {
-        // No GIF - show placeholder
-        sprite.setTextColor(0x4208);
-        sprite.setFreeFont(&FreeSans9pt7b);
-        sprite.setTextDatum(MC_DATUM);
-        sprite.drawString("No GIF uploaded", SCREEN_WIDTH / 2, 140);
-        sprite.drawString("Upload via Admin panel", SCREEN_WIDTH / 2, 160);
-    } else {
-        // TODO: Render GIF frame here
-        // Will be implemented with AnimatedGIF library
-        sprite.setTextColor(0x4208);
-        sprite.setFreeFont(&FreeSans9pt7b);
-        sprite.setTextDatum(MC_DATUM);
-        sprite.drawString("[GIF Animation]", SCREEN_WIDTH / 2, 150);
+    // Check for previous boot crash - if so, delete the GIF and skip
+    if (checkBootCrashFlag()) {
+        Serial.println(F("[GIF] Previous boot crashed! Deleting boot GIF to prevent boot loop."));
+        deleteProblematicGif(BOOT_GIF_PATH);
+        clearBootCrashFlag();
+        return false;
     }
 
-    // Push to display
-    sprite.pushSprite(0, 0);
+    // Validate GIF before playing
+    if (!validateGif(BOOT_GIF_PATH)) {
+        Serial.println(F("[GIF] Boot GIF validation failed, deleting"));
+        deleteProblematicGif(BOOT_GIF_PATH);
+        return false;
+    }
+
+    Serial.println(F("[DISPLAY] Playing boot GIF..."));
+
+    // Set crash flag before attempting playback
+    setBootCrashFlag();
+
+    // Initialize the GIF decoder
+    gif.begin(GIF_PALETTE_RGB565_BE);  // Big-endian for TFT_eSPI
+
+    if (gif.open(BOOT_GIF_PATH, GIFOpenFile, GIFCloseFile, GIFReadFile, GIFSeekFile, GIFDraw)) {
+        Serial.printf("[GIF] Boot GIF: %dx%d\n", gif.getCanvasWidth(), gif.getCanvasHeight());
+
+        // Center the GIF on screen
+        gifOffsetX = (SCREEN_WIDTH - gif.getCanvasWidth()) / 2;
+        gifOffsetY = (SCREEN_HEIGHT - gif.getCanvasHeight()) / 2;
+
+        // Clear screen with dark background
+        tft.fillScreen(0x0841);
+
+        // Play through all frames once (or loop for a set time)
+        unsigned long startTime = millis();
+        unsigned long maxPlayTime = 5000;  // Max 5 seconds for boot GIF
+
+        while (millis() - startTime < maxPlayTime) {
+            int frameDelay = gif.playFrame(true, nullptr);
+            if (frameDelay < 0) {
+                // End of animation - for boot, we only play once
+                break;
+            }
+            // Small yield for WiFi/system
+            yield();
+        }
+
+        gif.close();
+
+        // Clear crash flag - we made it through successfully!
+        clearBootCrashFlag();
+
+        Serial.println(F("[GIF] Boot GIF complete"));
+        return true;
+    } else {
+        Serial.printf("[GIF] Failed to open boot GIF, error: %d\n", gif.getLastError());
+        clearBootCrashFlag();
+        return false;
+    }
+}
+
+// Static state for loop GIF playback
+static bool loopGifActive = false;
+static unsigned long loopGifStartTime = 0;
+static bool screenGifValidated = false;
+static bool screenGifValid = false;
+
+void drawGifScreen() {
+    // Apply timezone offset from primary location
+    const WeatherData& weather = getWeather(0);
+    long localEpoch = timeClient.getEpochTime() + weather.utcOffsetSeconds;
+    int hours = (localEpoch % 86400L) / 3600;
+    int minutes = (localEpoch % 3600) / 60;
+
+    // Check if screen GIF exists and is valid (uses module-level statics)
+    if (!screenGifValidated) {
+        screenGifValid = gifFileExists(SCREEN_GIF_PATH) && validateGif(SCREEN_GIF_PATH);
+        screenGifValidated = true;
+        if (!screenGifValid && gifFileExists(SCREEN_GIF_PATH)) {
+            // Invalid GIF - delete it
+            deleteProblematicGif(SCREEN_GIF_PATH);
+        }
+    }
+
+    if (!screenGifValid) {
+        // No GIF or invalid - show placeholder with time header
+        tft.fillScreen(0x0841);  // Dark background
+
+        // Draw time header
+        tft.setTextColor(COLOR_TEXT_WHITE);
+        tft.setTextDatum(TC_DATUM);
+        tft.setFreeFont(&FreeSansBold18pt7b);
+
+        char timeStr[12];
+        int h12 = hours % 12;
+        if (h12 == 0) h12 = 12;
+        const char* ampm = (hours < 12) ? "AM" : "PM";
+        snprintf(timeStr, sizeof(timeStr), "%d:%02d %s", h12, minutes, ampm);
+        tft.drawString(timeStr, SCREEN_WIDTH / 2, 15);
+
+        // Draw separator line
+        tft.drawFastHLine(20, 55, SCREEN_WIDTH - 40, 0x2104);
+
+        // No GIF placeholder
+        tft.setTextColor(0x4208);
+        tft.setFreeFont(&FreeSans9pt7b);
+        tft.setTextDatum(MC_DATUM);
+        tft.drawString("No GIF uploaded", SCREEN_WIDTH / 2, 140);
+        tft.drawString("Upload via Admin panel", SCREEN_WIDTH / 2, 160);
+        return;
+    }
+
+    // Start GIF playback if not already active
+    if (!loopGifActive) {
+        gif.begin(GIF_PALETTE_RGB565_BE);
+        if (gif.open(SCREEN_GIF_PATH, GIFOpenFile, GIFCloseFile, GIFReadFile, GIFSeekFile, GIFDraw)) {
+            Serial.printf("[GIF] Screen GIF: %dx%d\n", gif.getCanvasWidth(), gif.getCanvasHeight());
+
+            // Position GIF in lower portion of screen (below time header)
+            int gifHeight = gif.getCanvasHeight();
+            int gifWidth = gif.getCanvasWidth();
+            gifOffsetX = (SCREEN_WIDTH - gifWidth) / 2;
+            gifOffsetY = 60 + (180 - gifHeight) / 2;  // Center in GIF area (y=60, h=180)
+
+            // Clear screen and draw time header once
+            tft.fillScreen(0x0841);
+
+            // Draw time header
+            tft.setTextColor(COLOR_TEXT_WHITE);
+            tft.setTextDatum(TC_DATUM);
+            tft.setFreeFont(&FreeSansBold18pt7b);
+
+            char timeStr[12];
+            int h12 = hours % 12;
+            if (h12 == 0) h12 = 12;
+            const char* ampm = (hours < 12) ? "AM" : "PM";
+            snprintf(timeStr, sizeof(timeStr), "%d:%02d %s", h12, minutes, ampm);
+            tft.drawString(timeStr, SCREEN_WIDTH / 2, 15);
+
+            // Draw separator line
+            tft.drawFastHLine(20, 55, SCREEN_WIDTH - 40, 0x2104);
+
+            loopGifActive = true;
+            loopGifStartTime = millis();
+        } else {
+            Serial.printf("[GIF] Failed to open screen GIF, error: %d\n", gif.getLastError());
+            return;
+        }
+    }
+
+    // Play one frame of the GIF
+    if (loopGifActive) {
+        int frameDelay = gif.playFrame(true, nullptr);
+        if (frameDelay < 0) {
+            // End of animation - reset to loop
+            gif.reset();
+        }
+    }
+}
+
+void stopLoopGif() {
+    if (loopGifActive) {
+        gif.close();
+        loopGifActive = false;
+        Serial.println(F("[GIF] Loop GIF stopped"));
+    }
+}
+
+// Call this after uploading a new GIF to force re-validation
+void invalidateGifCache() {
+    screenGifValidated = false;
+    screenGifValid = false;
+    Serial.println(F("[GIF] GIF cache invalidated"));
 }

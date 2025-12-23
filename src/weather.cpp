@@ -226,6 +226,9 @@ bool fetchWeather(float lat, float lon, WeatherData& data) {
         strncpy(data.timezone, tz, sizeof(data.timezone) - 1);
     }
 
+    // Get UTC offset for time display
+    data.utcOffsetSeconds = doc["utc_offset_seconds"] | 0;
+
     // Parse current weather
     JsonObject current = doc["current_weather"];
     if (current) {

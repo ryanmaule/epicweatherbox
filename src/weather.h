@@ -102,6 +102,7 @@ struct WeatherData {
     float latitude;
     float longitude;
     char timezone[32];          // Timezone string
+    int utcOffsetSeconds;       // UTC offset in seconds (for NTP)
 
     // Current conditions
     CurrentWeather current;
