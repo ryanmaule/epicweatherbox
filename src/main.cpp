@@ -2768,11 +2768,11 @@ void handleAdmin() {
     const char* HTML_FILE = "/admin.html.gz";
 
     // Try to serve from LittleFS first (gzipped)
+    // Note: streamFile() auto-adds Content-Encoding:gzip for .gz files
     if (LittleFS.exists(HTML_FILE)) {
         File f = LittleFS.open(HTML_FILE, "r");
         if (f) {
             size_t fileSize = f.size();
-            server.sendHeader("Content-Encoding", "gzip");
             server.streamFile(f, "text/html");
             f.close();
             Serial.printf("[ADMIN] Served %s (%u bytes gzipped)\n", HTML_FILE, fileSize);
@@ -2789,7 +2789,6 @@ void handleAdmin() {
         File f = LittleFS.open(HTML_FILE, "r");
         if (f) {
             size_t fileSize = f.size();
-            server.sendHeader("Content-Encoding", "gzip");
             server.streamFile(f, "text/html");
             f.close();
             Serial.printf("[ADMIN] Served %s after re-provision (%u bytes)\n", HTML_FILE, fileSize);
