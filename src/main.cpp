@@ -597,10 +597,10 @@ void initTftMinimal() {
 
 // Update boot screen status text at bottom
 void updateBootScreenStatus(const char* status) {
-    // Clear the status area
-    tft.fillRect(0, 200, 240, 40, COLOR_BG_DARK);
+    // Clear the status area (y=195 to bottom)
+    tft.fillRect(0, 195, 240, 45, COLOR_BG_DARK);
 
-    // Draw new status
+    // Draw new status at y=218 (4+ pixels from bottom edge)
     tft.setTextDatum(MC_DATUM);
     tft.setFreeFont(FSS9);
     tft.setTextColor(COLOR_GRAY);
@@ -608,19 +608,23 @@ void updateBootScreenStatus(const char* status) {
 }
 
 // Show IP address on boot screen (called after WiFi connects)
+// Shows IP in gray first, then transitions to cyan for emphasis
 void showBootScreenIP(const char* ip) {
-    // Clear bottom area for IP
-    tft.fillRect(0, 200, 240, 40, COLOR_BG_DARK);
+    // Clear bottom area for IP display
+    tft.fillRect(0, 195, 240, 45, COLOR_BG_DARK);
 
-    // Draw "Connected" status
     tft.setTextDatum(MC_DATUM);
     tft.setFreeFont(FSS9);
-    tft.setTextColor(COLOR_GRAY);
-    tft.drawString("Connected", 120, 210, GFXFF);
 
-    // Draw IP address in cyan
+    // First: show IP in gray
+    tft.setTextColor(COLOR_GRAY);
+    tft.drawString(ip, 120, 218, GFXFF);  // y=218 keeps text 4+ pixels from bottom edge
+
+    delay(400);
+
+    // Then: redraw IP in cyan for emphasis (same position)
     tft.setTextColor(COLOR_CYAN);
-    tft.drawString(ip, 120, 228, GFXFF);
+    tft.drawString(ip, 120, 218, GFXFF);
 }
 
 // Determine if we should use dark theme based on theme setting and time
@@ -1323,7 +1327,463 @@ void drawCustomScreen() {
     }
 }
 
+// =============================================================================
+// COUNTDOWN SCREEN
+// =============================================================================
+
+// Calculate Easter Sunday for a given year (Anonymous Gregorian algorithm / Computus)
+void calculateEaster(int year, int* month, int* day) {
+    int a = year % 19;
+    int b = year / 100;
+    int c = year % 100;
+    int d = b / 4;
+    int e = b % 4;
+    int f = (b + 8) / 25;
+    int g = (b - f + 1) / 3;
+    int h = (19 * a + b - d - g + 15) % 30;
+    int i = c / 4;
+    int k = c % 4;
+    int l = (32 + 2 * e + 2 * i - h - k) % 7;
+    int m = (a + 11 * h + 22 * l) / 451;
+    *month = (h + l - 7 * m + 114) / 31;
+    *day = ((h + l - 7 * m + 114) % 31) + 1;
+}
+
+// Days in each month (handles leap years)
+int daysInMonth(int month, int year) {
+    static const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (month == 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) {
+        return 29;  // Leap year February
+    }
+    return days[month - 1];
+}
+
+// Convert date to days since epoch (simple calculation)
+long dateToDays(int year, int month, int day) {
+    long days = 0;
+    for (int y = 1970; y < year; y++) {
+        days += (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 366 : 365;
+    }
+    for (int m = 1; m < month; m++) {
+        days += daysInMonth(m, year);
+    }
+    days += day;
+    return days;
+}
+
+// Calculate days until target date
+int daysUntil(int targetYear, int targetMonth, int targetDay,
+              int currentYear, int currentMonth, int currentDay) {
+    long targetDays = dateToDays(targetYear, targetMonth, targetDay);
+    long currentDays = dateToDays(currentYear, currentMonth, currentDay);
+    return (int)(targetDays - currentDays);
+}
+
+// Get next occurrence of an event (handles recurring events)
+void getNextEventDate(const CountdownEvent& event, int currentYear, int currentMonth, int currentDay,
+                      int* targetYear, int* targetMonth, int* targetDay) {
+    switch (event.type) {
+        case COUNTDOWN_EASTER:
+            calculateEaster(currentYear, targetMonth, targetDay);
+            *targetYear = currentYear;
+            // If Easter has passed, get next year's
+            if (*targetMonth < currentMonth ||
+                (*targetMonth == currentMonth && *targetDay <= currentDay)) {
+                calculateEaster(currentYear + 1, targetMonth, targetDay);
+                *targetYear = currentYear + 1;
+            }
+            break;
+
+        case COUNTDOWN_HALLOWEEN:
+            *targetMonth = 10; *targetDay = 31;
+            *targetYear = currentYear;
+            if (currentMonth > 10 || (currentMonth == 10 && currentDay > 31)) {
+                *targetYear = currentYear + 1;
+            }
+            break;
+
+        case COUNTDOWN_VALENTINE:
+            *targetMonth = 2; *targetDay = 14;
+            *targetYear = currentYear;
+            if (currentMonth > 2 || (currentMonth == 2 && currentDay > 14)) {
+                *targetYear = currentYear + 1;
+            }
+            break;
+
+        case COUNTDOWN_CHRISTMAS:
+            *targetMonth = 12; *targetDay = 25;
+            *targetYear = currentYear;
+            if (currentMonth == 12 && currentDay > 25) {
+                *targetYear = currentYear + 1;
+            }
+            break;
+
+        case COUNTDOWN_BIRTHDAY:
+        case COUNTDOWN_CUSTOM:
+        default:
+            *targetMonth = event.month;
+            *targetDay = event.day;
+            *targetYear = currentYear;
+            // Recurring - if passed this year, use next year
+            if (currentMonth > event.month ||
+                (currentMonth == event.month && currentDay > event.day)) {
+                *targetYear = currentYear + 1;
+            }
+            break;
+    }
+}
+
+// Get event type name
+const char* getEventTypeName(uint8_t type) {
+    switch (type) {
+        case COUNTDOWN_BIRTHDAY: return "Birthday";
+        case COUNTDOWN_EASTER: return "Easter";
+        case COUNTDOWN_HALLOWEEN: return "Halloween";
+        case COUNTDOWN_VALENTINE: return "Valentine's";
+        case COUNTDOWN_CHRISTMAS: return "Christmas";
+        case COUNTDOWN_CUSTOM: return "Event";
+        default: return "Event";
+    }
+}
+
+// Draw countdown event icon (16x16 pixels)
+void drawCountdownIcon(int x, int y, uint8_t type, uint16_t color) {
+    switch (type) {
+        case COUNTDOWN_BIRTHDAY:
+            // Cake icon
+            tft.fillRect(x + 6, y + 2, 4, 4, TFT_YELLOW);  // Candle flame
+            tft.fillRect(x + 7, y + 5, 2, 4, color);        // Candle
+            tft.fillRoundRect(x + 2, y + 9, 12, 6, 2, color);  // Cake top
+            break;
+
+        case COUNTDOWN_EASTER:
+            // Bunny/egg icon
+            tft.fillCircle(x + 8, y + 10, 5, color);  // Body
+            tft.fillRect(x + 4, y + 2, 3, 6, color);  // Left ear
+            tft.fillRect(x + 9, y + 2, 3, 6, color);  // Right ear
+            break;
+
+        case COUNTDOWN_HALLOWEEN:
+            // Pumpkin icon
+            tft.fillRect(x + 6, y + 1, 4, 3, TFT_GREEN);  // Stem
+            tft.fillCircle(x + 8, y + 10, 6, TFT_ORANGE);  // Pumpkin
+            break;
+
+        case COUNTDOWN_VALENTINE:
+            // Heart icon
+            tft.fillCircle(x + 5, y + 6, 4, TFT_RED);   // Left lobe
+            tft.fillCircle(x + 11, y + 6, 4, TFT_RED);  // Right lobe
+            tft.fillTriangle(x + 1, y + 8, x + 15, y + 8, x + 8, y + 15, TFT_RED);  // Bottom
+            break;
+
+        case COUNTDOWN_CHRISTMAS:
+            // Tree icon
+            tft.fillTriangle(x + 8, y + 1, x + 2, y + 7, x + 14, y + 7, TFT_GREEN);   // Top
+            tft.fillTriangle(x + 8, y + 4, x + 1, y + 11, x + 15, y + 11, TFT_GREEN); // Middle
+            tft.fillRect(x + 6, y + 11, 4, 4, 0x8420);  // Trunk (brown)
+            break;
+
+        case COUNTDOWN_CUSTOM:
+        default:
+            // Calendar icon
+            tft.drawRect(x + 2, y + 3, 12, 11, color);  // Box
+            tft.drawLine(x + 2, y + 6, x + 13, y + 6, color);  // Divider
+            tft.fillRect(x + 4, y + 1, 2, 4, color);  // Left ring
+            tft.fillRect(x + 10, y + 1, 2, 4, color);  // Right ring
+            break;
+    }
+}
+
+// Draw countdown screen for a specific countdown event
+void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScreens) {
+    const CountdownEvent& event = getCountdown(countdownIndex);
+
+    // Get theme colors
+    int yOff = -getUiNudgeY();
+    uint16_t bgColor = getThemeBg();
+    uint16_t cardColor = getThemeCard();
+    uint16_t cyanColor = getThemeCyan();
+    uint16_t grayColor = getThemeGray();
+    uint16_t textColor = getThemeText();
+
+    tft.fillScreen(bgColor);
+
+    // Get current time from primary location
+    const WeatherData& primaryWeather = getWeather(0);
+    long localEpoch = timeClient.getEpochTime() + primaryWeather.utcOffsetSeconds;
+    int hours = (localEpoch % 86400L) / 3600;
+    int minutes = (localEpoch % 3600) / 60;
+    int h12 = hours % 12;
+    if (h12 == 0) h12 = 12;
+    const char* ampm = (hours < 12) ? "AM" : "PM";
+
+    // Calculate current date from epoch
+    unsigned long daysFromEpoch = localEpoch / 86400;
+    int year = 1970;
+    while (true) {
+        int daysInYear = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) ? 366 : 365;
+        if (daysFromEpoch < (unsigned long)daysInYear) break;
+        daysFromEpoch -= daysInYear;
+        year++;
+    }
+    int month = 1;
+    while (daysFromEpoch >= (unsigned long)daysInMonth(month, year)) {
+        daysFromEpoch -= daysInMonth(month, year);
+        month++;
+    }
+    int day = daysFromEpoch + 1;
+
+    // HEADER: Time (left) + "Countdown" (right)
+    char timeStr[16];
+    snprintf(timeStr, sizeof(timeStr), "%d:%02d", h12, minutes);
+    tft.setFreeFont(FSSB12);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(cyanColor);
+    tft.drawString(timeStr, 8, 8 + yOff, GFXFF);
+
+    int16_t timeW = tft.textWidth(timeStr, GFXFF);
+    tft.setFreeFont(FSS9);
+    tft.drawString(ampm, 8 + timeW + 4, 10 + yOff, GFXFF);
+
+    tft.setTextDatum(TR_DATUM);
+    tft.setTextColor(grayColor);
+    tft.drawString("Countdown", 232, 10 + yOff, GFXFF);
+
+    // Get target date and days until
+    int targetYear, targetMonth, targetDay;
+    getNextEventDate(event, year, month, day, &targetYear, &targetMonth, &targetDay);
+    int daysLeft = daysUntil(targetYear, targetMonth, targetDay, year, month, day);
+
+    // Draw icon (centered, large area)
+    drawCountdownIcon(104, 45 + yOff, event.type, cyanColor);
+
+    // Event title
+    const char* title = (strlen(event.title) > 0) ? event.title : getEventTypeName(event.type);
+    tft.setFreeFont(FSSB18);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(textColor);
+    tft.drawString(title, 120, 90 + yOff, GFXFF);
+
+    // Days remaining (large number)
+    char daysStr[32];
+    if (daysLeft == 0) {
+        snprintf(daysStr, sizeof(daysStr), "TODAY!");
+        tft.setTextColor(cyanColor);
+    } else if (daysLeft == 1) {
+        snprintf(daysStr, sizeof(daysStr), "1 day");
+        tft.setTextColor(cyanColor);
+    } else if (daysLeft <= 7) {
+        snprintf(daysStr, sizeof(daysStr), "%d days", daysLeft);
+        tft.setTextColor(cyanColor);
+    } else {
+        snprintf(daysStr, sizeof(daysStr), "%d days", daysLeft);
+        tft.setTextColor(textColor);
+    }
+    tft.setFreeFont(FSSB24);
+    tft.drawString(daysStr, 120, 135 + yOff, GFXFF);
+
+    // Target date with day of week
+    const char* dayNames[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    const char* monthNames[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
+    // Calculate day of week using Zeller's formula
+    int m = targetMonth, y = targetYear, d = targetDay;
+    if (m < 3) { m += 12; y--; }
+    int dow = (d + 13*(m+1)/5 + y + y/4 - y/100 + y/400) % 7;
+    dow = (dow + 6) % 7;  // Convert to 0=Sunday
+
+    char dateStr[32];
+    snprintf(dateStr, sizeof(dateStr), "%s, %s %d", dayNames[dow], monthNames[targetMonth-1], targetDay);
+    tft.setFreeFont(FSS12);
+    tft.setTextColor(grayColor);
+    tft.drawString(dateStr, 120, 175 + yOff, GFXFF);
+
+    // Draw navigation dots at bottom
+    if (totalScreens > 1) {
+        int dotSpacing = 12;
+        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = 230 + yOff;
+        if (dotY > 236) dotY = 236;
+        for (int i = 0; i < totalScreens; i++) {
+            uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
+            tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
+        }
+    }
+}
+
+// Draw custom screen for a specific custom screen config (carousel version)
+void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalScreens) {
+    const CustomScreenConfig& config = getCustomScreenConfig(customIndex);
+
+    // Get theme colors
+    int yOff = -getUiNudgeY();
+    uint16_t bgColor = getThemeBg();
+    uint16_t cardColor = getThemeCard();
+    uint16_t cyanColor = getThemeCyan();
+    uint16_t grayColor = getThemeGray();
+    uint16_t textColor = getThemeText();
+
+    tft.fillScreen(bgColor);
+
+    // Get current time
+    const WeatherData& primaryWeather = getWeather(0);
+    long localEpoch = timeClient.getEpochTime() + primaryWeather.utcOffsetSeconds;
+    int hours = (localEpoch % 86400L) / 3600;
+    int minutes = (localEpoch % 3600) / 60;
+    int h12 = hours % 12;
+    if (h12 == 0) h12 = 12;
+    const char* ampm = (hours < 12) ? "AM" : "PM";
+
+    // HEADER
+    char timeStr[16];
+    snprintf(timeStr, sizeof(timeStr), "%d:%02d", h12, minutes);
+    tft.setFreeFont(FSSB12);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(cyanColor);
+    tft.drawString(timeStr, 8, 8 + yOff, GFXFF);
+
+    int16_t timeW = tft.textWidth(timeStr, GFXFF);
+    tft.setFreeFont(FSS9);
+    tft.drawString(ampm, 8 + timeW + 4, 10 + yOff, GFXFF);
+
+    // Header text (right side)
+    if (strlen(config.header) > 0) {
+        tft.setTextDatum(TR_DATUM);
+        tft.setTextColor(grayColor);
+        tft.drawString(config.header, 220, 10 + yOff, GFXFF);
+    }
+
+    // Star icon
+    tft.setTextColor(grayColor);
+    tft.drawString("*", 232, 8 + yOff, GFXFF);
+
+    // BODY - centered text with word wrap
+    if (strlen(config.body) > 0) {
+        int bodyLen = strlen(config.body);
+        int fontSize;
+        int lineHeight;
+
+        if (bodyLen <= 40) {
+            tft.setFreeFont(FSSB18);
+            fontSize = 18;
+            lineHeight = 38;
+        } else {
+            tft.setFreeFont(FSSB12);
+            fontSize = 12;
+            lineHeight = 30;
+        }
+
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextColor(textColor);
+
+        // Simple word wrap
+        String text = config.body;
+        int maxWidth = 220;
+        int startY = 100 + yOff;
+        int lineCount = 0;
+        String lines[4];
+
+        String currentLine = "";
+        int wordStart = 0;
+        for (int i = 0; i <= text.length() && lineCount < 4; i++) {
+            if (i == text.length() || text[i] == ' ' || text[i] == '\n') {
+                String word = text.substring(wordStart, i);
+                String testLine = currentLine + (currentLine.length() > 0 ? " " : "") + word;
+                if (tft.textWidth(testLine.c_str(), GFXFF) <= maxWidth) {
+                    currentLine = testLine;
+                } else {
+                    if (currentLine.length() > 0 && lineCount < 4) {
+                        lines[lineCount++] = currentLine;
+                    }
+                    currentLine = word;
+                }
+                wordStart = i + 1;
+            }
+        }
+        if (currentLine.length() > 0 && lineCount < 4) {
+            lines[lineCount++] = currentLine;
+        }
+
+        // Calculate vertical center
+        int totalHeight = lineCount * lineHeight;
+        int bodyStartY = 100 + yOff - totalHeight / 2 + lineHeight / 2;
+
+        for (int i = 0; i < lineCount; i++) {
+            tft.drawString(lines[i].c_str(), 120, bodyStartY + i * lineHeight, GFXFF);
+        }
+    }
+
+    // FOOTER - rounded bar at bottom
+    if (strlen(config.footer) > 0) {
+        tft.fillRoundRect(8, 195 + yOff, 224, 26, 6, cardColor);
+        tft.setFreeFont(FSS9);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextColor(cyanColor);
+        tft.drawString(config.footer, 120, 208 + yOff, GFXFF);
+    }
+
+    // Navigation dots
+    if (totalScreens > 1) {
+        int dotSpacing = 12;
+        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = 230 + yOff;
+        if (dotY > 236) dotY = 236;
+        for (int i = 0; i < totalScreens; i++) {
+            uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
+            tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
+        }
+    }
+}
+
+// Track carousel position
+static uint8_t currentCarouselIndex = 0;
+static uint8_t currentSubScreen = 0;  // For locations: 0=current, 1=forecast1, 2=forecast2
+
+// Calculate total screens in carousel for dot indicators
+int calculateTotalScreens() {
+    int total = 0;
+    uint8_t count = getCarouselCount();
+    bool showForecast = getShowForecast();
+
+    for (uint8_t i = 0; i < count; i++) {
+        const CarouselItem& item = getCarouselItem(i);
+        switch (item.type) {
+            case CAROUSEL_LOCATION:
+                total += showForecast ? 3 : 1;  // current + forecast1 + forecast2 (or just current)
+                break;
+            case CAROUSEL_COUNTDOWN:
+            case CAROUSEL_CUSTOM:
+                total += 1;
+                break;
+        }
+    }
+    return total > 0 ? total : 1;
+}
+
+// Calculate current screen index for dot indicator
+int calculateCurrentScreenIndex() {
+    int index = 0;
+    bool showForecast = getShowForecast();
+
+    for (uint8_t i = 0; i < currentCarouselIndex; i++) {
+        const CarouselItem& item = getCarouselItem(i);
+        switch (item.type) {
+            case CAROUSEL_LOCATION:
+                index += showForecast ? 3 : 1;
+                break;
+            case CAROUSEL_COUNTDOWN:
+            case CAROUSEL_CUSTOM:
+                index += 1;
+                break;
+        }
+    }
+    index += currentSubScreen;
+    return index;
+}
+
 // Main display update - call from loop()
+// Uses carousel system for flexible screen ordering
 void updateTftDisplay() {
     unsigned long now = millis();
     unsigned long cycleMs = (unsigned long)getScreenCycleTime() * 1000;
@@ -1332,56 +1792,66 @@ void updateTftDisplay() {
     if (now - lastDisplayUpdate >= cycleMs) {
         lastDisplayUpdate = now;
 
-        // Determine screens to show per location
-        bool showForecast = getShowForecast();
-        bool showCustom = getCustomScreenEnabled();
-        int numLocations = getLocationCount();
+        uint8_t carouselCount = getCarouselCount();
+        if (carouselCount == 0) {
+            // Fallback: if no carousel items, show current weather for location 0
+            drawCurrentWeather();
+            return;
+        }
 
-        // Screens per location: current, (forecast1, forecast2), (custom)
-        int screensPerLoc = 1;  // Always have current weather
-        if (showForecast) screensPerLoc += 2;  // Add forecast screens
-        if (showCustom) screensPerLoc += 1;    // Add custom screen at end
-
-        // Draw appropriate screen FIRST (before incrementing)
+        // Feed watchdog and yield
         ESP.wdtFeed();
         yield();
 
-        // Screen order depends on which screens are enabled
-        // With forecast: 0=current, 1=forecast1-3, 2=forecast4-6, 3=custom
-        // Without forecast: 0=current, 1=custom
-        if (showForecast) {
-            switch (currentDisplayScreen) {
-                case 0:
+        const CarouselItem& item = getCarouselItem(currentCarouselIndex);
+        int totalScreens = calculateTotalScreens();
+        int currentScreenIdx = calculateCurrentScreenIndex();
+        bool showForecast = getShowForecast();
+
+        switch (item.type) {
+            case CAROUSEL_LOCATION: {
+                // Location shows 3 screens (or 1 if forecast disabled)
+                // Temporarily set currentDisplayLocation for drawCurrentWeather/drawForecast
+                currentDisplayLocation = item.dataIndex;
+
+                if (showForecast) {
+                    switch (currentSubScreen) {
+                        case 0:
+                            drawCurrentWeather();
+                            break;
+                        case 1:
+                            drawForecast(0);  // Days 1-3
+                            break;
+                        case 2:
+                            drawForecast(3);  // Days 4-6
+                            break;
+                    }
+                    currentSubScreen++;
+                    if (currentSubScreen >= 3) {
+                        currentSubScreen = 0;
+                        currentCarouselIndex = (currentCarouselIndex + 1) % carouselCount;
+                    }
+                } else {
+                    // Only show current weather
                     drawCurrentWeather();
-                    break;
-                case 1:
-                    drawForecast(0);  // Days 1-3
-                    break;
-                case 2:
-                    drawForecast(3);  // Days 4-6
-                    break;
-                case 3:
-                    if (showCustom) drawCustomScreen();
-                    break;
+                    currentCarouselIndex = (currentCarouselIndex + 1) % carouselCount;
+                }
+                break;
             }
-        } else {
-            // No forecast screens
-            if (currentDisplayScreen == 0) {
-                drawCurrentWeather();
-            } else if (currentDisplayScreen == 1 && showCustom) {
-                drawCustomScreen();
-            }
+
+            case CAROUSEL_COUNTDOWN:
+                drawCountdownScreen(item.dataIndex, currentScreenIdx, totalScreens);
+                currentCarouselIndex = (currentCarouselIndex + 1) % carouselCount;
+                break;
+
+            case CAROUSEL_CUSTOM:
+                drawCustomScreenByIndex(item.dataIndex, currentScreenIdx, totalScreens);
+                currentCarouselIndex = (currentCarouselIndex + 1) % carouselCount;
+                break;
         }
 
-        Serial.printf("[TFT] Screen %d, Location %d\n",
-                      currentDisplayScreen, currentDisplayLocation);
-
-        // Advance screen for NEXT cycle
-        currentDisplayScreen++;
-        if (currentDisplayScreen >= screensPerLoc) {
-            currentDisplayScreen = 0;
-            currentDisplayLocation = (currentDisplayLocation + 1) % numLocations;
-        }
+        Serial.printf("[TFT] Carousel %d/%d, SubScreen %d, Total %d\n",
+                      currentCarouselIndex, carouselCount, currentSubScreen, totalScreens);
     }
 }
 #endif
@@ -1704,6 +2174,36 @@ void setupWebServer() {
             l["enabled"] = loc.enabled;
         }
 
+        // Carousel items
+        JsonArray carouselArray = doc["carousel"].to<JsonArray>();
+        for (uint8_t i = 0; i < getCarouselCount(); i++) {
+            const CarouselItem& item = getCarouselItem(i);
+            JsonObject c = carouselArray.add<JsonObject>();
+            c["type"] = item.type;
+            c["dataIndex"] = item.dataIndex;
+        }
+
+        // Countdown events
+        JsonArray countdownArray = doc["countdowns"].to<JsonArray>();
+        for (uint8_t i = 0; i < getCountdownCount(); i++) {
+            const CountdownEvent& cd = getCountdown(i);
+            JsonObject c = countdownArray.add<JsonObject>();
+            c["type"] = cd.type;
+            c["month"] = cd.month;
+            c["day"] = cd.day;
+            c["title"] = cd.title;
+        }
+
+        // Custom screens (multiple)
+        JsonArray customArray = doc["customScreens"].to<JsonArray>();
+        for (uint8_t i = 0; i < getCustomScreenCount(); i++) {
+            const CustomScreenConfig& cs = getCustomScreenConfig(i);
+            JsonObject c = customArray.add<JsonObject>();
+            c["header"] = cs.header;
+            c["body"] = cs.body;
+            c["footer"] = cs.footer;
+        }
+
         // Metadata
         doc["locationCount"] = getLocationCount();
         doc["maxLocations"] = MAX_WEATHER_LOCATIONS;
@@ -1720,7 +2220,7 @@ void setupWebServer() {
         doc["themeMode"] = getThemeMode();
         doc["uiNudgeY"] = getUiNudgeY();
 
-        // Custom screen settings
+        // Custom screen settings (legacy - single screen)
         doc["customScreenEnabled"] = getCustomScreenEnabled();
         doc["customScreenHeader"] = getCustomScreenHeader();
         doc["customScreenBody"] = getCustomScreenBody();
@@ -1845,7 +2345,7 @@ void setupWebServer() {
             setUiNudgeY(doc["uiNudgeY"] | 0);
         }
 
-        // Custom screen settings
+        // Custom screen settings (legacy - single screen)
         if (doc["customScreenEnabled"].is<bool>()) {
             setCustomScreenEnabled(doc["customScreenEnabled"] | false);
         }
@@ -1857,6 +2357,58 @@ void setupWebServer() {
         }
         if (doc["customScreenFooter"].is<const char*>()) {
             setCustomScreenFooter(doc["customScreenFooter"]);
+        }
+
+        // Countdown events (new carousel system)
+        if (doc["countdowns"].is<JsonArray>()) {
+            JsonArray cdArray = doc["countdowns"].as<JsonArray>();
+            // Clear existing countdowns by removing them one by one
+            while (getCountdownCount() > 0) {
+                removeCountdown(0);
+            }
+            for (JsonObject cd : cdArray) {
+                uint8_t type = cd["type"] | 0;
+                uint8_t month = cd["month"] | 1;
+                uint8_t day = cd["day"] | 1;
+                const char* title = cd["title"];
+                addCountdown(type, month, day, title ? title : "");
+            }
+            Serial.printf("[API] Updated %d countdowns\n", getCountdownCount());
+        }
+
+        // Custom screens (new carousel system - multiple screens)
+        if (doc["customScreens"].is<JsonArray>()) {
+            JsonArray csArray = doc["customScreens"].as<JsonArray>();
+            // Clear existing custom screens
+            while (getCustomScreenCount() > 0) {
+                removeCustomScreenConfig(0);
+            }
+            for (JsonObject cs : csArray) {
+                const char* header = cs["header"];
+                const char* body = cs["body"];
+                const char* footer = cs["footer"];
+                addCustomScreenConfig(
+                    header ? header : "",
+                    body ? body : "",
+                    footer ? footer : ""
+                );
+            }
+            Serial.printf("[API] Updated %d custom screens\n", getCustomScreenCount());
+        }
+
+        // Carousel order (new carousel system)
+        if (doc["carousel"].is<JsonArray>()) {
+            JsonArray carouselArray = doc["carousel"].as<JsonArray>();
+            CarouselItem items[MAX_CAROUSEL_ITEMS];
+            uint8_t count = 0;
+            for (JsonObject c : carouselArray) {
+                if (count >= MAX_CAROUSEL_ITEMS) break;
+                items[count].type = c["type"] | 0;
+                items[count].dataIndex = c["dataIndex"] | 0;
+                count++;
+            }
+            setCarousel(items, count);
+            Serial.printf("[API] Updated carousel with %d items\n", count);
         }
 
         // Save and refresh weather

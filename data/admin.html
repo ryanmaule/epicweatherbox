@@ -22,10 +22,12 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 .btn-primary:hover{background:#00a8cc}
 .btn-secondary{background:rgba(255,255,255,0.1);color:#eee}
 .btn-secondary:hover{background:rgba(255,255,255,0.2)}
+.btn-add{background:rgba(0,212,255,0.15);color:#00d4ff;border:1px dashed #00d4ff}
+.btn-add:hover{background:rgba(0,212,255,0.25)}
 .form-group{margin-bottom:12px}
 .form-group label{display:block;margin-bottom:4px;font-size:0.85em;color:#aaa}
-.form-group input,.form-group select{width:100%;padding:8px;border:1px solid #333;border-radius:6px;background:#2a2a4e;color:#eee;font-size:0.9em}
-.form-group input:focus,.form-group select:focus{outline:none;border-color:#00d4ff}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px;border:1px solid #333;border-radius:6px;background:#2a2a4e;color:#eee;font-size:0.9em}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#00d4ff}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .weather-now{text-align:center;padding:10px}
 .weather-temp{font-size:2.5em;font-weight:bold}
@@ -46,6 +48,28 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 .tab-content.active{display:block}
 .links{margin-top:15px;text-align:center}
 .links a{color:#00d4ff;margin:0 10px;font-size:0.85em}
+
+/* Carousel styles */
+.carousel-list{min-height:100px}
+.carousel-item{background:rgba(255,255,255,0.03);border:1px solid #333;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:grab}
+.carousel-item:active{cursor:grabbing}
+.carousel-item.dragging{opacity:0.5;border-color:#00d4ff}
+.carousel-item .drag-handle{color:#666;font-size:1.2em}
+.carousel-item .item-icon{font-size:1.3em}
+.carousel-item .item-info{flex:1}
+.carousel-item .item-title{font-weight:bold;font-size:0.9em}
+.carousel-item .item-desc{font-size:0.75em;color:#888;margin-top:2px}
+.carousel-item .item-remove{background:none;border:none;color:#666;font-size:1.2em;cursor:pointer;padding:4px 8px}
+.carousel-item .item-remove:hover{color:#f66}
+.carousel-counters{display:flex;gap:15px;margin-top:10px;font-size:0.8em;color:#888}
+.add-buttons{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+
+/* Modal styles */
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center}
+.modal.active{display:flex}
+.modal-content{background:#1a1a2e;border:1px solid #333;border-radius:12px;padding:20px;width:90%;max-width:400px;max-height:90vh;overflow-y:auto}
+.modal-content h3{color:#00d4ff;margin-bottom:15px}
+.modal-buttons{display:flex;gap:10px;margin-top:15px;justify-content:flex-end}
 </style>
 </head>
 <body>
@@ -69,51 +93,32 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <div>
 <div class="card">
 <div class="tabs">
-<div class="tab active" data-tab="location">Location</div>
+<div class="tab active" data-tab="carousel">Carousel</div>
 <div class="tab" data-tab="display">Display</div>
-<div class="tab" data-tab="custom">Custom</div>
 <div class="tab" data-tab="system">System</div>
 </div>
-<div id="location" class="tab-content active">
-<div class="form-group">
-<label>Primary Location</label>
-<input type="text" id="loc1-name" placeholder="City name">
+
+<!-- CAROUSEL TAB -->
+<div id="carousel" class="tab-content active">
+<p style="font-size:0.85em;color:#888;margin-bottom:12px">Drag to reorder screens. Each location shows 3 screens (current + forecasts).</p>
+<div id="carousel-list" class="carousel-list"></div>
+<div class="add-buttons">
+<button class="btn btn-add" onclick="openModal('location')">+ Location</button>
+<button class="btn btn-add" onclick="openModal('countdown')">+ Countdown</button>
+<button class="btn btn-add" onclick="openModal('custom')">+ Custom Text</button>
 </div>
-<div class="form-row">
-<div class="form-group">
-<label>Latitude</label>
-<input type="number" id="loc1-lat" step="0.0001" placeholder="47.6062">
+<div class="carousel-counters">
+<span>Locations: <span id="loc-count">0</span>/3</span>
+<span>Countdowns: <span id="cd-count">0</span>/3</span>
+<span>Custom: <span id="cust-count">0</span>/3</span>
 </div>
-<div class="form-group">
-<label>Longitude</label>
-<input type="number" id="loc1-lon" step="0.0001" placeholder="-122.3321">
+<div class="btn-row" style="margin-top:15px">
+<button class="btn btn-primary" onclick="saveCarousel()">Save Carousel</button>
 </div>
+<div id="carousel-status"></div>
 </div>
-<div class="form-group">
-<label><input type="checkbox" id="loc2-enabled"> Enable Second Location</label>
-</div>
-<div id="loc2-fields" style="display:none">
-<div class="form-group">
-<label>Secondary Location</label>
-<input type="text" id="loc2-name" placeholder="City name">
-</div>
-<div class="form-row">
-<div class="form-group">
-<label>Latitude</label>
-<input type="number" id="loc2-lat" step="0.0001">
-</div>
-<div class="form-group">
-<label>Longitude</label>
-<input type="number" id="loc2-lon" step="0.0001">
-</div>
-</div>
-</div>
-<div class="btn-row">
-<button class="btn btn-primary" onclick="saveLocation()">Save Location</button>
-<button class="btn btn-secondary" onclick="useMyLocation()">Use My Location</button>
-</div>
-<div id="loc-status"></div>
-</div>
+
+<!-- DISPLAY TAB -->
 <div id="display" class="tab-content">
 <div class="form-group">
 <label>Temperature Unit</label>
@@ -136,30 +141,8 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 </div>
 <div id="display-status"></div>
 </div>
-<div id="custom" class="tab-content">
-<div class="form-group">
-<label><input type="checkbox" id="custom-enabled"> Enable Custom Screen</label>
-</div>
-<div id="custom-fields">
-<div class="form-group">
-<label>Header Text (max 16 chars, top-right)</label>
-<input type="text" id="custom-header" maxlength="16" placeholder="e.g., My Quote">
-</div>
-<div class="form-group">
-<label>Body Text (max 160 chars, centered)</label>
-<textarea id="custom-body" maxlength="160" rows="4" style="width:100%;padding:8px;border:1px solid #333;border-radius:6px;background:#2a2a4e;color:#eee;font-size:0.9em;resize:vertical" placeholder="Your custom message..."></textarea>
-<div style="font-size:0.75em;color:#666;margin-top:4px"><span id="body-count">0</span>/160 chars</div>
-</div>
-<div class="form-group">
-<label>Footer Text (max 30 chars, bottom bar)</label>
-<input type="text" id="custom-footer" maxlength="30" placeholder="e.g., Have a great day!">
-</div>
-</div>
-<div class="btn-row">
-<button class="btn btn-primary" onclick="saveCustomScreen()">Save Custom Screen</button>
-</div>
-<div id="custom-status"></div>
-</div>
+
+<!-- SYSTEM TAB -->
 <div id="system" class="tab-content">
 <div class="form-group">
 <label>Device Info</label>
@@ -178,379 +161,571 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <a href="/">Home</a>
 <a href="/api/weather">Weather API</a>
 <a href="/api/status">Status API</a>
+<a href="/safemode" style="color:#f90">Safe Mode</a>
 </div>
 </div>
+
+<!-- MODALS -->
+<div id="modal-location" class="modal">
+<div class="modal-content">
+<h3>Add Location</h3>
+<div class="form-group">
+<label>Location Name</label>
+<input type="text" id="new-loc-name" placeholder="e.g., Seattle">
+</div>
+<div class="form-row">
+<div class="form-group">
+<label>Latitude</label>
+<input type="number" id="new-loc-lat" step="0.0001" placeholder="47.6062">
+</div>
+<div class="form-group">
+<label>Longitude</label>
+<input type="number" id="new-loc-lon" step="0.0001" placeholder="-122.3321">
+</div>
+</div>
+<button class="btn btn-secondary" onclick="useMyLocationForNew()" style="width:100%">Use My Location</button>
+<div class="modal-buttons">
+<button class="btn btn-secondary" onclick="closeModal('location')">Cancel</button>
+<button class="btn btn-primary" onclick="addLocation()">Add</button>
+</div>
+</div>
+</div>
+
+<div id="modal-countdown" class="modal">
+<div class="modal-content">
+<h3>Add Countdown</h3>
+<div class="form-group">
+<label>Event Type</label>
+<select id="new-cd-type" onchange="updateCountdownFields()">
+<option value="0">Birthday</option>
+<option value="1">Easter</option>
+<option value="2">Halloween</option>
+<option value="3">Valentine's Day</option>
+<option value="4">Christmas</option>
+<option value="5">Custom Date</option>
+</select>
+</div>
+<div class="form-group" id="cd-title-group">
+<label>Title</label>
+<input type="text" id="new-cd-title" maxlength="31" placeholder="e.g., Mom's Birthday">
+</div>
+<div class="form-row" id="cd-date-group">
+<div class="form-group">
+<label>Month</label>
+<select id="new-cd-month">
+<option value="1">January</option><option value="2">February</option><option value="3">March</option>
+<option value="4">April</option><option value="5">May</option><option value="6">June</option>
+<option value="7">July</option><option value="8">August</option><option value="9">September</option>
+<option value="10">October</option><option value="11">November</option><option value="12">December</option>
+</select>
+</div>
+<div class="form-group">
+<label>Day</label>
+<input type="number" id="new-cd-day" min="1" max="31" value="1">
+</div>
+</div>
+<div class="modal-buttons">
+<button class="btn btn-secondary" onclick="closeModal('countdown')">Cancel</button>
+<button class="btn btn-primary" onclick="addCountdown()">Add</button>
+</div>
+</div>
+</div>
+
+<div id="modal-custom" class="modal">
+<div class="modal-content">
+<h3>Add Custom Text Screen</h3>
+<div class="form-group">
+<label>Header (max 16 chars)</label>
+<input type="text" id="new-cust-header" maxlength="16" placeholder="e.g., Quote">
+</div>
+<div class="form-group">
+<label>Body Text (max 80 chars)</label>
+<textarea id="new-cust-body" maxlength="80" rows="3" placeholder="Your message..."></textarea>
+<div style="font-size:0.75em;color:#666;margin-top:4px"><span id="new-body-count">0</span>/80</div>
+</div>
+<div class="form-group">
+<label>Footer (max 30 chars)</label>
+<input type="text" id="new-cust-footer" maxlength="30" placeholder="e.g., Have a great day!">
+</div>
+<div class="modal-buttons">
+<button class="btn btn-secondary" onclick="closeModal('custom')">Cancel</button>
+<button class="btn btn-primary" onclick="addCustomScreen()">Add</button>
+</div>
+</div>
+</div>
+
 <script>
-let currentScreen=0;
-const screens=['current','forecast','dual','custom'];
-const canvas=document.getElementById('preview');
-const ctx=canvas.getContext('2d');
+// Data storage
+let carouselItems = [];
+let locations = [];
+let countdowns = [];
+let customScreens = [];
+let currentScreen = 0;
+
+const canvas = document.getElementById('preview');
+const ctx = canvas.getContext('2d');
+
+const ICONS = {
+  location: '📍',
+  countdown: {
+    0: '🎂', // Birthday
+    1: '🐰', // Easter
+    2: '🎃', // Halloween
+    3: '❤️', // Valentine
+    4: '🎄', // Christmas
+    5: '📅'  // Custom
+  },
+  custom: '📝'
+};
+
+const EVENT_NAMES = ['Birthday', 'Easter', 'Halloween', 'Valentine\'s', 'Christmas', 'Custom'];
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 // Tab switching
-document.querySelectorAll('.tab').forEach(tab=>{
-tab.onclick=()=>{
-document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
-tab.classList.add('active');
-document.getElementById(tab.dataset.tab).classList.add('active');
-}});
-
-// Secondary location toggle
-document.getElementById('loc2-enabled').onchange=e=>{
-document.getElementById('loc2-fields').style.display=e.target.checked?'block':'none';
-};
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+  };
+});
 
 // Brightness slider
-document.getElementById('brightness').oninput=e=>{
-document.getElementById('brightness-val').textContent=e.target.value+'%';
+document.getElementById('brightness').oninput = e => {
+  document.getElementById('brightness-val').textContent = e.target.value + '%';
 };
 
-// Custom screen toggle
-document.getElementById('custom-enabled').onchange=e=>{
-document.getElementById('custom-fields').style.opacity=e.target.checked?'1':'0.5';
+// Body character counter for new custom screen
+document.getElementById('new-cust-body').oninput = e => {
+  document.getElementById('new-body-count').textContent = e.target.value.length;
 };
 
-// Body character counter
-document.getElementById('custom-body').oninput=e=>{
-document.getElementById('body-count').textContent=e.target.value.length;
-};
+// Modal handling
+function openModal(type) {
+  document.getElementById('modal-' + type).classList.add('active');
+  if (type === 'countdown') updateCountdownFields();
+}
+
+function closeModal(type) {
+  document.getElementById('modal-' + type).classList.remove('active');
+  // Clear fields
+  if (type === 'location') {
+    document.getElementById('new-loc-name').value = '';
+    document.getElementById('new-loc-lat').value = '';
+    document.getElementById('new-loc-lon').value = '';
+  } else if (type === 'countdown') {
+    document.getElementById('new-cd-type').value = '0';
+    document.getElementById('new-cd-title').value = '';
+    document.getElementById('new-cd-month').value = '1';
+    document.getElementById('new-cd-day').value = '1';
+  } else if (type === 'custom') {
+    document.getElementById('new-cust-header').value = '';
+    document.getElementById('new-cust-body').value = '';
+    document.getElementById('new-cust-footer').value = '';
+    document.getElementById('new-body-count').textContent = '0';
+  }
+}
+
+function updateCountdownFields() {
+  const type = parseInt(document.getElementById('new-cd-type').value);
+  const titleGroup = document.getElementById('cd-title-group');
+  const dateGroup = document.getElementById('cd-date-group');
+
+  // Show/hide title based on type
+  if (type === 0 || type === 5) { // Birthday or Custom
+    titleGroup.style.display = 'block';
+  } else {
+    titleGroup.style.display = 'none';
+  }
+
+  // Show/hide date based on type (Easter is calculated)
+  if (type === 1) { // Easter
+    dateGroup.style.display = 'none';
+  } else if (type === 2) { // Halloween - Oct 31
+    dateGroup.style.display = 'none';
+  } else if (type === 3) { // Valentine - Feb 14
+    dateGroup.style.display = 'none';
+  } else if (type === 4) { // Christmas - Dec 25
+    dateGroup.style.display = 'none';
+  } else {
+    dateGroup.style.display = 'grid';
+  }
+}
+
+// Render carousel list
+function renderCarousel() {
+  const list = document.getElementById('carousel-list');
+  list.innerHTML = '';
+
+  let locCount = 0, cdCount = 0, custCount = 0;
+
+  carouselItems.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = 'carousel-item';
+    div.draggable = true;
+    div.dataset.index = idx;
+
+    let icon, title, desc;
+    if (item.type === 0) { // Location
+      const loc = locations[item.dataIndex] || {};
+      icon = ICONS.location;
+      title = loc.name || 'Location ' + (item.dataIndex + 1);
+      desc = `Lat: ${loc.lat?.toFixed(4) || '?'}, Lon: ${loc.lon?.toFixed(4) || '?'}`;
+      locCount++;
+    } else if (item.type === 1) { // Countdown
+      const cd = countdowns[item.dataIndex] || {};
+      icon = ICONS.countdown[cd.type] || '📅';
+      title = cd.title || EVENT_NAMES[cd.type] || 'Countdown';
+      if (cd.type === 1) {
+        desc = 'Easter (calculated)';
+      } else {
+        desc = MONTH_NAMES[(cd.month || 1) - 1] + ' ' + (cd.day || 1);
+      }
+      cdCount++;
+    } else { // Custom
+      const cust = customScreens[item.dataIndex] || {};
+      icon = ICONS.custom;
+      title = cust.header || 'Custom Screen';
+      desc = (cust.body || '').substring(0, 40) + (cust.body?.length > 40 ? '...' : '');
+      custCount++;
+    }
+
+    div.innerHTML = `
+      <span class="drag-handle">☰</span>
+      <span class="item-icon">${icon}</span>
+      <div class="item-info">
+        <div class="item-title">${escapeHtml(title)}</div>
+        <div class="item-desc">${escapeHtml(desc)}</div>
+      </div>
+      <button class="item-remove" onclick="removeCarouselItem(${idx})">×</button>
+    `;
+
+    // Drag events
+    div.ondragstart = e => {
+      e.dataTransfer.setData('text/plain', idx);
+      div.classList.add('dragging');
+    };
+    div.ondragend = () => div.classList.remove('dragging');
+    div.ondragover = e => e.preventDefault();
+    div.ondrop = e => {
+      e.preventDefault();
+      const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+      const toIdx = idx;
+      if (fromIdx !== toIdx) {
+        const item = carouselItems.splice(fromIdx, 1)[0];
+        carouselItems.splice(toIdx, 0, item);
+        renderCarousel();
+      }
+    };
+
+    list.appendChild(div);
+  });
+
+  document.getElementById('loc-count').textContent = locCount;
+  document.getElementById('cd-count').textContent = cdCount;
+  document.getElementById('cust-count').textContent = custCount;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text || '';
+  return div.innerHTML;
+}
+
+// Add items
+function addLocation() {
+  if (locations.length >= 3) {
+    alert('Maximum 3 locations allowed');
+    return;
+  }
+  const name = document.getElementById('new-loc-name').value.trim();
+  const lat = parseFloat(document.getElementById('new-loc-lat').value);
+  const lon = parseFloat(document.getElementById('new-loc-lon').value);
+
+  if (!name || isNaN(lat) || isNaN(lon)) {
+    alert('Please fill in all fields');
+    return;
+  }
+
+  const idx = locations.length;
+  locations.push({ name, lat, lon, enabled: true });
+  carouselItems.push({ type: 0, dataIndex: idx });
+  closeModal('location');
+  renderCarousel();
+}
+
+function addCountdown() {
+  if (countdowns.length >= 3) {
+    alert('Maximum 3 countdowns allowed');
+    return;
+  }
+  const type = parseInt(document.getElementById('new-cd-type').value);
+  let title = document.getElementById('new-cd-title').value.trim();
+  let month = parseInt(document.getElementById('new-cd-month').value);
+  let day = parseInt(document.getElementById('new-cd-day').value);
+
+  // Set defaults for preset types
+  if (type === 1) { month = 4; day = 1; title = 'Easter'; } // Easter - date calculated
+  else if (type === 2) { month = 10; day = 31; title = 'Halloween'; }
+  else if (type === 3) { month = 2; day = 14; title = 'Valentine\'s Day'; }
+  else if (type === 4) { month = 12; day = 25; title = 'Christmas'; }
+  else if (!title) {
+    alert('Please enter a title');
+    return;
+  }
+
+  const idx = countdowns.length;
+  countdowns.push({ type, month, day, title });
+  carouselItems.push({ type: 1, dataIndex: idx });
+  closeModal('countdown');
+  renderCarousel();
+}
+
+function addCustomScreen() {
+  if (customScreens.length >= 3) {
+    alert('Maximum 3 custom screens allowed');
+    return;
+  }
+  const header = document.getElementById('new-cust-header').value.trim();
+  const body = document.getElementById('new-cust-body').value.trim();
+  const footer = document.getElementById('new-cust-footer').value.trim();
+
+  if (!body) {
+    alert('Please enter body text');
+    return;
+  }
+
+  const idx = customScreens.length;
+  customScreens.push({ header, body, footer });
+  carouselItems.push({ type: 2, dataIndex: idx });
+  closeModal('custom');
+  renderCarousel();
+}
+
+function removeCarouselItem(idx) {
+  if (!confirm('Remove this item?')) return;
+
+  const item = carouselItems[idx];
+  carouselItems.splice(idx, 1);
+
+  // Don't remove from data arrays - just from carousel
+  // The dataIndex still points to the correct data
+
+  renderCarousel();
+}
+
+function useMyLocationForNew() {
+  if (!navigator.geolocation) {
+    alert('Geolocation not supported');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos => {
+    document.getElementById('new-loc-lat').value = pos.coords.latitude.toFixed(4);
+    document.getElementById('new-loc-lon').value = pos.coords.longitude.toFixed(4);
+  }, () => alert('Could not get location'));
+}
+
+// Save carousel
+async function saveCarousel() {
+  const data = {
+    carousel: carouselItems,
+    locations: locations,
+    countdowns: countdowns,
+    customScreens: customScreens
+  };
+
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const result = await r.json();
+    showStatus('carousel-status', result.success ? 'success' : 'error', result.message);
+    if (result.success) setTimeout(() => location.reload(), 2000);
+  } catch (e) {
+    showStatus('carousel-status', 'error', 'Failed to save');
+  }
+}
 
 // Load initial data
-async function loadData(){
-try{
-const[weather,status,config]=await Promise.all([
-fetch('/api/weather').then(r=>r.json()),
-fetch('/api/status').then(r=>r.json()),
-fetch('/api/config').then(r=>r.json()).catch(()=>({}))
-]);
-updateWeatherDisplay(weather);
-updateDeviceInfo(status);
-updateConfig(config);
-drawPreview(weather);
-}catch(e){console.error(e)}
+async function loadData() {
+  try {
+    const [weather, status, config] = await Promise.all([
+      fetch('/api/weather').then(r => r.json()),
+      fetch('/api/status').then(r => r.json()),
+      fetch('/api/config').then(r => r.json()).catch(() => ({}))
+    ]);
+    updateWeatherDisplay(weather);
+    updateDeviceInfo(status);
+    updateConfig(config);
+    drawPreview(weather);
+  } catch (e) { console.error(e); }
 }
 
-function updateWeatherDisplay(data){
-if(!data.primary||!data.primary.valid){
-document.getElementById('weather-display').innerHTML='<div class="status error">Weather unavailable</div>';
-return;
-}
-const w=data.primary;
-let html=`<div class="weather-now">
-<div class="weather-icon">${w.current.icon}</div>
-<div class="weather-temp">${Math.round(w.current.temperature)}°F</div>
-<div class="weather-cond">${w.current.condition} - ${w.location}</div>
-</div><div class="forecast">`;
-w.forecast.slice(0,5).forEach(d=>{
-html+=`<div class="forecast-day"><div class="day">${d.day}</div><div class="icon">${d.icon}</div><div class="temp">${Math.round(d.tempMax)}°</div></div>`;
-});
-html+='</div>';
-document.getElementById('weather-display').innerHTML=html;
-}
-
-function updateDeviceInfo(s){
-document.getElementById('device-info').innerHTML=`
-<div>Version: ${s.version}</div>
-<div>IP: ${s.ip}</div>
-<div>Uptime: ${Math.floor(s.uptime/60)}m ${s.uptime%60}s</div>
-<div>Free RAM: ${s.heap} bytes</div>
-<div>WiFi: ${s.rssi} dBm</div>`;
+function updateWeatherDisplay(data) {
+  if (!data.primary || !data.primary.valid) {
+    document.getElementById('weather-display').innerHTML = '<div class="status error">Weather unavailable</div>';
+    return;
+  }
+  const w = data.primary;
+  let html = `<div class="weather-now">
+    <div class="weather-icon">${w.current.icon}</div>
+    <div class="weather-temp">${Math.round(w.current.temperature)}°</div>
+    <div class="weather-cond">${w.current.condition} - ${w.location}</div>
+  </div><div class="forecast">`;
+  w.forecast.slice(0, 5).forEach(d => {
+    html += `<div class="forecast-day"><div class="day">${d.day}</div><div class="icon">${d.icon}</div><div class="temp">${Math.round(d.tempMax)}°</div></div>`;
+  });
+  html += '</div>';
+  document.getElementById('weather-display').innerHTML = html;
 }
 
-function updateConfig(c){
-if(c.primary){
-document.getElementById('loc1-name').value=c.primary.name||'';
-document.getElementById('loc1-lat').value=c.primary.lat||'';
-document.getElementById('loc1-lon').value=c.primary.lon||'';
-}
-if(c.secondary){
-document.getElementById('loc2-enabled').checked=c.secondary.enabled;
-document.getElementById('loc2-fields').style.display=c.secondary.enabled?'block':'none';
-document.getElementById('loc2-name').value=c.secondary.name||'';
-document.getElementById('loc2-lat').value=c.secondary.lat||'';
-document.getElementById('loc2-lon').value=c.secondary.lon||'';
-}
-if(c.display){
-document.getElementById('temp-unit').value=c.display.unit||'f';
-document.getElementById('cycle-time').value=c.display.cycle||10;
-document.getElementById('brightness').value=c.display.brightness||80;
-document.getElementById('brightness-val').textContent=(c.display.brightness||80)+'%';
-}
-// Custom screen settings
-if(c.customScreenEnabled!==undefined){
-document.getElementById('custom-enabled').checked=c.customScreenEnabled;
-document.getElementById('custom-fields').style.opacity=c.customScreenEnabled?'1':'0.5';
-}
-if(c.customScreenHeader)document.getElementById('custom-header').value=c.customScreenHeader;
-if(c.customScreenBody){
-document.getElementById('custom-body').value=c.customScreenBody;
-document.getElementById('body-count').textContent=c.customScreenBody.length;
-}
-if(c.customScreenFooter)document.getElementById('custom-footer').value=c.customScreenFooter;
+function updateDeviceInfo(s) {
+  document.getElementById('device-info').innerHTML = `
+    <div>Version: ${s.version}</div>
+    <div>IP: ${s.ip}</div>
+    <div>Uptime: ${Math.floor(s.uptime / 60)}m ${s.uptime % 60}s</div>
+    <div>Free RAM: ${s.heap} bytes</div>
+    <div>WiFi: ${s.rssi} dBm</div>`;
 }
 
-function drawPreview(data){
-ctx.fillStyle='#000';
-ctx.fillRect(0,0,240,240);
-if(!data||!data.primary||!data.primary.valid){
-ctx.fillStyle='#666';
-ctx.font='16px sans-serif';
-ctx.textAlign='center';
-ctx.fillText('No weather data',120,120);
-return;
-}
-const w=data.primary;
-if(currentScreen===0)drawCurrentWeather(w);
-else if(currentScreen===1)drawForecast(w);
-else if(currentScreen===2)drawDualLocation(data);
-else drawCustomPreview();
+function updateConfig(c) {
+  // Load carousel items
+  if (c.carousel && Array.isArray(c.carousel)) {
+    carouselItems = c.carousel;
+  } else {
+    carouselItems = [];
+  }
+
+  // Load locations
+  if (c.locations && Array.isArray(c.locations)) {
+    locations = c.locations;
+  } else {
+    // Legacy format
+    locations = [];
+    if (c.primary) {
+      locations.push({ name: c.primary.name, lat: c.primary.lat, lon: c.primary.lon, enabled: true });
+    }
+    if (c.secondary && c.secondary.enabled) {
+      locations.push({ name: c.secondary.name, lat: c.secondary.lat, lon: c.secondary.lon, enabled: true });
+    }
+    // Create default carousel from locations
+    if (carouselItems.length === 0) {
+      locations.forEach((_, i) => carouselItems.push({ type: 0, dataIndex: i }));
+    }
+  }
+
+  // Load countdowns
+  if (c.countdowns && Array.isArray(c.countdowns)) {
+    countdowns = c.countdowns;
+  } else {
+    countdowns = [];
+  }
+
+  // Load custom screens
+  if (c.customScreens && Array.isArray(c.customScreens)) {
+    customScreens = c.customScreens;
+  } else if (c.customScreenEnabled && c.customScreenBody) {
+    // Legacy single custom screen
+    customScreens = [{
+      header: c.customScreenHeader || '',
+      body: c.customScreenBody || '',
+      footer: c.customScreenFooter || ''
+    }];
+  } else {
+    customScreens = [];
+  }
+
+  // Display settings
+  if (c.display) {
+    document.getElementById('temp-unit').value = c.display.unit || 'f';
+    document.getElementById('cycle-time').value = c.display.cycle || 10;
+    document.getElementById('brightness').value = c.display.brightness || 80;
+    document.getElementById('brightness-val').textContent = (c.display.brightness || 80) + '%';
+  }
+
+  renderCarousel();
 }
 
-function drawCurrentWeather(w){
-ctx.fillStyle='#1a1a2e';
-ctx.fillRect(0,0,240,240);
-ctx.textAlign='center';
-ctx.fillStyle='#00d4ff';
-ctx.font='bold 14px sans-serif';
-ctx.fillText(w.location,120,25);
-ctx.font='60px sans-serif';
-ctx.fillText(w.current.icon,120,100);
-ctx.fillStyle='#fff';
-ctx.font='bold 48px sans-serif';
-ctx.fillText(Math.round(w.current.temperature)+'°',120,160);
-ctx.fillStyle='#aaa';
-ctx.font='16px sans-serif';
-ctx.fillText(w.current.condition,120,185);
-ctx.font='12px sans-serif';
-ctx.fillText('Wind: '+w.current.windSpeed+' mph',120,210);
-const now=new Date();
-ctx.fillStyle='#666';
-ctx.fillText(now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),120,232);
+function drawPreview(data) {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, 240, 240);
+  if (!data || !data.primary || !data.primary.valid) {
+    ctx.fillStyle = '#666';
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('No weather data', 120, 120);
+    return;
+  }
+  const w = data.primary;
+  drawCurrentWeather(w);
 }
 
-function drawForecast(w){
-ctx.fillStyle='#1a1a2e';
-ctx.fillRect(0,0,240,240);
-ctx.textAlign='center';
-ctx.fillStyle='#00d4ff';
-ctx.font='bold 14px sans-serif';
-ctx.fillText('7-Day Forecast',120,20);
-const days=w.forecast.slice(0,7);
-const cols=4,rows=2;
-days.forEach((d,i)=>{
-if(i>=7)return;
-const row=Math.floor(i/cols),col=i%cols;
-const x=30+col*55,y=50+row*95;
-ctx.fillStyle='#888';
-ctx.font='11px sans-serif';
-ctx.fillText(d.day,x,y);
-ctx.font='24px sans-serif';
-ctx.fillText(d.icon,x,y+30);
-ctx.fillStyle='#fff';
-ctx.font='bold 14px sans-serif';
-ctx.fillText(Math.round(d.tempMax)+'°',x,y+55);
-ctx.fillStyle='#668';
-ctx.font='12px sans-serif';
-ctx.fillText(Math.round(d.tempMin)+'°',x,y+70);
-});
+function drawCurrentWeather(w) {
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, 240, 240);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#00d4ff';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillText(w.location, 120, 25);
+  ctx.font = '60px sans-serif';
+  ctx.fillText(w.current.icon, 120, 100);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 48px sans-serif';
+  ctx.fillText(Math.round(w.current.temperature) + '°', 120, 160);
+  ctx.fillStyle = '#aaa';
+  ctx.font = '16px sans-serif';
+  ctx.fillText(w.current.condition, 120, 185);
+  ctx.font = '12px sans-serif';
+  ctx.fillText('Wind: ' + w.current.windSpeed + ' mph', 120, 210);
+  const now = new Date();
+  ctx.fillStyle = '#666';
+  ctx.fillText(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 120, 232);
 }
 
-function drawDualLocation(data){
-ctx.fillStyle='#1a1a2e';
-ctx.fillRect(0,0,240,240);
-ctx.textAlign='center';
-const w1=data.primary;
-ctx.fillStyle='#00d4ff';
-ctx.font='bold 12px sans-serif';
-ctx.fillText(w1.location,60,25);
-ctx.font='36px sans-serif';
-ctx.fillText(w1.current.icon,60,70);
-ctx.fillStyle='#fff';
-ctx.font='bold 28px sans-serif';
-ctx.fillText(Math.round(w1.current.temperature)+'°',60,110);
-if(data.secondary&&data.secondary.valid){
-const w2=data.secondary;
-ctx.fillStyle='#00d4ff';
-ctx.font='bold 12px sans-serif';
-ctx.fillText(w2.location,180,25);
-ctx.font='36px sans-serif';
-ctx.fillText(w2.current.icon,180,70);
-ctx.fillStyle='#fff';
-ctx.font='bold 28px sans-serif';
-ctx.fillText(Math.round(w2.current.temperature)+'°',180,110);
-}else{
-ctx.fillStyle='#666';
-ctx.font='12px sans-serif';
-ctx.fillText('Second location',180,60);
-ctx.fillText('not configured',180,75);
-}
-ctx.strokeStyle='#333';
-ctx.beginPath();
-ctx.moveTo(120,10);
-ctx.lineTo(120,130);
-ctx.stroke();
-const now=new Date();
-ctx.fillStyle='#888';
-ctx.font='14px sans-serif';
-ctx.fillText(now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),120,220);
+function cycleScreen() {
+  // Just refresh preview for now
+  fetch('/api/weather').then(r => r.json()).then(drawPreview);
 }
 
-function drawCustomPreview(){
-ctx.fillStyle='#1a1a2e';
-ctx.fillRect(0,0,240,240);
-const now=new Date();
-// Header: time left
-ctx.fillStyle='#00d4ff';
-ctx.font='bold 14px sans-serif';
-ctx.textAlign='left';
-ctx.fillText(now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),8,20);
-// Header: custom text right
-const header=document.getElementById('custom-header').value||'';
-if(header){
-ctx.fillStyle='#888';
-ctx.font='12px sans-serif';
-ctx.textAlign='right';
-ctx.fillText(header,232,20);
-}
-// Body: custom text centered with word wrap
-const body=document.getElementById('custom-body').value||'';
-if(body){
-ctx.fillStyle='#fff';
-ctx.textAlign='center';
-const len=body.length;
-const fontSize=len<=40?24:len<=80?16:12;
-ctx.font=`${fontSize}px sans-serif`;
-const lines=wrapText(body,len<=40?14:len<=80?22:30);
-let y=len<=40?90:70;
-const lineH=fontSize+4;
-lines.slice(0,6).forEach(line=>{
-ctx.fillText(line,120,y);
-y+=lineH;
-});
-}
-// Footer bar
-ctx.fillStyle='#2a2a4e';
-roundRect(8,175,224,36,4);
-const footer=document.getElementById('custom-footer').value||'';
-if(footer){
-ctx.fillStyle='#00d4ff';
-ctx.font='bold 14px sans-serif';
-ctx.textAlign='center';
-ctx.fillText(footer,120,198);
-}
-// Dot indicator
-ctx.fillStyle='#00d4ff';
-ctx.beginPath();
-ctx.arc(120,230,4,0,Math.PI*2);
-ctx.fill();
+function refreshPreview() {
+  fetch('/api/weather').then(r => r.json()).then(drawPreview);
 }
 
-function wrapText(text,maxChars){
-const words=text.split(' ');
-const lines=[];
-let line='';
-words.forEach(word=>{
-if((line+word).length>maxChars){
-if(line)lines.push(line.trim());
-line=word+' ';
-}else{
-line+=word+' ';
-}
-});
-if(line)lines.push(line.trim());
-return lines;
-}
-
-function roundRect(x,y,w,h,r){
-ctx.beginPath();
-ctx.moveTo(x+r,y);
-ctx.lineTo(x+w-r,y);
-ctx.quadraticCurveTo(x+w,y,x+w,y+r);
-ctx.lineTo(x+w,y+h-r);
-ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-ctx.lineTo(x+r,y+h);
-ctx.quadraticCurveTo(x,y+h,x,y+h-r);
-ctx.lineTo(x,y+r);
-ctx.quadraticCurveTo(x,y,x+r,y);
-ctx.closePath();
-ctx.fill();
+async function saveDisplay() {
+  const data = {
+    display: {
+      unit: document.getElementById('temp-unit').value,
+      cycle: parseInt(document.getElementById('cycle-time').value),
+      brightness: parseInt(document.getElementById('brightness').value)
+    }
+  };
+  try {
+    const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const result = await r.json();
+    showStatus('display-status', result.success ? 'success' : 'error', result.message);
+  } catch (e) { showStatus('display-status', 'error', 'Failed to save'); }
 }
 
-function cycleScreen(){
-currentScreen=(currentScreen+1)%4;
-fetch('/api/weather').then(r=>r.json()).then(drawPreview);
+async function refreshWeather() {
+  try {
+    const r = await fetch('/api/weather/refresh');
+    const result = await r.json();
+    if (result.success) loadData();
+  } catch (e) {}
 }
 
-function refreshPreview(){
-fetch('/api/weather').then(r=>r.json()).then(drawPreview);
-}
-
-async function saveLocation(){
-const data={
-primary:{name:document.getElementById('loc1-name').value,lat:parseFloat(document.getElementById('loc1-lat').value),lon:parseFloat(document.getElementById('loc1-lon').value)},
-secondary:{enabled:document.getElementById('loc2-enabled').checked,name:document.getElementById('loc2-name').value,lat:parseFloat(document.getElementById('loc2-lat').value)||0,lon:parseFloat(document.getElementById('loc2-lon').value)||0}
-};
-try{
-const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-const result=await r.json();
-showStatus('loc-status',result.success?'success':'error',result.message);
-if(result.success)setTimeout(()=>location.reload(),2000);
-}catch(e){showStatus('loc-status','error','Failed to save');}
-}
-
-function useMyLocation(){
-if(!navigator.geolocation){showStatus('loc-status','error','Geolocation not supported');return;}
-navigator.geolocation.getCurrentPosition(pos=>{
-document.getElementById('loc1-lat').value=pos.coords.latitude.toFixed(4);
-document.getElementById('loc1-lon').value=pos.coords.longitude.toFixed(4);
-showStatus('loc-status','success','Location detected - enter city name and save');
-},()=>showStatus('loc-status','error','Could not get location'));
-}
-
-async function saveDisplay(){
-const data={display:{
-unit:document.getElementById('temp-unit').value,
-cycle:parseInt(document.getElementById('cycle-time').value),
-brightness:parseInt(document.getElementById('brightness').value)
-}};
-try{
-const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-const result=await r.json();
-showStatus('display-status',result.success?'success':'error',result.message);
-}catch(e){showStatus('display-status','error','Failed to save');}
-}
-
-async function saveCustomScreen(){
-const data={
-customScreenEnabled:document.getElementById('custom-enabled').checked,
-customScreenHeader:document.getElementById('custom-header').value,
-customScreenBody:document.getElementById('custom-body').value,
-customScreenFooter:document.getElementById('custom-footer').value
-};
-try{
-const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-const result=await r.json();
-showStatus('custom-status',result.success?'success':'error',result.message);
-}catch(e){showStatus('custom-status','error','Failed to save');}
-}
-
-async function refreshWeather(){
-try{
-const r=await fetch('/api/weather/refresh');
-const result=await r.json();
-if(result.success)loadData();
-}catch(e){}
-}
-
-function showStatus(id,type,msg){
-const el=document.getElementById(id);
-el.className='status '+type;
-el.textContent=msg;
-setTimeout(()=>el.textContent='',5000);
+function showStatus(id, type, msg) {
+  const el = document.getElementById(id);
+  el.className = 'status ' + type;
+  el.textContent = msg;
+  setTimeout(() => el.textContent = '', 5000);
 }
 
 loadData();
-setInterval(loadData,60000);
+setInterval(loadData, 60000);
 </script>
 </body>
 </html>

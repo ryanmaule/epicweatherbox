@@ -43,11 +43,35 @@ static int themeMode = 0;  // 0=auto, 1=dark, 2=light
 static bool gifScreenEnabled = false;  // Show GIF screen in rotation
 static int uiNudgeY = 0;  // UI vertical offset in pixels (positive=up, negative=down)
 
-// Custom screen settings
+// Custom screen settings (legacy - single screen, kept for backward compatibility)
 static bool customScreenEnabled = false;
 static char customScreenHeader[17] = "";   // 16 chars + null
-static char customScreenBody[161] = "";    // 160 chars + null
+static char customScreenBody[161] = "";    // 160 chars + null (legacy size)
 static char customScreenFooter[31] = "";   // 30 chars + null
+
+// =============================================================================
+// CAROUSEL SYSTEM DATA
+// =============================================================================
+
+// Carousel items (ordered list of screens to display)
+static CarouselItem carousel[MAX_CAROUSEL_ITEMS];
+static uint8_t carouselCount = 0;
+
+// Countdown events
+static CountdownEvent countdowns[MAX_COUNTDOWN_EVENTS] = {
+    {COUNTDOWN_BIRTHDAY, 1, 1, ""},
+    {COUNTDOWN_BIRTHDAY, 1, 1, ""},
+    {COUNTDOWN_BIRTHDAY, 1, 1, ""}
+};
+static uint8_t countdownCount = 0;
+
+// Custom text screens (multiple, replaces single customScreen for carousel)
+static CustomScreenConfig customScreens[MAX_CUSTOM_SCREENS] = {
+    {"", "", ""},
+    {"", "", ""},
+    {"", "", ""}
+};
+static uint8_t customScreenCount = 0;
 
 // Timing
 static unsigned long lastUpdateTime = 0;
@@ -663,6 +687,224 @@ void setCustomScreenFooter(const char* text) {
     }
 }
 
+// =============================================================================
+// CAROUSEL SYSTEM
+// =============================================================================
+
+uint8_t getCarouselCount() {
+    return carouselCount;
+}
+
+static CarouselItem emptyCarouselItem = {CAROUSEL_LOCATION, 0};
+
+const CarouselItem& getCarouselItem(uint8_t index) {
+    if (index >= carouselCount) {
+        return emptyCarouselItem;
+    }
+    return carousel[index];
+}
+
+void setCarousel(const CarouselItem* items, uint8_t count) {
+    carouselCount = min(count, (uint8_t)MAX_CAROUSEL_ITEMS);
+    for (uint8_t i = 0; i < carouselCount; i++) {
+        carousel[i] = items[i];
+    }
+    Serial.printf("[CAROUSEL] Set %d items\n", carouselCount);
+}
+
+bool addCarouselItem(uint8_t type, uint8_t dataIndex) {
+    if (carouselCount >= MAX_CAROUSEL_ITEMS) {
+        Serial.println(F("[CAROUSEL] Cannot add - at max capacity"));
+        return false;
+    }
+    carousel[carouselCount].type = type;
+    carousel[carouselCount].dataIndex = dataIndex;
+    carouselCount++;
+    Serial.printf("[CAROUSEL] Added item type=%d, index=%d\n", type, dataIndex);
+    return true;
+}
+
+bool removeCarouselItem(uint8_t index) {
+    if (index >= carouselCount) {
+        return false;
+    }
+    // Shift items down
+    for (uint8_t i = index; i < carouselCount - 1; i++) {
+        carousel[i] = carousel[i + 1];
+    }
+    carouselCount--;
+    Serial.printf("[CAROUSEL] Removed item at index %d, now %d items\n", index, carouselCount);
+    return true;
+}
+
+bool moveCarouselItem(uint8_t fromIndex, uint8_t toIndex) {
+    if (fromIndex >= carouselCount || toIndex >= carouselCount || fromIndex == toIndex) {
+        return false;
+    }
+    CarouselItem temp = carousel[fromIndex];
+    if (fromIndex < toIndex) {
+        // Shift items up
+        for (uint8_t i = fromIndex; i < toIndex; i++) {
+            carousel[i] = carousel[i + 1];
+        }
+    } else {
+        // Shift items down
+        for (uint8_t i = fromIndex; i > toIndex; i--) {
+            carousel[i] = carousel[i - 1];
+        }
+    }
+    carousel[toIndex] = temp;
+    Serial.printf("[CAROUSEL] Moved item from %d to %d\n", fromIndex, toIndex);
+    return true;
+}
+
+// =============================================================================
+// COUNTDOWN EVENTS
+// =============================================================================
+
+uint8_t getCountdownCount() {
+    return countdownCount;
+}
+
+static CountdownEvent emptyCountdown = {COUNTDOWN_BIRTHDAY, 1, 1, ""};
+
+const CountdownEvent& getCountdown(uint8_t index) {
+    if (index >= countdownCount) {
+        return emptyCountdown;
+    }
+    return countdowns[index];
+}
+
+int addCountdown(uint8_t type, uint8_t month, uint8_t day, const char* title) {
+    if (countdownCount >= MAX_COUNTDOWN_EVENTS) {
+        Serial.println(F("[COUNTDOWN] Cannot add - at max capacity"));
+        return -1;
+    }
+    int idx = countdownCount;
+    countdowns[idx].type = type;
+    countdowns[idx].month = constrain(month, 1, 12);
+    countdowns[idx].day = constrain(day, 1, 31);
+    if (title) {
+        strncpy(countdowns[idx].title, title, sizeof(countdowns[idx].title) - 1);
+        countdowns[idx].title[sizeof(countdowns[idx].title) - 1] = '\0';
+    } else {
+        countdowns[idx].title[0] = '\0';
+    }
+    countdownCount++;
+    Serial.printf("[COUNTDOWN] Added event type=%d, %d/%d, title=%s\n", type, month, day, countdowns[idx].title);
+    return idx;
+}
+
+bool updateCountdown(uint8_t index, uint8_t type, uint8_t month, uint8_t day, const char* title) {
+    if (index >= countdownCount) {
+        return false;
+    }
+    countdowns[index].type = type;
+    countdowns[index].month = constrain(month, 1, 12);
+    countdowns[index].day = constrain(day, 1, 31);
+    if (title) {
+        strncpy(countdowns[index].title, title, sizeof(countdowns[index].title) - 1);
+        countdowns[index].title[sizeof(countdowns[index].title) - 1] = '\0';
+    }
+    Serial.printf("[COUNTDOWN] Updated event %d\n", index);
+    return true;
+}
+
+bool removeCountdown(uint8_t index) {
+    if (index >= countdownCount) {
+        return false;
+    }
+    // Shift items down
+    for (uint8_t i = index; i < countdownCount - 1; i++) {
+        countdowns[i] = countdowns[i + 1];
+    }
+    countdownCount--;
+    // Clear the last slot
+    countdowns[countdownCount].type = COUNTDOWN_BIRTHDAY;
+    countdowns[countdownCount].month = 1;
+    countdowns[countdownCount].day = 1;
+    countdowns[countdownCount].title[0] = '\0';
+    Serial.printf("[COUNTDOWN] Removed event at index %d, now %d events\n", index, countdownCount);
+    return true;
+}
+
+// =============================================================================
+// CUSTOM SCREENS (Multiple)
+// =============================================================================
+
+uint8_t getCustomScreenCount() {
+    return customScreenCount;
+}
+
+static CustomScreenConfig emptyCustomScreen = {"", "", ""};
+
+const CustomScreenConfig& getCustomScreenConfig(uint8_t index) {
+    if (index >= customScreenCount) {
+        return emptyCustomScreen;
+    }
+    return customScreens[index];
+}
+
+int addCustomScreenConfig(const char* header, const char* body, const char* footer) {
+    if (customScreenCount >= MAX_CUSTOM_SCREENS) {
+        Serial.println(F("[CUSTOM] Cannot add - at max capacity"));
+        return -1;
+    }
+    int idx = customScreenCount;
+    if (header) {
+        strncpy(customScreens[idx].header, header, sizeof(customScreens[idx].header) - 1);
+        customScreens[idx].header[sizeof(customScreens[idx].header) - 1] = '\0';
+    }
+    if (body) {
+        strncpy(customScreens[idx].body, body, sizeof(customScreens[idx].body) - 1);
+        customScreens[idx].body[sizeof(customScreens[idx].body) - 1] = '\0';
+    }
+    if (footer) {
+        strncpy(customScreens[idx].footer, footer, sizeof(customScreens[idx].footer) - 1);
+        customScreens[idx].footer[sizeof(customScreens[idx].footer) - 1] = '\0';
+    }
+    customScreenCount++;
+    Serial.printf("[CUSTOM] Added screen %d\n", idx);
+    return idx;
+}
+
+bool updateCustomScreenConfig(uint8_t index, const char* header, const char* body, const char* footer) {
+    if (index >= customScreenCount) {
+        return false;
+    }
+    if (header) {
+        strncpy(customScreens[index].header, header, sizeof(customScreens[index].header) - 1);
+        customScreens[index].header[sizeof(customScreens[index].header) - 1] = '\0';
+    }
+    if (body) {
+        strncpy(customScreens[index].body, body, sizeof(customScreens[index].body) - 1);
+        customScreens[index].body[sizeof(customScreens[index].body) - 1] = '\0';
+    }
+    if (footer) {
+        strncpy(customScreens[index].footer, footer, sizeof(customScreens[index].footer) - 1);
+        customScreens[index].footer[sizeof(customScreens[index].footer) - 1] = '\0';
+    }
+    Serial.printf("[CUSTOM] Updated screen %d\n", index);
+    return true;
+}
+
+bool removeCustomScreenConfig(uint8_t index) {
+    if (index >= customScreenCount) {
+        return false;
+    }
+    // Shift items down
+    for (uint8_t i = index; i < customScreenCount - 1; i++) {
+        customScreens[i] = customScreens[i + 1];
+    }
+    customScreenCount--;
+    // Clear the last slot
+    customScreens[customScreenCount].header[0] = '\0';
+    customScreens[customScreenCount].body[0] = '\0';
+    customScreens[customScreenCount].footer[0] = '\0';
+    Serial.printf("[CUSTOM] Removed screen at index %d, now %d screens\n", index, customScreenCount);
+    return true;
+}
+
 /**
  * Check if currently in night mode based on hour
  */
@@ -710,11 +952,38 @@ bool saveWeatherConfig() {
     doc["gifScreenEnabled"] = gifScreenEnabled;
     doc["uiNudgeY"] = uiNudgeY;
 
-    // Custom screen settings
+    // Custom screen settings (legacy single screen)
     doc["customScreenEnabled"] = customScreenEnabled;
     doc["customScreenHeader"] = customScreenHeader;
     doc["customScreenBody"] = customScreenBody;
     doc["customScreenFooter"] = customScreenFooter;
+
+    // Carousel items
+    JsonArray carouselArray = doc["carousel"].to<JsonArray>();
+    for (uint8_t i = 0; i < carouselCount; i++) {
+        JsonObject item = carouselArray.add<JsonObject>();
+        item["type"] = carousel[i].type;
+        item["dataIndex"] = carousel[i].dataIndex;
+    }
+
+    // Countdown events
+    JsonArray countdownArray = doc["countdowns"].to<JsonArray>();
+    for (uint8_t i = 0; i < countdownCount; i++) {
+        JsonObject event = countdownArray.add<JsonObject>();
+        event["type"] = countdowns[i].type;
+        event["month"] = countdowns[i].month;
+        event["day"] = countdowns[i].day;
+        event["title"] = countdowns[i].title;
+    }
+
+    // Custom screens (multiple)
+    JsonArray customArray = doc["customScreens"].to<JsonArray>();
+    for (uint8_t i = 0; i < customScreenCount; i++) {
+        JsonObject screen = customArray.add<JsonObject>();
+        screen["header"] = customScreens[i].header;
+        screen["body"] = customScreens[i].body;
+        screen["footer"] = customScreens[i].footer;
+    }
 
     File file = LittleFS.open(WEATHER_CONFIG_FILE, "w");
     if (!file) {
@@ -860,6 +1129,79 @@ bool loadWeatherConfig() {
     if (footer) {
         strncpy(customScreenFooter, footer, sizeof(customScreenFooter) - 1);
         customScreenFooter[sizeof(customScreenFooter) - 1] = '\0';
+    }
+
+    // Load carousel items
+    if (doc["carousel"].is<JsonArray>()) {
+        JsonArray carouselArray = doc["carousel"].as<JsonArray>();
+        carouselCount = 0;
+        for (JsonObject item : carouselArray) {
+            if (carouselCount >= MAX_CAROUSEL_ITEMS) break;
+            carousel[carouselCount].type = item["type"] | 0;
+            carousel[carouselCount].dataIndex = item["dataIndex"] | 0;
+            carouselCount++;
+        }
+        Serial.printf("[WEATHER] Loaded %d carousel items\n", carouselCount);
+    } else {
+        // Initialize default carousel with location 0 if no carousel saved
+        carouselCount = 1;
+        carousel[0].type = CAROUSEL_LOCATION;
+        carousel[0].dataIndex = 0;
+
+        // Add additional locations to carousel
+        for (int i = 1; i < locationCount; i++) {
+            if (carouselCount < MAX_CAROUSEL_ITEMS) {
+                carousel[carouselCount].type = CAROUSEL_LOCATION;
+                carousel[carouselCount].dataIndex = i;
+                carouselCount++;
+            }
+        }
+        Serial.printf("[WEATHER] Initialized default carousel with %d locations\n", carouselCount);
+    }
+
+    // Load countdown events
+    if (doc["countdowns"].is<JsonArray>()) {
+        JsonArray countdownArray = doc["countdowns"].as<JsonArray>();
+        countdownCount = 0;
+        for (JsonObject event : countdownArray) {
+            if (countdownCount >= MAX_COUNTDOWN_EVENTS) break;
+            countdowns[countdownCount].type = event["type"] | 0;
+            countdowns[countdownCount].month = event["month"] | 1;
+            countdowns[countdownCount].day = event["day"] | 1;
+            const char* title = event["title"];
+            if (title) {
+                strncpy(countdowns[countdownCount].title, title, sizeof(countdowns[countdownCount].title) - 1);
+                countdowns[countdownCount].title[sizeof(countdowns[countdownCount].title) - 1] = '\0';
+            }
+            countdownCount++;
+        }
+        Serial.printf("[WEATHER] Loaded %d countdown events\n", countdownCount);
+    }
+
+    // Load custom screens (multiple)
+    if (doc["customScreens"].is<JsonArray>()) {
+        JsonArray customArray = doc["customScreens"].as<JsonArray>();
+        customScreenCount = 0;
+        for (JsonObject screen : customArray) {
+            if (customScreenCount >= MAX_CUSTOM_SCREENS) break;
+            const char* h = screen["header"];
+            const char* b = screen["body"];
+            const char* f = screen["footer"];
+            if (h) {
+                strncpy(customScreens[customScreenCount].header, h, sizeof(customScreens[customScreenCount].header) - 1);
+                customScreens[customScreenCount].header[sizeof(customScreens[customScreenCount].header) - 1] = '\0';
+            }
+            if (b) {
+                strncpy(customScreens[customScreenCount].body, b, sizeof(customScreens[customScreenCount].body) - 1);
+                customScreens[customScreenCount].body[sizeof(customScreens[customScreenCount].body) - 1] = '\0';
+            }
+            if (f) {
+                strncpy(customScreens[customScreenCount].footer, f, sizeof(customScreens[customScreenCount].footer) - 1);
+                customScreens[customScreenCount].footer[sizeof(customScreens[customScreenCount].footer) - 1] = '\0';
+            }
+            customScreenCount++;
+        }
+        Serial.printf("[WEATHER] Loaded %d custom screens\n", customScreenCount);
     }
 
     // Log loaded locations

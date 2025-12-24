@@ -28,6 +28,63 @@
 // Maximum number of locations supported
 #define MAX_WEATHER_LOCATIONS 5
 
+// Maximum carousel items (3 locations + 3 countdowns + 3 custom = 9)
+#define MAX_CAROUSEL_ITEMS 9
+#define MAX_COUNTDOWN_EVENTS 3
+#define MAX_CUSTOM_SCREENS 3
+
+// =============================================================================
+// CAROUSEL & COUNTDOWN TYPES
+// =============================================================================
+
+/**
+ * Carousel item types - what kind of screen to display
+ */
+enum CarouselItemType {
+    CAROUSEL_LOCATION = 0,   // Weather location (shows 3 screens: current + 2 forecast)
+    CAROUSEL_COUNTDOWN = 1,  // Countdown event (single screen)
+    CAROUSEL_CUSTOM = 2      // Custom text screen (single screen)
+};
+
+/**
+ * Countdown event types - preset and custom events
+ */
+enum CountdownEventType {
+    COUNTDOWN_BIRTHDAY = 0,   // Custom date, recurring yearly
+    COUNTDOWN_EASTER = 1,     // Calculated each year (Computus algorithm)
+    COUNTDOWN_HALLOWEEN = 2,  // Oct 31
+    COUNTDOWN_VALENTINE = 3,  // Feb 14
+    COUNTDOWN_CHRISTMAS = 4,  // Dec 25
+    COUNTDOWN_CUSTOM = 5      // Custom date and title
+};
+
+/**
+ * Countdown event configuration
+ */
+struct CountdownEvent {
+    uint8_t type;           // CountdownEventType
+    uint8_t month;          // 1-12 (for Birthday and Custom types)
+    uint8_t day;            // 1-31
+    char title[32];         // Display title (used for Birthday and Custom)
+};
+
+/**
+ * Custom text screen configuration
+ */
+struct CustomScreenConfig {
+    char header[17];        // Top-right text (16 chars + null)
+    char body[81];          // Center text (80 chars + null) - e.g., "My Weather Clock is AWESOME!"
+    char footer[31];        // Bottom bar text (30 chars + null)
+};
+
+/**
+ * Single carousel item - references data by type and index
+ */
+struct CarouselItem {
+    uint8_t type;           // CarouselItemType
+    uint8_t dataIndex;      // Index into respective data array
+};
+
 // =============================================================================
 // WEATHER CODE MAPPING (WMO Weather interpretation codes)
 // =============================================================================
@@ -390,5 +447,100 @@ void setCustomScreenBody(const char* text);
  */
 const char* getCustomScreenFooter();
 void setCustomScreenFooter(const char* text);
+
+// =============================================================================
+// CAROUSEL SYSTEM
+// =============================================================================
+
+/**
+ * Get number of items in carousel
+ */
+uint8_t getCarouselCount();
+
+/**
+ * Get carousel item by index
+ */
+const CarouselItem& getCarouselItem(uint8_t index);
+
+/**
+ * Set entire carousel (items array and count)
+ */
+void setCarousel(const CarouselItem* items, uint8_t count);
+
+/**
+ * Add item to carousel
+ * @return true if added, false if at max capacity
+ */
+bool addCarouselItem(uint8_t type, uint8_t dataIndex);
+
+/**
+ * Remove carousel item by index
+ */
+bool removeCarouselItem(uint8_t index);
+
+/**
+ * Move carousel item from one position to another
+ */
+bool moveCarouselItem(uint8_t fromIndex, uint8_t toIndex);
+
+// =============================================================================
+// COUNTDOWN EVENTS
+// =============================================================================
+
+/**
+ * Get number of countdown events
+ */
+uint8_t getCountdownCount();
+
+/**
+ * Get countdown event by index
+ */
+const CountdownEvent& getCountdown(uint8_t index);
+
+/**
+ * Add countdown event
+ * @return index of new event, or -1 if at max capacity
+ */
+int addCountdown(uint8_t type, uint8_t month, uint8_t day, const char* title);
+
+/**
+ * Update countdown event
+ */
+bool updateCountdown(uint8_t index, uint8_t type, uint8_t month, uint8_t day, const char* title);
+
+/**
+ * Remove countdown event by index
+ */
+bool removeCountdown(uint8_t index);
+
+// =============================================================================
+// CUSTOM SCREENS (Multiple)
+// =============================================================================
+
+/**
+ * Get number of custom screens
+ */
+uint8_t getCustomScreenCount();
+
+/**
+ * Get custom screen config by index
+ */
+const CustomScreenConfig& getCustomScreenConfig(uint8_t index);
+
+/**
+ * Add custom screen
+ * @return index of new screen, or -1 if at max capacity
+ */
+int addCustomScreenConfig(const char* header, const char* body, const char* footer);
+
+/**
+ * Update custom screen
+ */
+bool updateCustomScreenConfig(uint8_t index, const char* header, const char* body, const char* footer);
+
+/**
+ * Remove custom screen by index
+ */
+bool removeCustomScreenConfig(uint8_t index);
 
 #endif // WEATHER_H
