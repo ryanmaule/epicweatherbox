@@ -173,25 +173,19 @@ $PIO run --target clean
 - **Resolution**: 240x240 pixels
 - **Interface**: SPI (Mode 3 required)
 - **Ribbon marking**: GMT154-06
-- **Color Format**: BGR565 (Blue-Green-Red, 16-bit)
+- **Color Format**: RGB565 (16-bit, R in high bits, B in low bits)
 
-### Color Conversion (IMPORTANT!)
-The display uses **BGR565** format, NOT standard RGB565. When converting hex RGB colors:
+### Color Conversion
+For detailed color conversion formulas and palettes, see the **TFT Designer Agent** at `.claude/agents/tft-designer.md`.
 
-**To convert #RRGGBB to BGR565:**
+**Quick formula** (#RRGGBB to RGB565):
 ```
-B_5bit = (B >> 3)  // 5 bits for blue (HIGH bits)
-G_6bit = (G >> 2)  // 6 bits for green (MIDDLE bits)
-R_5bit = (R >> 3)  // 5 bits for red (LOW bits)
-BGR565 = (B_5bit << 11) | (G_6bit << 5) | R_5bit
+RGB565 = ((R >> 3) << 11) | ((G >> 2) << 5) | (B >> 3)
 ```
 
-**Example**: Converting #87CEEB (sky blue) to BGR565:
-- R=0x87=135, G=0xCE=206, B=0xEB=235
-- B_5bit=29, G_6bit=51, R_5bit=16
-- BGR565 = (29 << 11) | (51 << 5) | 16 = 0xEE70
+**Example**: #4682B4 (steel blue) → 0x4416
 
-**Common pitfall**: Getting R and B swapped - blue goes in the HIGH bits (11-15), red goes in the LOW bits (0-4). If colors appear as their complement (blue→orange, teal→brown), you have them backwards.
+**Note**: Code comments saying "BGR565" are misleading - the display uses standard RGB565.
 
 ### Display Pinout
 | Function | GPIO | Notes |
@@ -784,8 +778,55 @@ A live device was accessed at `http://192.168.4.235/` running firmware V9.0.40.
 
 - [x] v1.3.3 release
 
+### Phase 14: Theme System (v1.4.0) - IN PROGRESS
+
+**Theme Infrastructure**:
+- New files: `src/themes.h` and `src/themes.cpp`
+- 3 themes total: Classic (original), Sunset (new warm palette), Custom (user-editable)
+- Built-in themes stored in PROGMEM (0 RAM cost)
+- User custom theme stored in `/themes.json` on LittleFS
+
+**Theme Modes**:
+- Auto: Uses dark theme at night, light during day (based on weather API `isDay`)
+- Dark: Always dark theme
+- Light: Always light theme
+
+**Theme Colors** (7 per variant):
+- Background, Card, Text, Cyan (time/headers), Orange (high temp), Blue (low temp), Gray (secondary)
+
+**Sunset Theme** (designed by TFT Designer agent):
+- Dark mode: Deep burgundy (#2D1B2E) background, warm coral accents (#FF8C42), soft pink highlights (#FFB7B2)
+- Light mode: Warm cream (#FFF5E6) background, burnt orange accents (#D4652F), coral highlights (#C94C4C)
+
+**Admin UI**:
+- New "Theme" tab between Display and System
+- Theme selector buttons (Classic, Sunset, Custom)
+- Mode selector (Auto, Dark, Light)
+- 14 color pickers for custom theme (7 dark + 7 light)
+- RGB565 ↔ Hex color conversion in JavaScript
+- Reset to Classic defaults button
+
+**API Endpoints**:
+- `GET /api/themes` - Returns active theme, mode, and custom colors
+- `POST /api/themes` - Update theme selection, mode, and custom colors
+
+**Files Modified**:
+- `src/themes.h` - NEW: Theme structures and declarations
+- `src/themes.cpp` - NEW: Theme management with built-in themes
+- `src/main.cpp` - Removed color defines, added theme include and API endpoints
+- `src/weather.cpp/h` - Removed themeMode (moved to themes module)
+- `data/admin.html` - Added Theme tab with color pickers
+
+**Memory Impact**:
+- RAM: <50 bytes (theme state + custom colors)
+- LittleFS: ~300 bytes (`/themes.json`)
+- Flash: +2KB for theme code, +2KB for admin UI
+
+- [ ] Test on device
+- [ ] Release v1.4.0
+
 ### Current Device Status
-- **Firmware**: v1.3.3
+- **Firmware**: v1.3.3 (v1.4.0 in development)
 - **GitHub Release**: https://github.com/ryanmaule/epicweatherbox/releases/tag/v1.3.3
 - **Device IP**: 192.168.4.235
 - **OTA URL**: http://192.168.4.235/update

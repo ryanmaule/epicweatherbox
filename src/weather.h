@@ -399,14 +399,9 @@ void setScreenCycleTime(int seconds);
 bool getGifScreenEnabled();
 void setGifScreenEnabled(bool enabled);
 
-/**
- * Theme mode
- * 0 = auto (dark at night, light during day based on night mode hours)
- * 1 = always dark
- * 2 = always light
- */
-int getThemeMode();
-void setThemeMode(int mode);
+// Theme mode functions moved to themes.h
+// int getThemeMode();
+// void setThemeMode(int mode);
 
 /**
  * UI vertical nudge in pixels

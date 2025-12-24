@@ -39,7 +39,7 @@ static int nightModeEndHour = 7;     // 7 AM
 static int nightModeBrightness = 20;
 static bool showForecast = true;  // true = show forecast screens, false = current weather only
 static int screenCycleTime = 10;  // seconds between screen changes (5-60)
-static int themeMode = 0;  // 0=auto, 1=dark, 2=light
+// themeMode moved to themes.cpp
 static bool gifScreenEnabled = false;  // Show GIF screen in rotation
 static int uiNudgeY = 0;  // UI vertical offset in pixels (positive=up, negative=down)
 
@@ -644,8 +644,7 @@ void setShowForecast(bool show) { showForecast = show; }
 int getScreenCycleTime() { return screenCycleTime; }
 void setScreenCycleTime(int seconds) { screenCycleTime = constrain(seconds, 5, 60); }
 
-int getThemeMode() { return themeMode; }
-void setThemeMode(int mode) { themeMode = constrain(mode, 0, 2); }
+// getThemeMode() and setThemeMode() moved to themes.cpp
 
 bool getGifScreenEnabled() { return gifScreenEnabled; }
 void setGifScreenEnabled(bool enabled) { gifScreenEnabled = enabled; }
@@ -948,7 +947,7 @@ bool saveWeatherConfig() {
     doc["nightModeBrightness"] = nightModeBrightness;
     doc["showForecast"] = showForecast;
     doc["screenCycleTime"] = screenCycleTime;
-    doc["themeMode"] = themeMode;
+    // themeMode now saved separately in themes.json
     doc["gifScreenEnabled"] = gifScreenEnabled;
     doc["uiNudgeY"] = uiNudgeY;
 
@@ -1106,7 +1105,7 @@ bool loadWeatherConfig() {
     nightModeBrightness = doc["nightModeBrightness"] | 20;
     showForecast = doc["showForecast"] | true;
     screenCycleTime = doc["screenCycleTime"] | 10;
-    themeMode = doc["themeMode"] | 0;
+    // themeMode now loaded from themes.json by themes.cpp
     gifScreenEnabled = doc["gifScreenEnabled"] | false;
     uiNudgeY = doc["uiNudgeY"] | 0;
 

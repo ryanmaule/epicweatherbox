@@ -7,7 +7,7 @@ You are the TFT Designer Agent for the EpicWeatherBox firmware project. Your res
 **Hardware**: ST7789T3 240x240 IPS TFT
 - **Resolution**: 240x240 pixels (57,600 total pixels)
 - **Color Depth**: 16-bit RGB565 (65,536 colors)
-- **Color Order**: BGR (not RGB - colors are swapped!)
+- **Color Order**: Standard RGB565 (despite "BGR" comments in code)
 - **Aspect Ratio**: 1:1 (square)
 - **Backlight**: PWM-controlled brightness on GPIO5
 
@@ -15,13 +15,27 @@ You are the TFT Designer Agent for the EpicWeatherBox firmware project. Your res
 ```
 | R R R R R | G G G G G G | B B B B B |
 |  5 bits   |   6 bits    |  5 bits   |
+| bits 15-11|  bits 10-5  | bits 4-0  |
 ```
-- Red: 5 bits (0-31), Green: 6 bits (0-63), Blue: 5 bits (0-31)
-- Conversion: `RGB565 = ((R & 0xF8) << 8) | ((G & 0xFC) << 3) | (B >> 3)`
+- Red: 5 bits (0-31) in HIGH bits
+- Green: 6 bits (0-63) in MIDDLE bits
+- Blue: 5 bits (0-31) in LOW bits
 
-**Important**: The display uses BGR order, so when defining colors in code:
-- What you see as "red" on screen is actually stored in the blue channel
-- Always test colors on the physical device
+**Verified Conversion Formula** (hex RGB to RGB565):
+```cpp
+// #RRGGBB to RGB565
+uint16_t hexToRGB565(uint8_t r, uint8_t g, uint8_t b) {
+    return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+}
+
+// Example: #4682B4 (steel blue)
+// R=0x46=70, G=0x82=130, B=0xB4=180
+// = ((70 >> 3) << 11) | ((130 >> 2) << 5) | (180 >> 3)
+// = (8 << 11) | (32 << 5) | 22
+// = 0x4416
+```
+
+**Note**: Some code comments say "BGR565" but this is misleading. The display uses standard RGB565 format where R is in the high bits (11-15) and B is in the low bits (0-4).
 
 ## DESIGN PHILOSOPHY
 
@@ -113,7 +127,7 @@ uint8_t b = (rgb565 & 0x1F) * 255 / 31;
 | BG Light | 0xC618 | #C6C6C6 | Background |
 | Card Light | 0xEF7D | #EFEFEF | Card surfaces |
 | Text Dark | 0x2104 | #212121 | Primary text |
-| Cyan Light | 0x866D | #87CEEB | Accent |
+| Cyan Light | 0x4416 | #4682B4 | Accent (steel blue) |
 | Orange Light | 0xC280 | #C65100 | Temperature high |
 | Blue Light | 0x4B0D | #4B96FF | Temperature low |
 | Gray Light | 0x4208 | #424242 | Secondary text |
@@ -404,7 +418,7 @@ Use the standard build and OTA process:
 |---------|-----------|------------|-------------|--------------|
 | Hot/High | #FFA500 | #C65100 | 0xFD20 | 0xC280 |
 | Cold/Low | #5CB3FF | #4B96FF | 0x5D9F | 0x4B0D |
-| Accent | #00FFFF | #87CEEB | 0x07FF | 0x866D |
+| Accent | #00FFFF | #4682B4 | 0x07FF | 0x4416 |
 | Warning | #FF6B6B | #D93636 | 0xFB4D | 0xD9A6 |
 | Success | #4CAF50 | #2E7D32 | 0x2E8A | 0x2DC6 |
 

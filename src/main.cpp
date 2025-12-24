@@ -35,6 +35,7 @@ extern "C" {
 #include "config.h"
 #include "ota.h"
 #include "weather.h"
+#include "themes.h"      // Theme system with color management
 #include "admin_html.h"  // Generated gzipped admin HTML
 
 // ============================================================================
@@ -96,47 +97,13 @@ static int currentDisplayLocation = 0;
 // Emergency safe mode - stops normal operation to allow recovery
 static bool emergencySafeMode = false;
 
-// Colors (dark theme)
-// Dark theme (night)
-#define COLOR_BG_DARK      0x0841  // Very dark blue-gray
-#define COLOR_CARD_DARK    0x2104  // Dark card background
-
-// Light theme (day)
-#define COLOR_BG_LIGHT     0xC618  // Medium gray background (much darker than white)
-#define COLOR_CARD_LIGHT   0xEF7D  // Light gray cards (visible contrast from bg)
-
-// Current active colors (set by getThemeBg/getThemeCard)
-#define COLOR_BG       0x0841  // Default: dark (overridden by functions below)
-#define COLOR_CARD     0x2104  // Default: dark
-#define COLOR_CYAN     0x07FF  // Bright cyan
-#define COLOR_WHITE    0xFFFF
-#define COLOR_GRAY     0x8410
-#define COLOR_ORANGE   0xFD20
-#define COLOR_BLUE     0x5D9F
-
-// Text colors for light theme
-#define COLOR_TEXT_DARK    0x2104  // Dark text for light backgrounds
-
-// Light theme accent colors (darker for contrast)
-#define COLOR_CYAN_LIGHT   0x0555  // Darker cyan for light bg
-#define COLOR_ORANGE_LIGHT 0xC280  // Darker orange for light bg
-#define COLOR_BLUE_LIGHT   0x4B0D  // Darker blue for light bg
-#define COLOR_GRAY_LIGHT   0x4208  // Darker gray for light bg
-
-// Icon colors (pixel art style - BGR565 format)
-// BGR565: BBBBB GGGGGG RRRRR (5-6-5 bits)
-#define ICON_SUN       0x07FF  // Yellow (cyan in RGB, yellow in BGR display)
-#define ICON_CLOUD     0xFFFF  // White cloud (for dark mode)
-#define ICON_CLOUD_DARK 0xC618 // Gray cloud (for stormy weather)
-#define ICON_RAIN      0xFD00  // Light blue rain drops
-#define ICON_SNOW      0xFFFF  // White snow (dark mode)
+// Colors are now managed by themes.h/themes.cpp
+// Icon colors used as default values for drawing functions
+#define ICON_SUN       0x07FF  // Yellow/cyan (used for sun icon rays)
+#define ICON_CLOUD     0xFFFF  // White cloud (dark mode default)
+#define ICON_RAIN      0xFD00  // Light blue rain (dark mode default)
+#define ICON_SNOW      0xFFFF  // White snow (dark mode default)
 #define ICON_LIGHTNING 0x07FF  // Yellow lightning bolt
-
-// Light mode icon colors (darker for visibility)
-#define ICON_CLOUD_LIGHT     0x6B4D  // Dark gray cloud for light mode
-#define ICON_CLOUD_STORM_LIGHT 0x4208 // Very dark cloud for storms in light mode
-#define ICON_SNOW_LIGHT      0x4208  // Dark gray snow for light mode
-#define ICON_RAIN_LIGHT      0x4B0D  // Dark blue rain for light mode
 
 // ============================================================================
 // PROCEDURAL PIXEL-ART WEATHER ICONS
@@ -265,7 +232,7 @@ void drawIconMoon(int x, int y, int size = 32) {
 // Draw fog lines
 void drawIconFog(int x, int y, int size = 32) {
     int s = size / 16;
-    uint16_t c = COLOR_GRAY;
+    uint16_t c = getThemeGray();
 
     // Horizontal wavy lines
     for (int px = 3; px < 13; px++) {
@@ -427,8 +394,12 @@ int drawLargeDigit(int x, int y, char digit, int height, uint16_t color) {
             tft.fillRoundRect(left + gap, bot, w - 2*gap, t, t/2, color);      // bot
             break;
         case '-':
-            tft.fillRoundRect(left + gap, mid, w - 2*gap, t, t/2, color);      // mid only
-            break;
+            // Narrower minus sign - half the width of a digit
+            {
+                int minusW = w / 2;
+                tft.fillRoundRect(left, mid, minusW, t, t/2, color);
+                return minusW + gap;
+            }
         default:
             break;
     }
@@ -461,7 +432,9 @@ int getLargeNumberWidth(const char* numStr, int height) {
     int total = 0;
     for (int i = 0; numStr[i] != '\0'; i++) {
         if (numStr[i] == '1') {
-            total += t + gap;  // Matches drawLargeDigit return for '1'
+            total += t + gap;  // Narrow '1'
+        } else if (numStr[i] == '-') {
+            total += w / 2 + gap;  // Narrow minus sign
         } else {
             total += w;
         }
@@ -571,21 +544,22 @@ void initTftMinimal() {
     yield();
 
     // Draw boot screen with smooth fonts
-    tft.fillScreen(COLOR_BG);
+    // Use hardcoded dark theme colors for boot (before themes loaded)
+    tft.fillScreen(0x0841);  // Dark background
     tft.setTextDatum(MC_DATUM);  // Middle center
 
     // "Epic" in bold 18pt cyan
     tft.setFreeFont(FSSB18);
-    tft.setTextColor(COLOR_CYAN);
+    tft.setTextColor(0x07FF);  // Cyan
     tft.drawString("Epic", 120, 95, GFXFF);
 
     // "WeatherBox" in bold 18pt white
-    tft.setTextColor(COLOR_WHITE);
+    tft.setTextColor(0xFFFF);  // White
     tft.drawString("WeatherBox", 120, 130, GFXFF);
 
     // Version in small gray
     tft.setFreeFont(FSS9);
-    tft.setTextColor(COLOR_GRAY);
+    tft.setTextColor(0x8410);  // Gray
     tft.drawString("v" FIRMWARE_VERSION, 120, 165, GFXFF);
 
     // Status text at bottom (y=218 to match IP position - keeps 4+ pixels from bottom edge)
@@ -598,96 +572,40 @@ void initTftMinimal() {
 
 // Update boot screen status text at bottom
 void updateBootScreenStatus(const char* status) {
-    // Clear the status area (y=195 to bottom)
-    tft.fillRect(0, 195, 240, 45, COLOR_BG_DARK);
+    // Clear the status area (y=195 to bottom) - hardcoded dark theme for boot
+    tft.fillRect(0, 195, 240, 45, 0x0841);  // Dark background
 
     // Draw new status at y=218 (4+ pixels from bottom edge)
     tft.setTextDatum(MC_DATUM);
     tft.setFreeFont(FSS9);
-    tft.setTextColor(COLOR_GRAY);
+    tft.setTextColor(0x8410);  // Gray
     tft.drawString(status, 120, 218, GFXFF);
 }
 
 // Show IP address on boot screen (called after WiFi connects)
 // Shows IP in gray first, then transitions to cyan for emphasis
 void showBootScreenIP(const char* ip) {
-    // Clear bottom area for IP display
-    tft.fillRect(0, 195, 240, 45, COLOR_BG_DARK);
+    // Clear bottom area for IP display - hardcoded dark theme for boot
+    tft.fillRect(0, 195, 240, 45, 0x0841);  // Dark background
 
     tft.setTextDatum(MC_DATUM);
     tft.setFreeFont(FSS9);
 
     // First: show IP in gray
-    tft.setTextColor(COLOR_GRAY);
+    tft.setTextColor(0x8410);  // Gray
     tft.drawString(ip, 120, 218, GFXFF);  // y=218 keeps text 4+ pixels from bottom edge
 
     delay(400);
 
     // Then: redraw IP in cyan for emphasis (same position)
-    tft.setTextColor(COLOR_CYAN);
+    tft.setTextColor(0x07FF);  // Cyan
     tft.drawString(ip, 120, 218, GFXFF);
 }
 
-// Determine if we should use dark theme based on theme setting and time
-bool shouldUseDarkTheme() {
-    int themeMode = getThemeMode();
-
-    if (themeMode == 1) return true;   // Always dark
-    if (themeMode == 2) return false;  // Always light
-
-    // Auto mode: dark at night based on isDay from weather
-    const WeatherData& weather = getWeather(0);
-    return !weather.current.isDay;
-}
-
-// Get current theme background color
-uint16_t getThemeBg() {
-    return shouldUseDarkTheme() ? COLOR_BG_DARK : COLOR_BG_LIGHT;
-}
-
-// Get current theme card color
-uint16_t getThemeCard() {
-    return shouldUseDarkTheme() ? COLOR_CARD_DARK : COLOR_CARD_LIGHT;
-}
-
-// Get current theme text color (for text that needs to contrast with background)
-uint16_t getThemeText() {
-    return shouldUseDarkTheme() ? COLOR_WHITE : COLOR_TEXT_DARK;
-}
-
-// Get theme-aware accent colors
-uint16_t getThemeCyan() {
-    return shouldUseDarkTheme() ? COLOR_CYAN : COLOR_CYAN_LIGHT;
-}
-
-uint16_t getThemeOrange() {
-    return shouldUseDarkTheme() ? COLOR_ORANGE : COLOR_ORANGE_LIGHT;
-}
-
-uint16_t getThemeBlue() {
-    return shouldUseDarkTheme() ? COLOR_BLUE : COLOR_BLUE_LIGHT;
-}
-
-uint16_t getThemeGray() {
-    return shouldUseDarkTheme() ? COLOR_GRAY : COLOR_GRAY_LIGHT;
-}
-
-// Get theme-aware icon colors
-uint16_t getIconCloud() {
-    return shouldUseDarkTheme() ? ICON_CLOUD : ICON_CLOUD_LIGHT;
-}
-
-uint16_t getIconCloudDark() {
-    return shouldUseDarkTheme() ? ICON_CLOUD_DARK : ICON_CLOUD_STORM_LIGHT;
-}
-
-uint16_t getIconSnow() {
-    return shouldUseDarkTheme() ? ICON_SNOW : ICON_SNOW_LIGHT;
-}
-
-uint16_t getIconRain() {
-    return shouldUseDarkTheme() ? ICON_RAIN : ICON_RAIN_LIGHT;
-}
+// Theme functions are now in themes.cpp
+// shouldUseDarkTheme(), getThemeBg(), getThemeCard(), getThemeText()
+// getThemeCyan(), getThemeOrange(), getThemeBlue(), getThemeGray()
+// getIconCloud(), getIconCloudDark(), getIconSnow(), getIconRain()
 
 // ============================================================================
 // ANIMATED GIF SUPPORT - DISABLED
@@ -1987,6 +1905,12 @@ void setup() {
 
     feedWatchdog();
 
+    // Initialize theme system (loads from LittleFS)
+    Serial.println(F("[BOOT] Initializing themes..."));
+    initThemes();
+
+    feedWatchdog();
+
     // Initialize display - MINIMAL SAFE TEST
 #if ENABLE_TFT_TEST
     Serial.println(F("[BOOT] Initializing TFT (minimal test)..."));
@@ -2525,6 +2449,127 @@ void setupWebServer() {
         forceWeatherUpdate();
 
         server.send(200, "application/json", "{\"success\":true,\"message\":\"Config saved\"}");
+    });
+
+    // Themes API - GET returns all themes, POST updates custom theme
+    server.on("/api/themes", HTTP_GET, []() {
+        JsonDocument doc;
+
+        doc["activeTheme"] = getActiveTheme();
+        doc["themeMode"] = getThemeMode();
+
+        // List all themes
+        JsonArray themes = doc["themes"].to<JsonArray>();
+
+        // Built-in: Classic
+        JsonObject classic = themes.add<JsonObject>();
+        classic["name"] = "Classic";
+        classic["index"] = THEME_CLASSIC;
+        classic["builtin"] = true;
+
+        // Built-in: Sunset
+        JsonObject sunset = themes.add<JsonObject>();
+        sunset["name"] = "Sunset";
+        sunset["index"] = THEME_SUNSET;
+        sunset["builtin"] = true;
+
+        // User: Custom
+        JsonObject custom = themes.add<JsonObject>();
+        custom["name"] = "Custom";
+        custom["index"] = THEME_CUSTOM;
+        custom["builtin"] = false;
+
+        // Include custom theme colors for editing
+        const ThemeColors& darkColors = getCustomThemeDark();
+        JsonObject dark = custom["dark"].to<JsonObject>();
+        dark["bg"] = darkColors.bg;
+        dark["card"] = darkColors.card;
+        dark["text"] = darkColors.text;
+        dark["cyan"] = darkColors.cyan;
+        dark["orange"] = darkColors.orange;
+        dark["blue"] = darkColors.blue;
+        dark["gray"] = darkColors.gray;
+
+        const ThemeColors& lightColors = getCustomThemeLight();
+        JsonObject light = custom["light"].to<JsonObject>();
+        light["bg"] = lightColors.bg;
+        light["card"] = lightColors.card;
+        light["text"] = lightColors.text;
+        light["cyan"] = lightColors.cyan;
+        light["orange"] = lightColors.orange;
+        light["blue"] = lightColors.blue;
+        light["gray"] = lightColors.gray;
+
+        String response;
+        serializeJson(doc, response);
+        server.send(200, "application/json", response);
+    });
+
+    server.on("/api/themes", HTTP_POST, []() {
+        if (!server.hasArg("plain")) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"No data\"}");
+            return;
+        }
+
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, server.arg("plain"));
+        if (error) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
+            return;
+        }
+
+        // Set active theme
+        if (doc["activeTheme"].is<int>()) {
+            setActiveTheme(doc["activeTheme"] | 0);
+        }
+
+        // Set theme mode
+        if (doc["themeMode"].is<int>()) {
+            setThemeMode(doc["themeMode"] | 0);
+        }
+
+        // Update custom theme colors
+        if (doc["custom"].is<JsonObject>()) {
+            JsonObject custom = doc["custom"];
+            ThemeColors dark, light;
+
+            // Load current defaults
+            dark = getCustomThemeDark();
+            light = getCustomThemeLight();
+
+            // Update dark colors
+            if (custom["dark"].is<JsonObject>()) {
+                JsonObject d = custom["dark"];
+                if (d["bg"].is<int>()) dark.bg = d["bg"];
+                if (d["card"].is<int>()) dark.card = d["card"];
+                if (d["text"].is<int>()) dark.text = d["text"];
+                if (d["cyan"].is<int>()) dark.cyan = d["cyan"];
+                if (d["orange"].is<int>()) dark.orange = d["orange"];
+                if (d["blue"].is<int>()) dark.blue = d["blue"];
+                if (d["gray"].is<int>()) dark.gray = d["gray"];
+            }
+
+            // Update light colors
+            if (custom["light"].is<JsonObject>()) {
+                JsonObject l = custom["light"];
+                if (l["bg"].is<int>()) light.bg = l["bg"];
+                if (l["card"].is<int>()) light.card = l["card"];
+                if (l["text"].is<int>()) light.text = l["text"];
+                if (l["cyan"].is<int>()) light.cyan = l["cyan"];
+                if (l["orange"].is<int>()) light.orange = l["orange"];
+                if (l["blue"].is<int>()) light.blue = l["blue"];
+                if (l["gray"].is<int>()) light.gray = l["gray"];
+            }
+
+            updateCustomTheme(dark, light);
+        }
+
+        // Reset custom theme to defaults
+        if (doc["resetCustom"].is<bool>() && doc["resetCustom"]) {
+            resetCustomTheme();
+        }
+
+        server.send(200, "application/json", "{\"success\":true,\"message\":\"Theme saved\"}");
     });
 
     // Admin page - minimal location config
