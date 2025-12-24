@@ -179,15 +179,27 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <button class="btn btn-secondary" onclick="location.href='/update'">Firmware Update</button>
 <button class="btn btn-secondary" style="background:#c33" onclick="if(confirm('Reboot?'))location.href='/reboot'">Reboot</button>
 </div>
+<div class="form-group" style="margin-top:20px">
+<label>API Endpoints</label>
+<div class="info-box"><span class="info-label">/api/weather</span><a href="/api/weather" class="info-value" style="text-decoration:none">Weather data</a></div>
+<div class="info-box"><span class="info-label">/api/config</span><a href="/api/config" class="info-value" style="text-decoration:none">Location config</a></div>
+<div class="info-box"><span class="info-label">/api/status</span><a href="/api/status" class="info-value" style="text-decoration:none">Device status</a></div>
+</div>
+<div class="form-group" style="margin-top:15px">
+<label>Project Links</label>
+<div class="info-box"><span class="info-label">GitHub</span><a href="https://github.com/ryanmaule/epicweatherbox" target="_blank" class="info-value" style="text-decoration:none">Source &amp; Docs</a></div>
+<div class="info-box"><span class="info-label">Releases</span><a href="https://github.com/ryanmaule/epicweatherbox/releases" target="_blank" class="info-value" style="text-decoration:none">Download firmware</a></div>
+<div class="info-box"><span class="info-label">Issues</span><a href="https://github.com/ryanmaule/epicweatherbox/issues" target="_blank" class="info-value" style="text-decoration:none">Report bugs</a></div>
+</div>
 </div>
 </div>
 </div>
 </div>
 <div class="links">
-<a href="/">Home</a>
 <a href="/api/weather">Weather API</a>
 <a href="/api/status">Status API</a>
-<a href="/safemode" style="color:#f90">Safe Mode</a>
+<a href="/api/safemode" style="color:#f90">Safe Mode</a>
+<a href="/reset" style="color:#f66" onclick="return confirm('Factory Reset will clear WiFi settings and reboot. Continue?')">Factory Reset</a>
 </div>
 </div>
 

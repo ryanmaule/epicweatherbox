@@ -11,7 +11,7 @@
 // =============================================================================
 // FIRMWARE INFO
 // =============================================================================
-#define FIRMWARE_VERSION "1.3.1"
+#define FIRMWARE_VERSION "1.3.2"
 #define DEVICE_NAME "EpicWeatherBox"
 #define DEVICE_MODEL "EpicWeatherBox"
 

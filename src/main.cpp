@@ -1895,7 +1895,6 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", 0, 60000);
 void setupWiFi();
 void setupWebServer();
 void setupWatchdog();
-void handleRoot();
 void handleAdmin();
 void handleAdminLegacy();  // Fallback embedded admin page
 void handleNotFound();
@@ -2170,8 +2169,11 @@ void setupWiFi() {
  * Setup web server routes
  */
 void setupWebServer() {
-    // Main page
-    server.on("/", HTTP_GET, handleRoot);
+    // Redirect root to admin panel
+    server.on("/", HTTP_GET, []() {
+        server.sendHeader("Location", "/admin", true);
+        server.send(302, "text/plain", "");
+    });
 
     // API endpoints
     server.on("/api/status", HTTP_GET, []() {
@@ -2706,99 +2708,6 @@ void setupWebServer() {
     // Start server
     server.begin();
     Serial.println(F("[WEB] HTTP server started on port 80"));
-}
-
-/**
- * Handle root page
- */
-void handleRoot() {
-    // Using F() macro to store strings in flash
-    String html = F("<!DOCTYPE html><html><head>"
-        "<meta charset='UTF-8'>"
-        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-        "<title>EpicWeatherBox</title>"
-        "<style>"
-        "*{box-sizing:border-box;}"
-        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
-        "margin:0;padding:20px;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);"
-        "color:#eee;min-height:100vh;}"
-        ".container{max-width:600px;margin:0 auto;}"
-        "h1{color:#00d4ff;text-align:center;margin-bottom:30px;}"
-        ".card{background:rgba(255,255,255,0.05);border-radius:12px;padding:20px;"
-        "margin-bottom:20px;border:1px solid rgba(255,255,255,0.1);}"
-        ".card h3{margin-top:0;color:#00d4ff;}"
-        ".info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}"
-        ".info-item{padding:10px;background:rgba(0,0,0,0.2);border-radius:8px;}"
-        ".info-label{font-size:12px;color:#888;margin-bottom:4px;}"
-        ".info-value{font-size:16px;font-weight:500;}"
-        "a{color:#00d4ff;text-decoration:none;}"
-        "a:hover{text-decoration:underline;}"
-        ".links{display:flex;flex-wrap:wrap;gap:10px;}"
-        ".link-btn{display:inline-block;padding:12px 20px;background:#00d4ff;color:#1a1a2e;"
-        "border-radius:8px;font-weight:600;transition:all 0.3s;}"
-        ".link-btn:hover{background:#00a8cc;text-decoration:none;transform:translateY(-2px);}"
-        ".link-btn.warning{background:#ffc107;}"
-        ".link-btn.danger{background:#dc3545;color:#fff;}"
-        "</style></head><body>"
-        "<div class='container'>"
-        "<h1>EpicWeatherBox</h1>");
-
-    html += F("<div class='card'><h3>Device Status</h3><div class='info-grid'>");
-    html += F("<div class='info-item'><div class='info-label'>Firmware</div><div class='info-value'>");
-    html += FIRMWARE_VERSION;
-    html += F("</div></div>");
-    html += F("<div class='info-item'><div class='info-label'>IP Address</div><div class='info-value'>");
-    html += WiFi.localIP().toString();
-    html += F("</div></div>");
-    html += F("<div class='info-item'><div class='info-label'>Free Memory</div><div class='info-value'>");
-    html += String(ESP.getFreeHeap());
-    html += F(" bytes</div></div>");
-    html += F("<div class='info-item'><div class='info-label'>Uptime</div><div class='info-value'>");
-
-    // Format uptime nicely
-    unsigned long uptime = millis() / 1000;
-    if (uptime < 60) {
-        html += String(uptime) + "s";
-    } else if (uptime < 3600) {
-        html += String(uptime / 60) + "m " + String(uptime % 60) + "s";
-    } else {
-        html += String(uptime / 3600) + "h " + String((uptime % 3600) / 60) + "m";
-    }
-
-    html += F("</div></div>");
-    html += F("<div class='info-item'><div class='info-label'>WiFi Signal</div><div class='info-value'>");
-    html += String(WiFi.RSSI());
-    html += F(" dBm</div></div>");
-    html += F("<div class='info-item'><div class='info-label'>Time</div><div class='info-value'>");
-    html += timeClient.getFormattedTime();
-    html += F("</div></div></div></div>");
-
-    html += F("<div class='card'><h3>Quick Links</h3><div class='links'>"
-        "<a href='/admin' class='link-btn'>Admin Panel</a>"
-        "<a href='/update' class='link-btn'>Firmware Update</a>"
-        "<a href='/reboot' class='link-btn warning'>Reboot</a>"
-        "<a href='/reset' class='link-btn danger'>Factory Reset</a>"
-        "</div></div>");
-
-    html += F("<div class='card'><h3>API Endpoints</h3>"
-        "<p><a href='/api/weather'>/api/weather</a> - Weather data</p>"
-        "<p><a href='/api/config'>/api/config</a> - Location config</p>"
-        "<p><a href='/api/status'>/api/status</a> - Device status</p>"
-        "</div>");
-
-    html += F("<div class='card'><h3>Project Links</h3>"
-        "<p><a href='https://github.com/ryanmaule/epicweatherbox' target='_blank'>GitHub Repository</a> - Source code &amp; documentation</p>"
-        "<p><a href='https://github.com/ryanmaule/epicweatherbox/releases' target='_blank'>Releases</a> - Download latest firmware</p>"
-        "<p><a href='https://github.com/ryanmaule/epicweatherbox/issues' target='_blank'>Issues</a> - Report bugs or request features</p>"
-        "<p style='margin-top:15px;padding-top:10px;border-top:1px solid #333'>"
-        "<strong>Current Version:</strong> " FIRMWARE_VERSION "<br>"
-        "<span style='color:#888;font-size:0.9em'>Check <a href='https://github.com/ryanmaule/epicweatherbox/releases/latest' target='_blank'>latest release</a> for updates. "
-        "Use <a href='/update'>/update</a> to upload new firmware.</span></p>"
-        "</div>");
-
-    html += F("</div></body></html>");
-
-    server.send(200, "text/html", html);
 }
 
 /**
