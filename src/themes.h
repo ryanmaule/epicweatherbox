@@ -17,13 +17,13 @@
 // Maximum user-customizable themes (stored in LittleFS)
 #define MAX_USER_THEMES 1
 
-// Total themes: 2 built-in (Classic, Sunset) + 1 user = 3
+// Total themes: 2 built-in (Classic, Minecraft) + 1 user = 3
 #define TOTAL_THEMES 3
 
 // Theme indices
-#define THEME_CLASSIC  0
-#define THEME_SUNSET   1
-#define THEME_CUSTOM   2
+#define THEME_CLASSIC   0
+#define THEME_MINECRAFT 1
+#define THEME_CUSTOM    2
 
 // Theme mode constants
 #define THEME_MODE_AUTO   0   // Dark at night, light during day
@@ -36,16 +36,25 @@
 
 /**
  * Color palette for one theme variant (dark or light mode)
- * All colors are in BGR565 format (16-bit, blue in high bits)
+ * All colors are in RGB565 format (16-bit)
+ *
+ * Colors are split into two groups:
+ * - On-background: For text/icons drawn on the main background
+ * - On-card: For text/icons drawn inside card containers
  */
 struct ThemeColors {
-    uint16_t bg;        // Background color
-    uint16_t card;      // Card/container background
-    uint16_t text;      // Primary text color
-    uint16_t cyan;      // Accent 1 (time, headers)
-    uint16_t orange;    // Accent 2 (high temp, warnings)
-    uint16_t blue;      // Accent 3 (low temp, info)
-    uint16_t gray;      // Secondary text, muted elements
+    uint16_t bg;            // Main background color
+    uint16_t card;          // Card/container background
+    uint16_t text;          // Primary text on background
+    uint16_t textOnCard;    // Primary text on cards
+    uint16_t cyan;          // Accent on background (time, headers)
+    uint16_t cyanOnCard;    // Accent on cards (precipitation, etc)
+    uint16_t orange;        // High temp on background
+    uint16_t orangeOnCard;  // High temp on cards
+    uint16_t blue;          // Low temp on background
+    uint16_t blueOnCard;    // Low temp on cards
+    uint16_t gray;          // Secondary text on background
+    uint16_t grayOnCard;    // Secondary text on cards
 };
 
 /**
@@ -72,7 +81,7 @@ void initThemes();
 // =============================================================================
 
 /**
- * Get active theme index (0=Classic, 1=Sunset, 2=Custom)
+ * Get active theme index (0=Classic, 1=Minecraft, 2=Custom)
  */
 int getActiveTheme();
 
@@ -118,24 +127,49 @@ uint16_t getThemeCard();
 uint16_t getThemeText();
 
 /**
- * Get current cyan/accent color (time, headers)
+ * Get current cyan/accent color (time, headers) - for use on background
  */
 uint16_t getThemeCyan();
 
 /**
- * Get current orange/accent color (high temp)
+ * Get current cyan/accent color - for use on cards
+ */
+uint16_t getThemeCyanOnCard();
+
+/**
+ * Get current orange/accent color (high temp) - for use on background
  */
 uint16_t getThemeOrange();
 
 /**
- * Get current blue/accent color (low temp)
+ * Get current orange/accent color - for use on cards
+ */
+uint16_t getThemeOrangeOnCard();
+
+/**
+ * Get current blue/accent color (low temp) - for use on background
  */
 uint16_t getThemeBlue();
 
 /**
- * Get current gray/secondary color
+ * Get current blue/accent color - for use on cards
+ */
+uint16_t getThemeBlueOnCard();
+
+/**
+ * Get current gray/secondary color - for use on background
  */
 uint16_t getThemeGray();
+
+/**
+ * Get current gray/secondary color - for use on cards
+ */
+uint16_t getThemeGrayOnCard();
+
+/**
+ * Get text color for use on cards
+ */
+uint16_t getThemeTextOnCard();
 
 // =============================================================================
 // ICON COLORS
@@ -167,7 +201,7 @@ uint16_t getIconRain();
 
 /**
  * Get theme definition by index
- * @param index Theme index (0=Classic, 1=Sunset, 2=Custom)
+ * @param index Theme index (0=Classic, 1=Minecraft, 2=Custom)
  * @return Pointer to theme definition, or nullptr if invalid index
  */
 const ThemeDefinition* getThemeDefinition(int index);

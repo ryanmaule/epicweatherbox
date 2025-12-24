@@ -196,7 +196,7 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <label>Select Theme</label>
 <div class="theme-selector">
 <div class="theme-btn active" data-theme="0"><div class="theme-name">Classic</div><div class="theme-desc">Original colors</div></div>
-<div class="theme-btn" data-theme="1"><div class="theme-name">Sunset</div><div class="theme-desc">Warm orange/purple</div></div>
+<div class="theme-btn" data-theme="1"><div class="theme-name">Minecraft</div><div class="theme-desc">Blocky earth tones</div></div>
 <div class="theme-btn" data-theme="2"><div class="theme-name">Custom</div><div class="theme-desc">Your colors</div></div>
 </div>
 </div>
@@ -210,28 +210,53 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <p style="font-size:0.75em;color:#666;margin-top:4px">Auto uses dark at night, light during day.</p>
 </div>
 <div id="custom-colors" class="custom-colors hidden">
-<div class="color-group">
-<div class="color-group-title">Dark Mode Colors</div>
-<div class="color-row"><span class="color-label">Background</span><input type="color" class="color-preview" id="dark-bg"><input type="text" class="color-input" id="dark-bg-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Card</span><input type="color" class="color-preview" id="dark-card"><input type="text" class="color-input" id="dark-card-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Text</span><input type="color" class="color-preview" id="dark-text"><input type="text" class="color-input" id="dark-text-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Cyan (time)</span><input type="color" class="color-preview" id="dark-cyan"><input type="text" class="color-input" id="dark-cyan-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Orange (high temp)</span><input type="color" class="color-preview" id="dark-orange"><input type="text" class="color-input" id="dark-orange-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Blue (low temp)</span><input type="color" class="color-preview" id="dark-blue"><input type="text" class="color-input" id="dark-blue-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Gray (secondary)</span><input type="color" class="color-preview" id="dark-gray"><input type="text" class="color-input" id="dark-gray-hex" maxlength="7"></div>
-</div>
-<div class="color-group">
-<div class="color-group-title">Light Mode Colors</div>
-<div class="color-row"><span class="color-label">Background</span><input type="color" class="color-preview" id="light-bg"><input type="text" class="color-input" id="light-bg-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Card</span><input type="color" class="color-preview" id="light-card"><input type="text" class="color-input" id="light-card-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Text</span><input type="color" class="color-preview" id="light-text"><input type="text" class="color-input" id="light-text-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Cyan (time)</span><input type="color" class="color-preview" id="light-cyan"><input type="text" class="color-input" id="light-cyan-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Orange (high temp)</span><input type="color" class="color-preview" id="light-orange"><input type="text" class="color-input" id="light-orange-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Blue (low temp)</span><input type="color" class="color-preview" id="light-blue"><input type="text" class="color-input" id="light-blue-hex" maxlength="7"></div>
-<div class="color-row"><span class="color-label">Gray (secondary)</span><input type="color" class="color-preview" id="light-gray"><input type="text" class="color-input" id="light-gray-hex" maxlength="7"></div>
-</div>
+<div class="form-group">
+<label>Start From</label>
 <div class="btn-row">
-<button class="btn btn-secondary" onclick="resetCustomTheme()">Reset to Classic</button>
+<button class="btn btn-secondary" onclick="loadThemeColors(0)">Load Classic</button>
+<button class="btn btn-secondary" onclick="loadThemeColors(1)">Load Minecraft</button>
+<button class="btn btn-secondary" style="background:#633" onclick="clearCustomTheme()">Clear All</button>
+</div>
+</div>
+<div class="color-group">
+<div class="color-group-title">Dark Mode - Background Colors</div>
+<p style="font-size:0.7em;color:#666;margin-bottom:8px">Colors for elements on the main screen background</p>
+<div class="color-row"><span class="color-label">Background</span><input type="color" class="color-preview" id="dark-bg"><input type="text" class="color-input" id="dark-bg-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Primary Text</span><input type="color" class="color-preview" id="dark-text"><input type="text" class="color-input" id="dark-text-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Time &amp; Headers</span><input type="color" class="color-preview" id="dark-cyan"><input type="text" class="color-input" id="dark-cyan-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">High Temp</span><input type="color" class="color-preview" id="dark-orange"><input type="text" class="color-input" id="dark-orange-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Low Temp</span><input type="color" class="color-preview" id="dark-blue"><input type="text" class="color-input" id="dark-blue-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Secondary Text</span><input type="color" class="color-preview" id="dark-gray"><input type="text" class="color-input" id="dark-gray-hex" maxlength="7"></div>
+</div>
+<div class="color-group">
+<div class="color-group-title">Dark Mode - Card Colors</div>
+<p style="font-size:0.7em;color:#666;margin-bottom:8px">Colors for elements inside forecast cards and footer bars</p>
+<div class="color-row"><span class="color-label">Card Background</span><input type="color" class="color-preview" id="dark-card"><input type="text" class="color-input" id="dark-card-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Card Text</span><input type="color" class="color-preview" id="dark-textOnCard"><input type="text" class="color-input" id="dark-textOnCard-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Card Accents</span><input type="color" class="color-preview" id="dark-cyanOnCard"><input type="text" class="color-input" id="dark-cyanOnCard-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Card High Temp</span><input type="color" class="color-preview" id="dark-orangeOnCard"><input type="text" class="color-input" id="dark-orangeOnCard-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Card Low Temp</span><input type="color" class="color-preview" id="dark-blueOnCard"><input type="text" class="color-input" id="dark-blueOnCard-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Card Secondary</span><input type="color" class="color-preview" id="dark-grayOnCard"><input type="text" class="color-input" id="dark-grayOnCard-hex" maxlength="7"></div>
+</div>
+<div class="color-group">
+<div class="color-group-title">Light Mode - Background Colors</div>
+<p style="font-size:0.7em;color:#666;margin-bottom:8px">Colors for elements on the main screen background</p>
+<div class="color-row"><span class="color-label">Background</span><input type="color" class="color-preview" id="light-bg"><input type="text" class="color-input" id="light-bg-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Primary Text</span><input type="color" class="color-preview" id="light-text"><input type="text" class="color-input" id="light-text-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Time &amp; Headers</span><input type="color" class="color-preview" id="light-cyan"><input type="text" class="color-input" id="light-cyan-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">High Temp</span><input type="color" class="color-preview" id="light-orange"><input type="text" class="color-input" id="light-orange-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Low Temp</span><input type="color" class="color-preview" id="light-blue"><input type="text" class="color-input" id="light-blue-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Secondary Text</span><input type="color" class="color-preview" id="light-gray"><input type="text" class="color-input" id="light-gray-hex" maxlength="7"></div>
+</div>
+<div class="color-group">
+<div class="color-group-title">Light Mode - Card Colors</div>
+<p style="font-size:0.7em;color:#666;margin-bottom:8px">Colors for elements inside forecast cards and footer bars</p>
+<div class="color-row"><span class="color-label">Card Background</span><input type="color" class="color-preview" id="light-card"><input type="text" class="color-input" id="light-card-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Card Text</span><input type="color" class="color-preview" id="light-textOnCard"><input type="text" class="color-input" id="light-textOnCard-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Card Accents</span><input type="color" class="color-preview" id="light-cyanOnCard"><input type="text" class="color-input" id="light-cyanOnCard-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Card High Temp</span><input type="color" class="color-preview" id="light-orangeOnCard"><input type="text" class="color-input" id="light-orangeOnCard-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Card Low Temp</span><input type="color" class="color-preview" id="light-blueOnCard"><input type="text" class="color-input" id="light-blueOnCard-hex" maxlength="7"></div>
+<div class="color-row"><span class="color-label">Card Secondary</span><input type="color" class="color-preview" id="light-grayOnCard"><input type="text" class="color-input" id="light-grayOnCard-hex" maxlength="7"></div>
 </div>
 </div>
 <div class="btn-row" style="margin-top:15px">
@@ -1234,7 +1259,7 @@ function hexToRgb565(hex) {
 }
 
 // Theme UI handlers
-const COLOR_FIELDS = ['bg', 'card', 'text', 'cyan', 'orange', 'blue', 'gray'];
+const COLOR_FIELDS = ['bg', 'card', 'text', 'textOnCard', 'cyan', 'cyanOnCard', 'orange', 'orangeOnCard', 'blue', 'blueOnCard', 'gray', 'grayOnCard'];
 
 function updateThemes(data) {
   themeData = data;
@@ -1255,9 +1280,9 @@ function updateThemes(data) {
   customSection.classList.toggle('hidden', data.activeTheme !== 2);
 
   // Load custom theme colors into pickers
-  if (data.custom) {
-    loadColorGroup('dark', data.custom.dark);
-    loadColorGroup('light', data.custom.light);
+  if (data.themes && data.themes[2]) {
+    loadColorGroup('dark', data.themes[2].dark);
+    loadColorGroup('light', data.themes[2].light);
   }
 }
 
@@ -1272,6 +1297,35 @@ function loadColorGroup(mode, colors) {
       hex.value = hexVal;
     }
   });
+}
+
+// Load colors from a built-in theme (0=Classic, 1=Minecraft)
+function loadThemeColors(themeIndex) {
+  if (!themeData || !themeData.themes || !themeData.themes[themeIndex]) {
+    showStatus('theme-status', 'error', 'Theme data not available');
+    return;
+  }
+  const theme = themeData.themes[themeIndex];
+  loadColorGroup('dark', theme.dark);
+  loadColorGroup('light', theme.light);
+  showStatus('theme-status', 'success', `Loaded ${theme.name} colors`);
+}
+
+// Clear all custom theme colors to black
+function clearCustomTheme() {
+  if (!confirm('Clear all custom colors to black?')) return;
+  const black = '#000000';
+  COLOR_FIELDS.forEach(field => {
+    ['dark', 'light'].forEach(mode => {
+      const picker = document.getElementById(`${mode}-${field}`);
+      const hex = document.getElementById(`${mode}-${field}-hex`);
+      if (picker && hex) {
+        picker.value = black;
+        hex.value = black;
+      }
+    });
+  });
+  showStatus('theme-status', 'success', 'Colors cleared');
 }
 
 // Theme selector click handlers

@@ -160,6 +160,25 @@ $PIO device monitor
 $PIO run --target clean
 ```
 
+## Admin HTML System
+
+The admin panel (`data/admin.html`) uses a gzip + PROGMEM + LittleFS caching system due to ESP8266 memory limits. **See `.claude/agents/esp8266-developer.md` for full documentation.**
+
+**Quick Reference**:
+```
+data/admin.html → (build) → src/admin_html.h → (boot) → LittleFS:/admin.html.gz → (serve) → Browser
+```
+
+**When changing admin.html**:
+1. Edit `data/admin.html`
+2. **Bump version** in `config.h` (`FIRMWARE_VERSION`) - **CRITICAL!**
+3. Clean build: `pio run --target clean && pio run -e esp8266`
+4. Flash via OTA
+
+**Why version matters**: Device caches `/admin.html.gz` on LittleFS. It only reprovisions from PROGMEM when the firmware version changes. Without a version bump, your changes won't appear!
+
+**Force reprovision** (debugging only): `curl http://192.168.4.235/api/reprovision`
+
 ## Key Technical Notes
 
 ### ESP8266 Specifications

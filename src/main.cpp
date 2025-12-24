@@ -447,10 +447,16 @@ int getLargeNumberWidth(const char* numStr, int height) {
 bool shouldUseDarkTheme();
 uint16_t getThemeBg();
 uint16_t getThemeCard();
+uint16_t getThemeText();
+uint16_t getThemeTextOnCard();
 uint16_t getThemeCyan();
+uint16_t getThemeCyanOnCard();
 uint16_t getThemeOrange();
+uint16_t getThemeOrangeOnCard();
 uint16_t getThemeBlue();
+uint16_t getThemeBlueOnCard();
 uint16_t getThemeGray();
+uint16_t getThemeGrayOnCard();
 uint16_t getIconCloud();
 uint16_t getIconCloudDark();
 uint16_t getIconSnow();
@@ -830,9 +836,11 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
     // Draw rounded rectangle background (same style as forecast cards)
     tft.fillRoundRect(barMargin, barY, 240 - 2*barMargin, barH, 4, cardColor);
 
-    // Get theme-aware accent colors for the bar
-    uint16_t orangeColor = getThemeOrange();
-    uint16_t blueColor = getThemeBlue();
+    // Get theme-aware accent colors for the bar (use OnCard variants since inside card)
+    uint16_t orangeOnCard = getThemeOrangeOnCard();
+    uint16_t blueOnCard = getThemeBlueOnCard();
+    uint16_t cyanOnCard = getThemeCyanOnCard();
+    uint16_t grayOnCard = getThemeGrayOnCard();
 
     if (weather.forecastDays > 0) {
         float hi = weather.forecast[0].tempMax;
@@ -852,23 +860,23 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
         tft.setFreeFont(FSSB12);
 
         // High temp section
-        drawArrowUp(section1X + 12, contentY, orangeColor);
+        drawArrowUp(section1X + 12, contentY, orangeOnCard);
         tft.setTextDatum(TL_DATUM);
-        tft.setTextColor(orangeColor);
+        tft.setTextColor(orangeOnCard);
         char hiStr[8];
         snprintf(hiStr, sizeof(hiStr), "%.0f", hi);
         tft.drawString(hiStr, section1X + 28, contentY - 2, GFXFF);
 
         // Low temp section
-        drawArrowDown(section2X + 12, contentY, blueColor);
-        tft.setTextColor(blueColor);
+        drawArrowDown(section2X + 12, contentY, blueOnCard);
+        tft.setTextColor(blueOnCard);
         char loStr[8];
         snprintf(loStr, sizeof(loStr), "%.0f", lo);
         tft.drawString(loStr, section2X + 28, contentY - 2, GFXFF);
 
         // Precipitation section with % symbol
         int precipVal = (int)weather.forecast[0].precipitationProb;
-        uint16_t precipColor = precipVal > 30 ? cyanColor : grayColor;
+        uint16_t precipColor = precipVal > 30 ? cyanOnCard : grayOnCard;
         drawRaindrop(section3X + 12, contentY - 2, precipColor);
         tft.setTextColor(precipColor);
         char precip[8];
@@ -904,10 +912,14 @@ void drawForecast(int startDay, int currentScreen, int totalScreens) {
     // Background - use theme color based on day/night
     uint16_t bgColor = getThemeBg();
     uint16_t cardColor = getThemeCard();
+    // Colors for text on background
     uint16_t cyanColor = getThemeCyan();
     uint16_t grayColor = getThemeGray();
-    uint16_t orangeColor = getThemeOrange();
-    uint16_t blueColor = getThemeBlue();
+    // Colors for text inside cards
+    uint16_t cyanOnCard = getThemeCyanOnCard();
+    uint16_t grayOnCard = getThemeGrayOnCard();
+    uint16_t orangeOnCard = getThemeOrangeOnCard();
+    uint16_t blueOnCard = getThemeBlueOnCard();
     tft.fillScreen(bgColor);
 
     // Header: Time left (blue) with smaller AM/PM, Globe + Location right (grey)
@@ -961,10 +973,10 @@ void drawForecast(int startDay, int currentScreen, int totalScreens) {
         // Card background - use theme color
         tft.fillRoundRect(x, y, cardW, cardH, 4, cardColor);
 
-        // Day name - smooth font at top of card
+        // Day name - smooth font at top of card (use OnCard color)
         tft.setTextDatum(TC_DATUM);
         tft.setFreeFont(FSSB9);
-        tft.setTextColor(cyanColor);
+        tft.setTextColor(cyanOnCard);
         tft.drawString(day.dayName, x + cardW/2, y + 10, GFXFF);
 
         // Weather icon (32x32 centered, pushed down more from day name)
@@ -987,21 +999,21 @@ void drawForecast(int startDay, int currentScreen, int totalScreens) {
         int numAreaX = x + 28;  // Start of number area (after arrow + gap)
         int numAreaW = cardW - 28 - 4;  // Width for number (card width minus arrow area minus margin)
 
-        // High temp with up arrow icon
-        drawArrowUp(arrowX, y + 95, orangeColor);
+        // High temp with up arrow icon (use OnCard colors)
+        drawArrowUp(arrowX, y + 95, orangeOnCard);
         tft.setFreeFont(FSSB12);
-        tft.setTextColor(orangeColor);
+        tft.setTextColor(orangeOnCard);
         tft.setTextDatum(TC_DATUM);
         tft.drawString(hiStr, numAreaX + numAreaW/2, y + 93, GFXFF);
 
-        // Low temp with down arrow icon
-        drawArrowDown(arrowX, y + 120, blueColor);
-        tft.setTextColor(blueColor);
+        // Low temp with down arrow icon (use OnCard colors)
+        drawArrowDown(arrowX, y + 120, blueOnCard);
+        tft.setTextColor(blueOnCard);
         tft.drawString(loStr, numAreaX + numAreaW/2, y + 118, GFXFF);
 
-        // Precipitation with raindrop icon and % symbol
+        // Precipitation with raindrop icon and % symbol (use OnCard colors)
         int precipVal = (int)day.precipitationProb;
-        uint16_t precipColor = precipVal > 30 ? cyanColor : grayColor;
+        uint16_t precipColor = precipVal > 30 ? cyanOnCard : grayOnCard;
         drawRaindrop(arrowX + 2, y + 148, precipColor);
         tft.setFreeFont(FSSB12);
         tft.setTextColor(precipColor);
@@ -1034,9 +1046,12 @@ void drawCustomScreen() {
     int yOff = -getUiNudgeY();
     uint16_t bgColor = getThemeBg();
     uint16_t cardColor = getThemeCard();
+    // Colors for text on background
     uint16_t cyanColor = getThemeCyan();
     uint16_t grayColor = getThemeGray();
     uint16_t textColor = getThemeText();
+    // Colors for text on cards
+    uint16_t cyanOnCard = getThemeCyanOnCard();
 
     tft.fillScreen(bgColor);
 
@@ -1206,7 +1221,7 @@ void drawCustomScreen() {
     if (strlen(footerText) > 0) {
         tft.setFreeFont(FSSB12);
         tft.setTextDatum(TC_DATUM);
-        tft.setTextColor(cyanColor);
+        tft.setTextColor(cyanOnCard);  // Use OnCard color since inside card
         tft.drawString(footerText, 120, barY + 10, GFXFF);
     }
 
@@ -1425,7 +1440,6 @@ void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScr
     // Get theme colors
     int yOff = -getUiNudgeY();
     uint16_t bgColor = getThemeBg();
-    uint16_t cardColor = getThemeCard();
     uint16_t cyanColor = getThemeCyan();
     uint16_t grayColor = getThemeGray();
     uint16_t textColor = getThemeText();
@@ -1548,6 +1562,8 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
     uint16_t cyanColor = getThemeCyan();
     uint16_t grayColor = getThemeGray();
     uint16_t textColor = getThemeText();
+    // OnCard variant for footer bar text
+    uint16_t cyanOnCard = getThemeCyanOnCard();
 
     tft.fillScreen(bgColor);
 
@@ -1660,7 +1676,7 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
         tft.fillRoundRect(barMargin, barY, 240 - 2*barMargin, barH, 4, cardColor);
         tft.setFreeFont(FSSB12);
         tft.setTextDatum(TC_DATUM);
-        tft.setTextColor(cyanColor);
+        tft.setTextColor(cyanOnCard);  // Use OnCard variant for text inside footer bar
         tft.drawString(config.footer, 120, barY + 10, GFXFF);  // Text centered in bar
     }
 
@@ -2458,20 +2474,50 @@ void setupWebServer() {
         doc["activeTheme"] = getActiveTheme();
         doc["themeMode"] = getThemeMode();
 
-        // List all themes
+        // Helper to serialize ThemeColors to JSON
+        auto serializeColors = [](JsonObject& obj, const ThemeColors& c) {
+            obj["bg"] = c.bg;
+            obj["card"] = c.card;
+            obj["text"] = c.text;
+            obj["textOnCard"] = c.textOnCard;
+            obj["cyan"] = c.cyan;
+            obj["cyanOnCard"] = c.cyanOnCard;
+            obj["orange"] = c.orange;
+            obj["orangeOnCard"] = c.orangeOnCard;
+            obj["blue"] = c.blue;
+            obj["blueOnCard"] = c.blueOnCard;
+            obj["gray"] = c.gray;
+            obj["grayOnCard"] = c.grayOnCard;
+        };
+
+        // List all themes with their colors
         JsonArray themes = doc["themes"].to<JsonArray>();
 
-        // Built-in: Classic
+        // Built-in: Classic (include colors for "Load from" feature)
         JsonObject classic = themes.add<JsonObject>();
         classic["name"] = "Classic";
         classic["index"] = THEME_CLASSIC;
         classic["builtin"] = true;
+        const ThemeDefinition* classicDef = getThemeDefinition(THEME_CLASSIC);
+        if (classicDef) {
+            JsonObject cDark = classic["dark"].to<JsonObject>();
+            serializeColors(cDark, classicDef->dark);
+            JsonObject cLight = classic["light"].to<JsonObject>();
+            serializeColors(cLight, classicDef->light);
+        }
 
-        // Built-in: Sunset
-        JsonObject sunset = themes.add<JsonObject>();
-        sunset["name"] = "Sunset";
-        sunset["index"] = THEME_SUNSET;
-        sunset["builtin"] = true;
+        // Built-in: Minecraft (include colors for "Load from" feature)
+        JsonObject minecraft = themes.add<JsonObject>();
+        minecraft["name"] = "Minecraft";
+        minecraft["index"] = THEME_MINECRAFT;
+        minecraft["builtin"] = true;
+        const ThemeDefinition* minecraftDef = getThemeDefinition(THEME_MINECRAFT);
+        if (minecraftDef) {
+            JsonObject mDark = minecraft["dark"].to<JsonObject>();
+            serializeColors(mDark, minecraftDef->dark);
+            JsonObject mLight = minecraft["light"].to<JsonObject>();
+            serializeColors(mLight, minecraftDef->light);
+        }
 
         // User: Custom
         JsonObject custom = themes.add<JsonObject>();
@@ -2480,25 +2526,10 @@ void setupWebServer() {
         custom["builtin"] = false;
 
         // Include custom theme colors for editing
-        const ThemeColors& darkColors = getCustomThemeDark();
-        JsonObject dark = custom["dark"].to<JsonObject>();
-        dark["bg"] = darkColors.bg;
-        dark["card"] = darkColors.card;
-        dark["text"] = darkColors.text;
-        dark["cyan"] = darkColors.cyan;
-        dark["orange"] = darkColors.orange;
-        dark["blue"] = darkColors.blue;
-        dark["gray"] = darkColors.gray;
-
-        const ThemeColors& lightColors = getCustomThemeLight();
-        JsonObject light = custom["light"].to<JsonObject>();
-        light["bg"] = lightColors.bg;
-        light["card"] = lightColors.card;
-        light["text"] = lightColors.text;
-        light["cyan"] = lightColors.cyan;
-        light["orange"] = lightColors.orange;
-        light["blue"] = lightColors.blue;
-        light["gray"] = lightColors.gray;
+        JsonObject customDark = custom["dark"].to<JsonObject>();
+        serializeColors(customDark, getCustomThemeDark());
+        JsonObject customLight = custom["light"].to<JsonObject>();
+        serializeColors(customLight, getCustomThemeLight());
 
         String response;
         serializeJson(doc, response);
@@ -2543,10 +2574,15 @@ void setupWebServer() {
                 if (d["bg"].is<int>()) dark.bg = d["bg"];
                 if (d["card"].is<int>()) dark.card = d["card"];
                 if (d["text"].is<int>()) dark.text = d["text"];
+                if (d["textOnCard"].is<int>()) dark.textOnCard = d["textOnCard"];
                 if (d["cyan"].is<int>()) dark.cyan = d["cyan"];
+                if (d["cyanOnCard"].is<int>()) dark.cyanOnCard = d["cyanOnCard"];
                 if (d["orange"].is<int>()) dark.orange = d["orange"];
+                if (d["orangeOnCard"].is<int>()) dark.orangeOnCard = d["orangeOnCard"];
                 if (d["blue"].is<int>()) dark.blue = d["blue"];
+                if (d["blueOnCard"].is<int>()) dark.blueOnCard = d["blueOnCard"];
                 if (d["gray"].is<int>()) dark.gray = d["gray"];
+                if (d["grayOnCard"].is<int>()) dark.grayOnCard = d["grayOnCard"];
             }
 
             // Update light colors
@@ -2555,10 +2591,15 @@ void setupWebServer() {
                 if (l["bg"].is<int>()) light.bg = l["bg"];
                 if (l["card"].is<int>()) light.card = l["card"];
                 if (l["text"].is<int>()) light.text = l["text"];
+                if (l["textOnCard"].is<int>()) light.textOnCard = l["textOnCard"];
                 if (l["cyan"].is<int>()) light.cyan = l["cyan"];
+                if (l["cyanOnCard"].is<int>()) light.cyanOnCard = l["cyanOnCard"];
                 if (l["orange"].is<int>()) light.orange = l["orange"];
+                if (l["orangeOnCard"].is<int>()) light.orangeOnCard = l["orangeOnCard"];
                 if (l["blue"].is<int>()) light.blue = l["blue"];
+                if (l["blueOnCard"].is<int>()) light.blueOnCard = l["blueOnCard"];
                 if (l["gray"].is<int>()) light.gray = l["gray"];
+                if (l["grayOnCard"].is<int>()) light.grayOnCard = l["grayOnCard"];
             }
 
             updateCustomTheme(dark, light);

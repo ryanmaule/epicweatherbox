@@ -19,54 +19,77 @@ static const char* THEMES_CONFIG_FILE = "/themes.json";
 // BUILT-IN THEME DEFINITIONS (stored in PROGMEM)
 // =============================================================================
 
-// Classic theme - the original EpicWeatherBox colors
+// Classic theme - refined neutral palette with improved contrast
+// Dark: Dark bg with light cards - same colors work on both
+// Light: Light bg with white cards - same colors work on both
 static const ThemeColors CLASSIC_DARK PROGMEM = {
-    0x0841,  // bg: Very dark blue-gray
-    0x2104,  // card: Dark card background
-    0xFFFF,  // text: White
-    0x07FF,  // cyan: Bright cyan
-    0xFD20,  // orange: Bright orange
-    0x5D9F,  // blue: Medium blue
-    0x8410   // gray: Medium gray
+    0x1083,  // bg: True neutral dark (#101018)
+    0x18E4,  // card: Slightly elevated gray (#1C1C21)
+    0xFFFF,  // text: Pure white (on bg)
+    0xFFFF,  // textOnCard: Pure white (on card)
+    0x5DDE,  // cyan: Softer sky blue (#5CB8F0)
+    0x5DDE,  // cyanOnCard: Same
+    0xFC60,  // orange: Warm amber (#FF8C00)
+    0xFC60,  // orangeOnCard: Same
+    0x4C1F,  // blue: Clean blue (#4C80FF)
+    0x4C1F,  // blueOnCard: Same
+    0x9CF3,  // gray: Brighter neutral gray (#9C9C9C)
+    0x9CF3   // grayOnCard: Same
 };
 
 static const ThemeColors CLASSIC_LIGHT PROGMEM = {
-    0xC618,  // bg: Medium gray background
-    0xEF7D,  // card: Light gray cards
-    0x2104,  // text: Dark text
-    0x4416,  // cyan: Steel blue (#4682B4)
-    0xC280,  // orange: Darker orange
-    0x4B0D,  // blue: Darker blue
-    0x4208   // gray: Darker gray
+    0xF79E,  // bg: Warm off-white (#F0F0F0)
+    0xFFFF,  // card: Pure white for clarity
+    0x2104,  // text: Dark text (on bg)
+    0x2104,  // textOnCard: Dark text (on card)
+    0x2B52,  // cyan: Deep teal (#2A6890)
+    0x2B52,  // cyanOnCard: Same
+    0xD340,  // orange: Rich burnt orange (#D46800)
+    0xD340,  // orangeOnCard: Same
+    0x2B1D,  // blue: True blue (#2960E8)
+    0x2B1D,  // blueOnCard: Same
+    0x528A,  // gray: Neutral gray (#525252)
+    0x528A   // grayOnCard: Same
 };
 
-// Sunset theme - warm orange/purple palette
-// Colors designed by TFT Designer for warm, inviting sunset vibes
-// All colors are RGB565 format (R in high bits 11-15, B in low bits 0-4)
-static const ThemeColors SUNSET_DARK PROGMEM = {
-    0x28C5,  // bg: Deep burgundy/purple (#2D1B2E)
-    0x3947,  // card: Slightly lighter burgundy (#3E2B3F)
-    0xFFFF,  // text: White
-    0xFCE8,  // cyan: Warm coral (#FF8C42) - accent for time/headers
-    0xFB46,  // orange: Bright orange (#FF6B35) - high temps
-    0xFDB6,  // blue: Soft pink (#FFB7B2) - low temps
-    0x9EF3   // gray: Muted mauve (#9E8E9F)
+// Minecraft theme - blocky earthy palette inspired by the game
+// Dark mode: Dark bg, dark grass cards - bright accents work on both
+// Light mode: Light sand bg, gray stone cards - need different accents!
+static const ThemeColors MINECRAFT_DARK PROGMEM = {
+    0x0862,  // bg: Night sky (#0C0C14)
+    0x1B22,  // card: Dark grass block (#1A6410)
+    0xF79D,  // text: Warm white (#F0F0E8)
+    0xF79D,  // textOnCard: Same warm white
+    0x4F7B,  // cyan: Diamond ore (#4AEDD9)
+    0x4F7B,  // cyanOnCard: Same diamond
+    0xFC84,  // orange: Lava glow (#FF9020)
+    0xFC84,  // orangeOnCard: Same lava
+    0x3399,  // blue: Night water (#3070C8)
+    0x3399,  // blueOnCard: Same water
+    0x8410,  // gray: Stone (#808080)
+    0x8410   // grayOnCard: Same stone
 };
 
-static const ThemeColors SUNSET_LIGHT PROGMEM = {
-    0xFFBC,  // bg: Warm cream (#FFF5E6)
-    0xFFFF,  // card: White
-    0x3942,  // text: Deep brown (#3D2914)
-    0xD325,  // cyan: Burnt orange (#D4652F) - accent for time/headers
-    0xD325,  // orange: Burnt orange (#D4652F) - high temps
-    0xCA69,  // blue: Coral red (#C94C4C) - low temps
-    0x6A88   // gray: Warm brown (#6B5344)
+// Light mode: Sand bg (#EBE8BA) needs dark colors, Stone cards (#808080) need bright colors
+static const ThemeColors MINECRAFT_LIGHT PROGMEM = {
+    0xEF5D,  // bg: Light sand/dirt (#EBE8BA)
+    0x8410,  // card: Cobblestone gray (#808080)
+    0x2903,  // text: Dark oak (#2C2018) - for light bg
+    0xFFFF,  // textOnCard: White - for gray stone cards
+    0x1AC2,  // cyan: Dark grass (#1A5A10) - for light bg
+    0x5FE9,  // cyanOnCard: Bright grass (#5BFC48) - for stone cards
+    0xCC00,  // orange: Deep gold (#C88000) - for light bg
+    0xFE00,  // orangeOnCard: Bright gold (#FFCC00) - for stone cards
+    0x1A94,  // blue: Deep water (#1850A0) - for light bg
+    0x5DDF,  // blueOnCard: Bright water (#5BBCFF) - for stone cards
+    0x4A49,  // gray: Dark stone (#4A4A4A) - for light bg
+    0xC618   // grayOnCard: Light gray (#C6C6C6) - for stone cards
 };
 
 // Built-in theme definitions
 static const ThemeDefinition BUILTIN_THEMES[] PROGMEM = {
     { "Classic", CLASSIC_DARK, CLASSIC_LIGHT },
-    { "Sunset", SUNSET_DARK, SUNSET_LIGHT }
+    { "Minecraft", MINECRAFT_DARK, MINECRAFT_LIGHT }
 };
 
 // =============================================================================
@@ -116,9 +139,9 @@ static void updateCachedTheme() {
             currentDark = &CLASSIC_DARK;
             currentLight = &CLASSIC_LIGHT;
             break;
-        case THEME_SUNSET:
-            currentDark = &SUNSET_DARK;
-            currentLight = &SUNSET_LIGHT;
+        case THEME_MINECRAFT:
+            currentDark = &MINECRAFT_DARK;
+            currentLight = &MINECRAFT_LIGHT;
             break;
         case THEME_CUSTOM:
             currentDark = &customThemeDark;
@@ -227,9 +250,19 @@ uint16_t getThemeCyan() {
     return colors.cyan;
 }
 
+uint16_t getThemeCyanOnCard() {
+    const ThemeColors& colors = getCurrentColors();
+    return colors.cyanOnCard;
+}
+
 uint16_t getThemeOrange() {
     const ThemeColors& colors = getCurrentColors();
     return colors.orange;
+}
+
+uint16_t getThemeOrangeOnCard() {
+    const ThemeColors& colors = getCurrentColors();
+    return colors.orangeOnCard;
 }
 
 uint16_t getThemeBlue() {
@@ -237,9 +270,24 @@ uint16_t getThemeBlue() {
     return colors.blue;
 }
 
+uint16_t getThemeBlueOnCard() {
+    const ThemeColors& colors = getCurrentColors();
+    return colors.blueOnCard;
+}
+
 uint16_t getThemeGray() {
     const ThemeColors& colors = getCurrentColors();
     return colors.gray;
+}
+
+uint16_t getThemeGrayOnCard() {
+    const ThemeColors& colors = getCurrentColors();
+    return colors.grayOnCard;
+}
+
+uint16_t getThemeTextOnCard() {
+    const ThemeColors& colors = getCurrentColors();
+    return colors.textOnCard;
 }
 
 // =============================================================================
@@ -278,10 +326,10 @@ static void initThemeDefs() {
     copyThemeColors(const_cast<ThemeColors&>(themeDefs[THEME_CLASSIC].dark), CLASSIC_DARK);
     copyThemeColors(const_cast<ThemeColors&>(themeDefs[THEME_CLASSIC].light), CLASSIC_LIGHT);
 
-    // Sunset
-    themeDefs[THEME_SUNSET].name = "Sunset";
-    copyThemeColors(const_cast<ThemeColors&>(themeDefs[THEME_SUNSET].dark), SUNSET_DARK);
-    copyThemeColors(const_cast<ThemeColors&>(themeDefs[THEME_SUNSET].light), SUNSET_LIGHT);
+    // Minecraft
+    themeDefs[THEME_MINECRAFT].name = "Minecraft";
+    copyThemeColors(const_cast<ThemeColors&>(themeDefs[THEME_MINECRAFT].dark), MINECRAFT_DARK);
+    copyThemeColors(const_cast<ThemeColors&>(themeDefs[THEME_MINECRAFT].light), MINECRAFT_LIGHT);
 
     // Custom
     themeDefs[THEME_CUSTOM].name = "Custom";
@@ -307,14 +355,14 @@ const ThemeDefinition* getThemeDefinition(int index) {
 const char* getThemeName(int index) {
     switch (index) {
         case THEME_CLASSIC: return "Classic";
-        case THEME_SUNSET: return "Sunset";
+        case THEME_MINECRAFT: return "Minecraft";
         case THEME_CUSTOM: return "Custom";
         default: return "Unknown";
     }
 }
 
 bool isThemeBuiltIn(int index) {
-    return index == THEME_CLASSIC || index == THEME_SUNSET;
+    return index == THEME_CLASSIC || index == THEME_MINECRAFT;
 }
 
 // =============================================================================

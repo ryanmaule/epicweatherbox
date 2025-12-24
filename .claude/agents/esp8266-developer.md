@@ -178,6 +178,109 @@ scripts/
 - `board_build.ldscript = eagle.flash.4m1m.ld` - 1MB app, 3MB LittleFS
 - TFT_eSPI configured via build flags (no User_Setup.h needed)
 
+## ADMIN HTML SYSTEM (CRITICAL)
+
+The admin panel uses a multi-layer system to work around ESP8266 memory limits. **You must understand this to avoid debugging issues when changing admin.html.**
+
+### Architecture Overview
+
+```
+data/admin.html          # Source file (editable, ~55KB)
+        ↓ (build time)
+scripts/generate_admin_html.py
+        ↓ (gzip + embed)
+src/admin_html.h         # Gzipped PROGMEM array (~13KB)
+        ↓ (first boot or reprovision)
+LittleFS: /admin.html.gz # Cached on device filesystem
+        ↓ (serve)
+Browser                  # Decompressed by browser (Accept-Encoding: gzip)
+```
+
+### How It Works
+
+1. **Build Time**: `generate_admin_html.py` runs as a pre-build script:
+   - Reads `data/admin.html`
+   - Extracts version from `config.h` (FIRMWARE_VERSION)
+   - Gzip compresses the HTML
+   - Generates `src/admin_html.h` with the data as a PROGMEM byte array
+   - Includes version string for cache invalidation
+
+2. **First Boot / Reprovision**: Device checks if `/admin.html.gz` exists on LittleFS:
+   - If missing OR version mismatch: copies from PROGMEM to LittleFS
+   - This "provisions" the admin file from flash to filesystem
+   - Allows serving from LittleFS (faster, doesn't fragment heap)
+
+3. **Serving**: When browser requests `/admin`:
+   - Device serves `/admin.html.gz` from LittleFS
+   - Response includes `Content-Encoding: gzip`
+   - Browser automatically decompresses
+
+### Version-Based Cache Invalidation
+
+The system uses firmware version to decide when to reprovision:
+
+```cpp
+// In admin_html.h (generated):
+const char ADMIN_HTML_VERSION[] PROGMEM = "1.4.8";
+
+// On boot, device compares:
+// - ADMIN_HTML_VERSION (from PROGMEM)
+// - Version stored in /admin.html.gz metadata
+// If different → reprovision
+```
+
+**CRITICAL**: If you change `data/admin.html` but don't bump the version in `config.h`, the device won't reprovision and will keep serving the old cached version!
+
+### Workflow for Changing Admin HTML
+
+```bash
+# 1. Edit the source file
+#    data/admin.html
+
+# 2. Bump version in config.h
+#    #define FIRMWARE_VERSION "1.4.9"
+
+# 3. Clean build (recommended to ensure admin_html.h regenerates)
+/Users/ryanmaule/Library/Python/3.9/bin/pio run --target clean
+
+# 4. Build
+/Users/ryanmaule/Library/Python/3.9/bin/pio run -e esp8266
+
+# 5. Flash via OTA
+curl -F "image=@.pio/build/esp8266/firmware.bin" http://192.168.4.235/update
+
+# 6. Device reboots, sees new version, reprovisions admin.html.gz
+```
+
+### Forcing Reprovision (Without Version Bump)
+
+If you need to force the device to reload admin.html from PROGMEM:
+
+```bash
+# API endpoint that deletes cached files and reboots
+curl http://192.168.4.235/api/reprovision
+```
+
+This is useful for debugging, but for production always bump the version.
+
+### Troubleshooting Admin Changes Not Appearing
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Old admin after OTA | Version not bumped | Bump `FIRMWARE_VERSION` in config.h |
+| Old admin after version bump | Build cache | Run `pio run --target clean` then rebuild |
+| Changes in source but not in build | Script didn't run | Check build output for `[admin_html] Generating...` |
+| Garbled content in browser | Missing gzip header | Check `Content-Encoding: gzip` in response |
+
+### Memory Considerations
+
+- `admin.html` source: ~55KB (too large to serve directly)
+- Gzipped in PROGMEM: ~13KB (stored in flash, not RAM)
+- LittleFS cache: ~13KB (served from filesystem)
+- RAM usage: ~1KB buffer during provisioning (temporary)
+
+**Never** try to serve uncompressed HTML directly - ESP8266 doesn't have enough RAM.
+
 ## CODING STANDARDS
 
 ### Style
