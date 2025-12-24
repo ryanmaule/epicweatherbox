@@ -2712,6 +2712,18 @@ void setupWebServer() {
         server.send(200, "application/json", response);
     });
 
+    // Force admin HTML reprovision - deletes version file to trigger refresh on reboot
+    server.on("/api/reprovision", HTTP_GET, []() {
+        // Delete the version file to force reprovisioning
+        LittleFS.remove("/admin.version");
+        LittleFS.remove("/admin.html.gz");
+        Serial.println(F("[ADMIN] Admin files deleted, will reprovision on reboot"));
+        server.send(200, "application/json",
+            "{\"success\":true,\"message\":\"Admin files cleared. Rebooting to reprovision...\"}");
+        delay(500);
+        ESP.restart();
+    });
+
     // Reboot endpoint
     server.on("/reboot", HTTP_GET, []() {
         server.send(200, "text/html",

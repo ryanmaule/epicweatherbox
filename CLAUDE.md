@@ -778,7 +778,7 @@ A live device was accessed at `http://192.168.4.235/` running firmware V9.0.40.
 
 - [x] v1.3.3 release
 
-### Phase 14: Theme System (v1.4.0) - IN PROGRESS
+### Phase 14: Theme System (v1.4.1) - COMPLETE ✅
 
 **Theme Infrastructure**:
 - New files: `src/themes.h` and `src/themes.cpp`
@@ -809,6 +809,10 @@ A live device was accessed at `http://192.168.4.235/` running firmware V9.0.40.
 **API Endpoints**:
 - `GET /api/themes` - Returns active theme, mode, and custom colors
 - `POST /api/themes` - Update theme selection, mode, and custom colors
+- `GET /api/reprovision` - Force admin HTML refresh and reboot
+
+**Footer Link**:
+- Added "Reload Admin" link to force reprovision of admin.html from PROGMEM
 
 **Files Modified**:
 - `src/themes.h` - NEW: Theme structures and declarations
@@ -822,12 +826,11 @@ A live device was accessed at `http://192.168.4.235/` running firmware V9.0.40.
 - LittleFS: ~300 bytes (`/themes.json`)
 - Flash: +2KB for theme code, +2KB for admin UI
 
-- [ ] Test on device
-- [ ] Release v1.4.0
+- [x] v1.4.1 release
 
 ### Current Device Status
-- **Firmware**: v1.3.3 (v1.4.0 in development)
-- **GitHub Release**: https://github.com/ryanmaule/epicweatherbox/releases/tag/v1.3.3
+- **Firmware**: v1.4.1
+- **GitHub Release**: https://github.com/ryanmaule/epicweatherbox/releases/tag/v1.4.1
 - **Device IP**: 192.168.4.235
 - **OTA URL**: http://192.168.4.235/update
 - **Admin URL**: http://192.168.4.235/admin
