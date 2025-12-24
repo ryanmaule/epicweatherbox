@@ -35,6 +35,7 @@ extern "C" {
 #include "config.h"
 #include "ota.h"
 #include "weather.h"
+#include "admin_html.h"  // Generated gzipped admin HTML
 
 // ============================================================================
 // TFT DISPLAY - MINIMAL SAFE TEST
@@ -587,9 +588,9 @@ void initTftMinimal() {
     tft.setTextColor(COLOR_GRAY);
     tft.drawString("v" FIRMWARE_VERSION, 120, 165, GFXFF);
 
-    // Status text at bottom
+    // Status text at bottom (y=218 to match IP position - keeps 4+ pixels from bottom edge)
     tft.setTextColor(0x4208);  // Dark gray
-    tft.drawString("Connecting...", 120, 228, GFXFF);
+    tft.drawString("Connecting...", 120, 218, GFXFF);
 
     Serial.println(F("[TFT] Boot screen displayed"));
     lastDisplayUpdate = millis();
@@ -861,10 +862,11 @@ void drawCurrentWeather() {
     drawWeatherIcon(iconX, mainY, weather.current.condition, weather.current.isDay, 64);
 
     // Condition text under icon - centered in left column
+    // Use short string version for better fit (e.g., "P.Cloudy" instead of "Partly Cloudy")
     tft.setTextDatum(TC_DATUM);
     tft.setFreeFont(FSS12);
     tft.setTextColor(textColor);
-    tft.drawString(conditionToString(weather.current.condition), leftColCenter, mainY + 70, GFXFF);
+    tft.drawString(conditionToShortString(weather.current.condition), leftColCenter, mainY + 70, GFXFF);
 
     // Current temperature - very large custom numbers, centered in right column
     float temp = weather.current.temperature;
@@ -1785,11 +1787,13 @@ int calculateCurrentScreenIndex() {
 // Main display update - call from loop()
 // Uses carousel system for flexible screen ordering
 void updateTftDisplay() {
+    static bool firstRun = true;
     unsigned long now = millis();
     unsigned long cycleMs = (unsigned long)getScreenCycleTime() * 1000;
 
-    // Check if time to change screen
-    if (now - lastDisplayUpdate >= cycleMs) {
+    // Check if time to change screen (or first run - show immediately)
+    if (firstRun || (now - lastDisplayUpdate >= cycleMs)) {
+        firstRun = false;
         lastDisplayUpdate = now;
 
         uint8_t carouselCount = getCarouselCount();
@@ -1872,9 +1876,65 @@ void setupWebServer();
 void setupWatchdog();
 void handleRoot();
 void handleAdmin();
+void handleAdminLegacy();  // Fallback embedded admin page
 void handleDisplayPreview();
 void handleNotFound();
 void feedWatchdog();
+
+/**
+ * Provision admin.html.gz to LittleFS from PROGMEM
+ * Called on boot to ensure the latest admin UI is available.
+ * Only writes if version has changed (avoids unnecessary flash wear).
+ */
+void provisionAdminHtml() {
+    const char* ADMIN_VER_PATH = "/admin.version";
+    const char* ADMIN_GZ_PATH = "/admin.html.gz";
+
+    // Check if current version matches
+    if (LittleFS.exists(ADMIN_VER_PATH)) {
+        File vf = LittleFS.open(ADMIN_VER_PATH, "r");
+        if (vf) {
+            String currentVersion = vf.readString();
+            vf.close();
+            currentVersion.trim();
+            if (currentVersion == admin_html_version) {
+                Serial.println(F("[ADMIN] HTML up to date"));
+                return;  // Already up to date
+            }
+            Serial.printf("[ADMIN] Version mismatch: %s != %s\n",
+                         currentVersion.c_str(), admin_html_version);
+        }
+    }
+
+    Serial.printf("[ADMIN] Provisioning admin.html.gz (%u bytes)...\n", admin_html_gz_len);
+
+    // Write gzipped HTML from PROGMEM to LittleFS
+    File f = LittleFS.open(ADMIN_GZ_PATH, "w");
+    if (!f) {
+        Serial.println(F("[ADMIN] Failed to open file for writing"));
+        return;
+    }
+
+    // Copy from PROGMEM to file (byte by byte to avoid RAM buffer)
+    for (size_t i = 0; i < admin_html_gz_len; i++) {
+        f.write(pgm_read_byte(&admin_html_gz[i]));
+        // Feed watchdog every 1KB to prevent reset during long write
+        if (i % 1024 == 0) {
+            ESP.wdtFeed();
+            yield();
+        }
+    }
+    f.close();
+
+    // Update version file
+    File vf = LittleFS.open(ADMIN_VER_PATH, "w");
+    if (vf) {
+        vf.print(admin_html_version);
+        vf.close();
+    }
+
+    Serial.println(F("[ADMIN] Provisioning complete"));
+}
 
 void setup() {
     // Initialize serial first for debugging
@@ -1902,6 +1962,9 @@ void setup() {
         LittleFS.info(fs_info);
         Serial.printf_P(PSTR("[BOOT] LittleFS: %u/%u bytes used\n"),
                        fs_info.usedBytes, fs_info.totalBytes);
+
+        // Provision admin HTML from PROGMEM to LittleFS (if version changed)
+        provisionAdminHtml();
     }
 
     feedWatchdog();
@@ -2698,9 +2761,71 @@ void handleRoot() {
 }
 
 /**
- * Handle admin page - multi-location config with city search and add/remove
+ * Handle admin page - serves new Carousel UI from LittleFS
+ * Falls back to legacy embedded HTML if file not found
  */
 void handleAdmin() {
+    const char* HTML_FILE = "/admin.html.gz";
+
+    // Try to serve from LittleFS first (gzipped)
+    if (LittleFS.exists(HTML_FILE)) {
+        File f = LittleFS.open(HTML_FILE, "r");
+        if (f) {
+            size_t fileSize = f.size();
+            server.sendHeader("Content-Encoding", "gzip");
+            server.streamFile(f, "text/html");
+            f.close();
+            Serial.printf("[ADMIN] Served %s (%u bytes gzipped)\n", HTML_FILE, fileSize);
+            return;
+        }
+    }
+
+    // If we get here, admin.html.gz is missing - try to re-provision
+    Serial.println(F("[ADMIN] File missing, attempting re-provision..."));
+    provisionAdminHtml();
+
+    // Try again after provisioning
+    if (LittleFS.exists(HTML_FILE)) {
+        File f = LittleFS.open(HTML_FILE, "r");
+        if (f) {
+            size_t fileSize = f.size();
+            server.sendHeader("Content-Encoding", "gzip");
+            server.streamFile(f, "text/html");
+            f.close();
+            Serial.printf("[ADMIN] Served %s after re-provision (%u bytes)\n", HTML_FILE, fileSize);
+            return;
+        }
+    }
+
+    // If still failing, show error page with reboot option
+    Serial.println(F("[ADMIN] Re-provision failed, showing error page"));
+    String html = F("<!DOCTYPE html><html><head><meta charset='UTF-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Admin Error</title><style>"
+        "body{font-family:sans-serif;background:#1a1a2e;color:#eee;margin:0;padding:40px;text-align:center}"
+        ".card{background:#2a2a4e;border-radius:10px;padding:30px;max-width:400px;margin:50px auto}"
+        "h2{color:#ff6b35}p{color:#aaa;margin:20px 0}"
+        "button{background:#00d4ff;color:#1a1a2e;border:none;padding:15px 30px;border-radius:6px;cursor:pointer;margin:10px}"
+        "button:hover{background:#00a8cc}button.warn{background:#ff6b35}"
+        "</style></head><body><div class='card'>"
+        "<h2>Admin Page Error</h2>"
+        "<p>The admin interface could not be loaded. This may indicate a file system issue.</p>"
+        "<button onclick=\"location.href='/reboot'\">Reboot Device</button>"
+        "<button class='warn' onclick=\"location.href='/api/safemode'\">Enter Safe Mode</button>"
+        "</div></body></html>");
+    server.send(500, "text/html", html);
+}
+
+/**
+ * Legacy admin page - multi-location config with city search and add/remove
+ * Kept as fallback if LittleFS serving fails
+ *
+ * TODO(v1.3.0): Remove this function once PROGMEM admin provisioning is
+ * proven stable across multiple releases. The new Carousel UI is served
+ * from /admin.html.gz which is provisioned from PROGMEM on boot.
+ * Approximate savings: ~350 lines of code, ~15KB flash reduction.
+ */
+void handleAdminLegacy() {
     bool celsius = getUseCelsius();
     const char* unit = celsius ? "C" : "F";
     int locCount = getLocationCount();
@@ -3347,9 +3472,9 @@ void handleDisplayPreview() {
         // Version in gray at y=165 (matches TFT)
         "bootCtx.fillStyle=C.GRAY;bootCtx.font='14px sans-serif';"
         "bootCtx.fillText('v1.0.0',120,165);"
-        // Show "Connecting..." at bottom y=228 (matches TFT)
+        // Show "Connecting..." at bottom y=218 (matches TFT - same position as IP)
         "bootCtx.fillStyle='#666';bootCtx.font='12px sans-serif';"
-        "bootCtx.fillText('Connecting...',120,228);}"
+        "bootCtx.fillText('Connecting...',120,218);}"
 
         // Draw screen indicator dots
         "function drawDots(){"

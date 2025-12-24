@@ -1132,6 +1132,7 @@ bool loadWeatherConfig() {
     }
 
     // Load carousel items
+    bool carouselLoaded = false;
     if (doc["carousel"].is<JsonArray>()) {
         JsonArray carouselArray = doc["carousel"].as<JsonArray>();
         carouselCount = 0;
@@ -1141,20 +1142,19 @@ bool loadWeatherConfig() {
             carousel[carouselCount].dataIndex = item["dataIndex"] | 0;
             carouselCount++;
         }
-        Serial.printf("[WEATHER] Loaded %d carousel items\n", carouselCount);
-    } else {
-        // Initialize default carousel with location 0 if no carousel saved
-        carouselCount = 1;
-        carousel[0].type = CAROUSEL_LOCATION;
-        carousel[0].dataIndex = 0;
+        if (carouselCount > 0) {
+            Serial.printf("[WEATHER] Loaded %d carousel items\n", carouselCount);
+            carouselLoaded = true;
+        }
+    }
 
-        // Add additional locations to carousel
-        for (int i = 1; i < locationCount; i++) {
-            if (carouselCount < MAX_CAROUSEL_ITEMS) {
-                carousel[carouselCount].type = CAROUSEL_LOCATION;
-                carousel[carouselCount].dataIndex = i;
-                carouselCount++;
-            }
+    // If no carousel items loaded, initialize from locations
+    if (!carouselLoaded) {
+        carouselCount = 0;
+        for (int i = 0; i < locationCount && carouselCount < MAX_CAROUSEL_ITEMS; i++) {
+            carousel[carouselCount].type = CAROUSEL_LOCATION;
+            carousel[carouselCount].dataIndex = i;
+            carouselCount++;
         }
         Serial.printf("[WEATHER] Initialized default carousel with %d locations\n", carouselCount);
     }
