@@ -11,7 +11,7 @@
 // =============================================================================
 // FIRMWARE INFO
 // =============================================================================
-#define FIRMWARE_VERSION "1.3.2"
+#define FIRMWARE_VERSION "1.3.3"
 #define DEVICE_NAME "EpicWeatherBox"
 #define DEVICE_MODEL "EpicWeatherBox"
 
@@ -155,10 +155,10 @@
 #define FEATURE_NIGHT_MODE 1
 #define FEATURE_OTA_UPDATE 1
 
-// Disable to save memory
+// Disabled features (not needed for EpicWeatherBox)
 #define FEATURE_STOCK_TICKER 0        // Disabled - not needed
 #define FEATURE_BILIBILI 0            // Disabled - not needed
-#define FEATURE_COUNTDOWN_TIMER 0     // Disabled - not needed
+// Note: Countdown events are now part of the carousel system (weather.h)
 
 // =============================================================================
 // DEBUG SETTINGS

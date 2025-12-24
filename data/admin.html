@@ -75,6 +75,8 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 .info-box{background:rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
 .info-label{color:#888;font-size:0.85em}
 .info-value{color:#00d4ff;font-weight:500}
+.update-badge{background:#2a5a2a;color:#6f6;font-size:0.75em;padding:3px 8px;border-radius:4px;margin-left:8px;text-decoration:none}
+.update-badge:hover{background:#3a7a3a}
 
 /* Toggle switch */
 .toggle-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #333}
@@ -676,11 +678,39 @@ function cycleWeatherLocation() {
 
 function updateDeviceInfo(s) {
   document.getElementById('device-info').innerHTML = `
-    <div class="info-box"><span class="info-label">Version</span><span class="info-value">${s.version}</span></div>
+    <div class="info-box"><span class="info-label">Version</span><span class="info-value" id="version-info">${s.version}</span></div>
     <div class="info-box"><span class="info-label">IP Address</span><span class="info-value">${s.ip}</span></div>
     <div class="info-box"><span class="info-label">Uptime</span><span class="info-value">${Math.floor(s.uptime / 60)}m ${s.uptime % 60}s</span></div>
     <div class="info-box"><span class="info-label">Free RAM</span><span class="info-value">${(s.heap / 1024).toFixed(1)} KB</span></div>
     <div class="info-box"><span class="info-label">WiFi Signal</span><span class="info-value">${s.rssi} dBm</span></div>`;
+  checkForUpdate(s.version);
+}
+
+function compareVersions(v1, v2) {
+  const p1 = v1.replace(/^v/, '').split('.').map(Number);
+  const p2 = v2.replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const a = p1[i] || 0, b = p2[i] || 0;
+    if (a < b) return -1;
+    if (a > b) return 1;
+  }
+  return 0;
+}
+
+async function checkForUpdate(currentVersion) {
+  try {
+    const r = await fetch('https://api.github.com/repos/ryanmaule/epicweatherbox/releases/latest');
+    if (!r.ok) return;
+    const data = await r.json();
+    const latestVersion = data.tag_name;
+    if (compareVersions(currentVersion, latestVersion) < 0) {
+      const versionEl = document.getElementById('version-info');
+      if (versionEl) {
+        versionEl.innerHTML = currentVersion +
+          ` <a href="${data.html_url}" target="_blank" class="update-badge">${latestVersion} available</a>`;
+      }
+    }
+  } catch (e) { /* Ignore errors - update check is optional */ }
 }
 
 function updateConfig(c) {
