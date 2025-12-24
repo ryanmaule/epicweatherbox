@@ -1448,50 +1448,65 @@ const char* getEventTypeName(uint8_t type) {
     }
 }
 
-// Draw countdown event icon (16x16 pixels)
-void drawCountdownIcon(int x, int y, uint8_t type, uint16_t color) {
+// Draw large countdown icon (approx 48x48 pixels, centered at cx,cy)
+void drawCountdownIcon(int cx, int cy, uint8_t type, uint16_t color) {
     switch (type) {
         case COUNTDOWN_BIRTHDAY:
-            // Cake icon
-            tft.fillRect(x + 6, y + 2, 4, 4, TFT_YELLOW);  // Candle flame
-            tft.fillRect(x + 7, y + 5, 2, 4, color);        // Candle
-            tft.fillRoundRect(x + 2, y + 9, 12, 6, 2, color);  // Cake top
+            // Large cake icon
+            tft.fillRect(cx - 2, cy - 22, 4, 8, TFT_YELLOW);  // Candle flame
+            tft.fillRect(cx - 1, cy - 14, 2, 8, color);       // Candle
+            tft.fillRoundRect(cx - 18, cy - 6, 36, 14, 4, color);  // Cake top
+            tft.fillRoundRect(cx - 20, cy + 6, 40, 16, 4, color);  // Cake bottom
             break;
 
         case COUNTDOWN_EASTER:
-            // Bunny/egg icon
-            tft.fillCircle(x + 8, y + 10, 5, color);  // Body
-            tft.fillRect(x + 4, y + 2, 3, 6, color);  // Left ear
-            tft.fillRect(x + 9, y + 2, 3, 6, color);  // Right ear
+            // Large bunny icon
+            tft.fillRoundRect(cx - 10, cy - 24, 8, 20, 4, color);  // Left ear
+            tft.fillRoundRect(cx + 2, cy - 24, 8, 20, 4, color);   // Right ear
+            tft.fillCircle(cx, cy + 4, 18, color);  // Head/body
+            tft.fillCircle(cx - 6, cy - 2, 3, TFT_BLACK);  // Left eye
+            tft.fillCircle(cx + 6, cy - 2, 3, TFT_BLACK);  // Right eye
             break;
 
         case COUNTDOWN_HALLOWEEN:
-            // Pumpkin icon
-            tft.fillRect(x + 6, y + 1, 4, 3, TFT_GREEN);  // Stem
-            tft.fillCircle(x + 8, y + 10, 6, TFT_ORANGE);  // Pumpkin
+            // Large pumpkin icon
+            tft.fillRect(cx - 3, cy - 24, 6, 8, TFT_GREEN);  // Stem
+            tft.fillCircle(cx, cy + 2, 22, TFT_ORANGE);  // Main pumpkin
+            tft.fillTriangle(cx - 8, cy - 4, cx - 4, cy + 4, cx - 12, cy + 4, TFT_BLACK);  // Left eye
+            tft.fillTriangle(cx + 8, cy - 4, cx + 4, cy + 4, cx + 12, cy + 4, TFT_BLACK);  // Right eye
+            tft.fillTriangle(cx, cy + 6, cx - 8, cy + 14, cx + 8, cy + 14, TFT_BLACK);  // Mouth
             break;
 
         case COUNTDOWN_VALENTINE:
-            // Heart icon
-            tft.fillCircle(x + 5, y + 6, 4, TFT_RED);   // Left lobe
-            tft.fillCircle(x + 11, y + 6, 4, TFT_RED);  // Right lobe
-            tft.fillTriangle(x + 1, y + 8, x + 15, y + 8, x + 8, y + 15, TFT_RED);  // Bottom
+            // Large heart icon
+            tft.fillCircle(cx - 10, cy - 6, 14, TFT_RED);   // Left lobe
+            tft.fillCircle(cx + 10, cy - 6, 14, TFT_RED);  // Right lobe
+            tft.fillTriangle(cx - 24, cy - 2, cx + 24, cy - 2, cx, cy + 24, TFT_RED);  // Bottom
             break;
 
         case COUNTDOWN_CHRISTMAS:
-            // Tree icon
-            tft.fillTriangle(x + 8, y + 1, x + 2, y + 7, x + 14, y + 7, TFT_GREEN);   // Top
-            tft.fillTriangle(x + 8, y + 4, x + 1, y + 11, x + 15, y + 11, TFT_GREEN); // Middle
-            tft.fillRect(x + 6, y + 11, 4, 4, 0x8420);  // Trunk (brown)
+            // Large tree icon
+            tft.fillTriangle(cx, cy - 22, cx - 16, cy - 6, cx + 16, cy - 6, TFT_GREEN);   // Top
+            tft.fillTriangle(cx, cy - 12, cx - 22, cy + 6, cx + 22, cy + 6, TFT_GREEN);  // Middle
+            tft.fillTriangle(cx, cy - 2, cx - 26, cy + 18, cx + 26, cy + 18, TFT_GREEN); // Bottom
+            tft.fillRect(cx - 5, cy + 16, 10, 10, 0x8420);  // Trunk (brown)
+            tft.fillCircle(cx, cy - 16, 3, TFT_YELLOW);  // Star
             break;
 
         case COUNTDOWN_CUSTOM:
         default:
-            // Calendar icon
-            tft.drawRect(x + 2, y + 3, 12, 11, color);  // Box
-            tft.drawLine(x + 2, y + 6, x + 13, y + 6, color);  // Divider
-            tft.fillRect(x + 4, y + 1, 2, 4, color);  // Left ring
-            tft.fillRect(x + 10, y + 1, 2, 4, color);  // Right ring
+            // Large calendar icon
+            tft.fillRoundRect(cx - 20, cy - 16, 40, 38, 4, color);  // Box
+            tft.fillRect(cx - 20, cy - 16, 40, 12, color);  // Header
+            tft.drawLine(cx - 18, cy - 4, cx + 18, cy - 4, getThemeBg());  // Divider
+            // Calendar rings
+            tft.fillRoundRect(cx - 12, cy - 22, 6, 10, 2, color);
+            tft.fillRoundRect(cx + 6, cy - 22, 6, 10, 2, color);
+            // Date "25" in calendar
+            tft.setFreeFont(FSSB12);
+            tft.setTextDatum(MC_DATUM);
+            tft.setTextColor(getThemeBg());
+            tft.drawString("25", cx, cy + 8, GFXFF);
             break;
     }
 }
@@ -1556,15 +1571,15 @@ void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScr
     getNextEventDate(event, year, month, day, &targetYear, &targetMonth, &targetDay);
     int daysLeft = daysUntil(targetYear, targetMonth, targetDay, year, month, day);
 
-    // Draw icon (centered, large area)
-    drawCountdownIcon(104, 45 + yOff, event.type, cyanColor);
+    // Draw large icon (centered at 120, 75)
+    drawCountdownIcon(120, 75 + yOff, event.type, cyanColor);
 
-    // Event title
+    // Event title (smaller, below icon)
     const char* title = (strlen(event.title) > 0) ? event.title : getEventTypeName(event.type);
-    tft.setFreeFont(FSSB18);
+    tft.setFreeFont(FSSB12);
     tft.setTextDatum(MC_DATUM);
     tft.setTextColor(textColor);
-    tft.drawString(title, 120, 90 + yOff, GFXFF);
+    tft.drawString(title, 120, 120 + yOff, GFXFF);
 
     // Days remaining (large number)
     char daysStr[32];
@@ -1581,8 +1596,8 @@ void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScr
         snprintf(daysStr, sizeof(daysStr), "%d days", daysLeft);
         tft.setTextColor(textColor);
     }
-    tft.setFreeFont(FSSB24);
-    tft.drawString(daysStr, 120, 135 + yOff, GFXFF);
+    tft.setFreeFont(FSSB18);
+    tft.drawString(daysStr, 120, 155 + yOff, GFXFF);
 
     // Target date with day of week
     const char* dayNames[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
@@ -1597,9 +1612,9 @@ void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScr
 
     char dateStr[32];
     snprintf(dateStr, sizeof(dateStr), "%s, %s %d", dayNames[dow], monthNames[targetMonth-1], targetDay);
-    tft.setFreeFont(FSS12);
+    tft.setFreeFont(FSS9);
     tft.setTextColor(grayColor);
-    tft.drawString(dateStr, 120, 175 + yOff, GFXFF);
+    tft.drawString(dateStr, 120, 185 + yOff, GFXFF);
 
     // Draw navigation dots at bottom
     if (totalScreens > 1) {
@@ -1649,16 +1664,29 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
     tft.setFreeFont(FSS9);
     tft.drawString(ampm, 8 + timeW + 4, 10 + yOff, GFXFF);
 
-    // Header text (right side)
+    // Header text (right side) with star icon
     if (strlen(config.header) > 0) {
-        tft.setTextDatum(TR_DATUM);
+        tft.setFreeFont(FSS9);
+        int16_t headerW = tft.textWidth(config.header, GFXFF);
+        int textX = 232 - headerW;
+        tft.setTextDatum(TL_DATUM);
         tft.setTextColor(grayColor);
-        tft.drawString(config.header, 220, 10 + yOff, GFXFF);
-    }
+        tft.drawString(config.header, textX, 10 + yOff, GFXFF);
 
-    // Star icon
-    tft.setTextColor(grayColor);
-    tft.drawString("*", 232, 8 + yOff, GFXFF);
+        // Draw star icon to the left of header text
+        int starX = textX - 12;
+        int starY = 14 + yOff;
+        int starSize = 4;
+        tft.fillTriangle(starX, starY - starSize, starX - 3, starY + 2, starX + 3, starY + 2, grayColor);
+        tft.fillTriangle(starX - starSize, starY - 1, starX + starSize, starY - 1, starX, starY + 3, grayColor);
+    } else {
+        // No header, just draw star in corner
+        int starX = 224;
+        int starY = 14 + yOff;
+        int starSize = 4;
+        tft.fillTriangle(starX, starY - starSize, starX - 3, starY + 2, starX + 3, starY + 2, grayColor);
+        tft.fillTriangle(starX - starSize, starY - 1, starX + starSize, starY - 1, starX, starY + 3, grayColor);
+    }
 
     // BODY - centered text with word wrap
     if (strlen(config.body) > 0) {
@@ -2198,6 +2226,13 @@ void setupWebServer() {
             loc.set(locDoc.as<JsonObject>());
         }
 
+        // Add primary key for backward compatibility (first location)
+        if (getLocationCount() > 0) {
+            JsonDocument primaryDoc;
+            weatherToJson(getWeather(0), primaryDoc);
+            doc["primary"] = primaryDoc;
+        }
+
         // Add metadata
         doc["locationCount"] = getLocationCount();
         doc["maxLocations"] = MAX_WEATHER_LOCATIONS;
@@ -2271,7 +2306,7 @@ void setupWebServer() {
         doc["locationCount"] = getLocationCount();
         doc["maxLocations"] = MAX_WEATHER_LOCATIONS;
 
-        // Display settings
+        // Display settings (both flat and nested for compatibility)
         doc["useCelsius"] = getUseCelsius();
         doc["brightness"] = getBrightness();
         doc["nightModeEnabled"] = getNightModeEnabled();
@@ -2282,6 +2317,12 @@ void setupWebServer() {
         doc["screenCycleTime"] = getScreenCycleTime();
         doc["themeMode"] = getThemeMode();
         doc["uiNudgeY"] = getUiNudgeY();
+
+        // Display settings as nested object for new admin UI
+        JsonObject display = doc["display"].to<JsonObject>();
+        display["unit"] = getUseCelsius() ? "c" : "f";
+        display["cycle"] = getScreenCycleTime();
+        display["brightness"] = getBrightness();
 
         // Custom screen settings (legacy - single screen)
         doc["customScreenEnabled"] = getCustomScreenEnabled();
@@ -2314,11 +2355,8 @@ void setupWebServer() {
         if (doc["locations"].is<JsonArray>()) {
             JsonArray locArray = doc["locations"].as<JsonArray>();
 
-            // Validate
-            if (locArray.size() == 0) {
-                server.send(400, "application/json", "{\"success\":false,\"message\":\"At least one location required\"}");
-                return;
-            }
+            // Note: Allow empty locations if the carousel has countdown/custom screens only
+            // (For backward compat, we still require at least one location if carousel isn't specified)
             if (locArray.size() > MAX_WEATHER_LOCATIONS) {
                 server.send(400, "application/json", "{\"success\":false,\"message\":\"Max 5 locations\"}");
                 return;
@@ -2376,7 +2414,22 @@ void setupWebServer() {
             }
         }
 
-        // Update display settings
+        // Update display settings (handle nested object from new admin UI)
+        if (doc["display"].is<JsonObject>()) {
+            JsonObject display = doc["display"];
+            if (display["unit"].is<const char*>()) {
+                const char* unit = display["unit"];
+                setUseCelsius(unit && strcmp(unit, "c") == 0);
+            }
+            if (display["cycle"].is<int>()) {
+                setScreenCycleTime(display["cycle"] | 10);
+            }
+            if (display["brightness"].is<int>()) {
+                setBrightness(display["brightness"] | 50);
+            }
+        }
+
+        // Also handle flat format for backward compatibility
         if (doc["useCelsius"].is<bool>()) {
             setUseCelsius(doc["useCelsius"] | false);
         }

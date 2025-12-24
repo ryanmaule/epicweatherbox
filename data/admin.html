@@ -70,6 +70,11 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 .modal-content{background:#1a1a2e;border:1px solid #333;border-radius:12px;padding:20px;width:90%;max-width:400px;max-height:90vh;overflow-y:auto}
 .modal-content h3{color:#00d4ff;margin-bottom:15px}
 .modal-buttons{display:flex;gap:10px;margin-top:15px;justify-content:flex-end}
+
+/* Info boxes for system tab */
+.info-box{background:rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.info-label{color:#888;font-size:0.85em}
+.info-value{color:#00d4ff;font-weight:500}
 </style>
 </head>
 <body>
@@ -528,11 +533,43 @@ function useMyLocationForNew() {
 
 // Save carousel
 async function saveCarousel() {
+  // Rebuild data arrays to only include items that are in the carousel
+  // and fix dataIndex values to match their actual array positions
+  const usedLocs = [];
+  const usedCds = [];
+  const usedCusts = [];
+  const newCarousel = [];
+
+  carouselItems.forEach(item => {
+    if (item.type === 0) { // Location
+      const loc = locations[item.dataIndex];
+      if (loc) {
+        const newIdx = usedLocs.length;
+        usedLocs.push(loc);
+        newCarousel.push({ type: 0, dataIndex: newIdx });
+      }
+    } else if (item.type === 1) { // Countdown
+      const cd = countdowns[item.dataIndex];
+      if (cd) {
+        const newIdx = usedCds.length;
+        usedCds.push(cd);
+        newCarousel.push({ type: 1, dataIndex: newIdx });
+      }
+    } else if (item.type === 2) { // Custom
+      const cust = customScreens[item.dataIndex];
+      if (cust) {
+        const newIdx = usedCusts.length;
+        usedCusts.push(cust);
+        newCarousel.push({ type: 2, dataIndex: newIdx });
+      }
+    }
+  });
+
   const data = {
-    carousel: carouselItems,
-    locations: locations,
-    countdowns: countdowns,
-    customScreens: customScreens
+    carousel: newCarousel,
+    locations: usedLocs,
+    countdowns: usedCds,
+    customScreens: usedCusts
   };
 
   try {
@@ -584,11 +621,11 @@ function updateWeatherDisplay(data) {
 
 function updateDeviceInfo(s) {
   document.getElementById('device-info').innerHTML = `
-    <div>Version: ${s.version}</div>
-    <div>IP: ${s.ip}</div>
-    <div>Uptime: ${Math.floor(s.uptime / 60)}m ${s.uptime % 60}s</div>
-    <div>Free RAM: ${s.heap} bytes</div>
-    <div>WiFi: ${s.rssi} dBm</div>`;
+    <div class="info-box"><span class="info-label">Version</span><span class="info-value">${s.version}</span></div>
+    <div class="info-box"><span class="info-label">IP Address</span><span class="info-value">${s.ip}</span></div>
+    <div class="info-box"><span class="info-label">Uptime</span><span class="info-value">${Math.floor(s.uptime / 60)}m ${s.uptime % 60}s</span></div>
+    <div class="info-box"><span class="info-label">Free RAM</span><span class="info-value">${(s.heap / 1024).toFixed(1)} KB</span></div>
+    <div class="info-box"><span class="info-label">WiFi Signal</span><span class="info-value">${s.rssi} dBm</span></div>`;
 }
 
 function updateConfig(c) {
