@@ -755,7 +755,7 @@ void drawSafeModeScreen() {
 }
 
 // Draw current weather screen (no sprites - direct to TFT)
-void drawCurrentWeather() {
+void drawCurrentWeather(int currentScreen, int totalScreens) {
     const WeatherData& weather = getWeather(currentDisplayLocation);
     const WeatherLocation& location = getLocation(currentDisplayLocation);
     bool useCelsius = getUseCelsius();
@@ -961,15 +961,7 @@ void drawCurrentWeather() {
         drawPercent(section3X + 30 + numW, contentY, precipColor);
     }
 
-    // Screen dots at bottom (one per screen, not per location)
-    int numLocs = getLocationCount();
-    bool showForecastFlag = getShowForecast();
-    bool customEnabled = getCustomScreenEnabled();
-    int screensPerLoc = showForecastFlag ? 3 : 1;
-    if (customEnabled) screensPerLoc++;
-    int totalScreens = numLocs * screensPerLoc;
-    int currentScreen = currentDisplayLocation * screensPerLoc + currentDisplayScreen;
-
+    // Screen dots at bottom
     if (totalScreens > 1) {
         int dotSpacing = 10;
         int startX = 120 - (totalScreens - 1) * dotSpacing / 2;
@@ -983,7 +975,7 @@ void drawCurrentWeather() {
 }
 
 // Draw 3-day forecast screen
-void drawForecast(int startDay) {
+void drawForecast(int startDay, int currentScreen, int totalScreens) {
     const WeatherData& weather = getWeather(currentDisplayLocation);
     const WeatherLocation& location = getLocation(currentDisplayLocation);
     bool useCelsius = getUseCelsius();
@@ -1105,15 +1097,7 @@ void drawForecast(int startDay) {
         drawPercent(numX + numW + 2, y + 150, precipColor);
     }
 
-    // Screen dots at bottom (one per screen, not per location)
-    int numLocs = getLocationCount();
-    bool showForecastFlag = getShowForecast();
-    bool customEnabled = getCustomScreenEnabled();
-    int screensPerLoc = showForecastFlag ? 3 : 1;
-    if (customEnabled) screensPerLoc++;
-    int totalScreens = numLocs * screensPerLoc;
-    int currentScreen = currentDisplayLocation * screensPerLoc + currentDisplayScreen;
-
+    // Screen dots at bottom
     if (totalScreens > 1) {
         int dotSpacing = 10;
         int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
@@ -1750,13 +1734,16 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
         }
     }
 
-    // FOOTER - rounded bar at bottom
+    // FOOTER - rounded bar at bottom (matches main weather screen footer)
     if (strlen(config.footer) > 0) {
-        tft.fillRoundRect(8, 195 + yOff, 224, 26, 6, cardColor);
-        tft.setFreeFont(FSS9);
-        tft.setTextDatum(MC_DATUM);
+        int barY = 175 + yOff;
+        int barH = 36;
+        int barMargin = 8;
+        tft.fillRoundRect(barMargin, barY, 240 - 2*barMargin, barH, 4, cardColor);
+        tft.setFreeFont(FSSB12);
+        tft.setTextDatum(TC_DATUM);
         tft.setTextColor(cyanColor);
-        tft.drawString(config.footer, 120, 208 + yOff, GFXFF);
+        tft.drawString(config.footer, 120, barY + 10, GFXFF);  // Text centered in bar
     }
 
     // Navigation dots
@@ -1833,7 +1820,7 @@ void updateTftDisplay() {
         uint8_t carouselCount = getCarouselCount();
         if (carouselCount == 0) {
             // Fallback: if no carousel items, show current weather for location 0
-            drawCurrentWeather();
+            drawCurrentWeather(0, 1);  // Single screen, no dots
             return;
         }
 
@@ -1855,13 +1842,13 @@ void updateTftDisplay() {
                 if (showForecast) {
                     switch (currentSubScreen) {
                         case 0:
-                            drawCurrentWeather();
+                            drawCurrentWeather(currentScreenIdx, totalScreens);
                             break;
                         case 1:
-                            drawForecast(0);  // Days 1-3
+                            drawForecast(0, currentScreenIdx, totalScreens);  // Days 1-3
                             break;
                         case 2:
-                            drawForecast(3);  // Days 4-6
+                            drawForecast(3, currentScreenIdx, totalScreens);  // Days 4-6
                             break;
                     }
                     currentSubScreen++;
@@ -1871,7 +1858,7 @@ void updateTftDisplay() {
                     }
                 } else {
                     // Only show current weather
-                    drawCurrentWeather();
+                    drawCurrentWeather(currentScreenIdx, totalScreens);
                     currentCarouselIndex = (currentCarouselIndex + 1) % carouselCount;
                 }
                 break;
@@ -1911,7 +1898,6 @@ void setupWatchdog();
 void handleRoot();
 void handleAdmin();
 void handleAdminLegacy();  // Fallback embedded admin page
-void handleDisplayPreview();
 void handleNotFound();
 void feedWatchdog();
 
@@ -2543,9 +2529,6 @@ void setupWebServer() {
     // Admin page - minimal location config
     server.on("/admin", HTTP_GET, handleAdmin);
 
-    // Display preview page - simulates the TFT display in browser
-    server.on("/preview", HTTP_GET, handleDisplayPreview);
-
     // Version endpoint (original firmware compatibility)
     server.on("/v.json", HTTP_GET, []() {
         JsonDocument doc;
@@ -2792,7 +2775,6 @@ void handleRoot() {
 
     html += F("<div class='card'><h3>Quick Links</h3><div class='links'>"
         "<a href='/admin' class='link-btn'>Admin Panel</a>"
-        "<a href='/preview' class='link-btn'>Display Preview</a>"
         "<a href='/update' class='link-btn'>Firmware Update</a>"
         "<a href='/reboot' class='link-btn warning'>Reboot</a>"
         "<a href='/reset' class='link-btn danger'>Factory Reset</a>"
@@ -3103,7 +3085,7 @@ void handleAdminLegacy() {
 
     // Links
     html += F("<div class='card' style='text-align:center'>"
-        "<a href='/'>Home</a> | <a href='/preview'>Display Preview</a> | "
+        "<a href='/'>Home</a> | "
         "<a href='/update'>Firmware</a> | <a href='/api/safemode' style='color:#ff6600'>Safe Mode</a> | <a href='/reboot'>Reboot</a></div>");
 
     // JavaScript - more complex now for multi-location management
@@ -3236,399 +3218,7 @@ void handleAdminLegacy() {
     server.send(200, "text/html", html);
 }
 
-/**
- * Handle display preview page - HTML5 Canvas simulation of the TFT display
- * Shows what will be rendered on the actual 240x240 display
- */
-void handleDisplayPreview() {
-    String html = F("<!DOCTYPE html><html><head><meta charset='UTF-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>Display Preview - EpicWeatherBox</title><style>"
-        "*{box-sizing:border-box}body{font-family:sans-serif;background:#0d0d1a;color:#eee;margin:0;padding:20px}"
-        ".c{max-width:900px;margin:0 auto}h1{color:#00d4ff;text-align:center}"
-        ".dual-preview{display:flex;gap:30px;justify-content:center;flex-wrap:wrap;margin:20px 0}"
-        ".preview-box{text-align:center}"
-        ".preview-label{color:#888;font-size:0.9em;margin-bottom:8px}"
-        "canvas{border:8px solid #333;border-radius:12px;background:#000;image-rendering:pixelated}"
-        ".controls{background:rgba(255,255,255,0.05);border-radius:10px;padding:15px;margin:15px 0;text-align:center}"
-        "button{background:#00d4ff;color:#1a1a2e;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;margin:5px}"
-        "button:hover{background:#00a8cc}button.active{background:#00ff88}"
-        ".info{margin-top:10px;color:#888;font-size:0.9em}"
-        ".screen-label{color:#00d4ff;font-size:1.2em;margin:10px 0}"
-        "a{color:#00d4ff}.card{background:rgba(255,255,255,0.05);border-radius:10px;padding:15px;margin:15px 0}"
-        ".dots{display:flex;justify-content:center;gap:8px;margin:10px 0}"
-        ".dot{width:10px;height:10px;border-radius:50%;background:#444}"
-        ".dot.active{background:#00d4ff}"
-        "</style></head><body><div class='c'><h1>Display Preview</h1>"
-        "<div class='dual-preview'>"
-        "<div class='preview-box'><div class='preview-label'>Boot Screen</div>"
-        "<canvas id='bootCanvas' width='240' height='240'></canvas></div>"
-        "<div class='preview-box'><div class='preview-label'>Main Rotation</div>"
-        "<canvas id='display' width='240' height='240'></canvas></div></div>"
-        "<div class='controls'>"
-        "<div class='screen-label' id='screenLabel'>Current Weather</div>"
-        "<div class='dots' id='screenDots'></div>"
-        "<button onclick='prevScreen()'>◀ Prev</button>"
-        "<button onclick='nextScreen()'>Next ▶</button>"
-        "<button onclick='toggleAuto()' id='autoBtn'>Auto: ON</button>"
-        "<button onclick='toggleTheme()' id='themeBtn'>Theme: Dark</button>"
-        "<button onclick='refreshWeather()'>Refresh Weather</button>"
-        "<div class='info'>Screen updates every 10 seconds when Auto is ON</div></div>"
-        "<div class='card'><strong>Location:</strong> <span id='locName'>-</span> "
-        "(<span id='locIdx'>1</span>/<span id='locTotal'>1</span>)</div>"
-        "<div class='card' style='text-align:center'>"
-        "<a href='/'>Home</a> | <a href='/admin'>Admin Panel</a> | "
-        "<a href='/update'>Firmware</a> | <a href='/api/safemode' style='color:#ff6600'>Safe Mode</a> | <a href='/reboot'>Reboot</a></div>");
-
-    // JavaScript for canvas rendering
-    html += F("<script>"
-        "const canvas=document.getElementById('display');"
-        "const ctx=canvas.getContext('2d');"
-        "const bootCanvas=document.getElementById('bootCanvas');"
-        "const bootCtx=bootCanvas.getContext('2d');"
-        "ctx.imageSmoothingEnabled=false;"
-        "bootCtx.imageSmoothingEnabled=false;"
-        "let weatherData=null,config=null,currentLoc=0,currentScreen=0,autoPlay=true,autoTimer=null;"
-        "let showForecast=true,screenCycleTime=10,darkMode=true;"
-        "const SCREENS_PER_LOC=3;"  // Current weather + 2 forecast screens (GIF removed)
-
-        // Colors - dark and light themes
-        "const DARK={BG:'#0a0a14',CARD:'#141428',WHITE:'#FFFFFF',GRAY:'#888888',CYAN:'#00D4FF',ORANGE:'#FF6B35',BLUE:'#4DA8DA',YELLOW:'#FFE000',GREEN:'#00FF88'};"
-        "const LIGHT={BG:'#E8F4FC',CARD:'#FFFFFF',WHITE:'#1a1a2e',GRAY:'#555555',CYAN:'#0088AA',ORANGE:'#E85520',BLUE:'#2980B9',YELLOW:'#D4A800',GREEN:'#00AA55'};"
-        "let C=DARK;"
-
-        // WMO weather icons from CDN (32x32 SVGs)
-        "const ICON_CDN='https://cdn.jsdelivr.net/gh/ryanmaule/epicweatherbox@main/images/wmo_icons/';"
-        "const WMO_FILES={0:'wmo_0_clear.svg',1:'wmo_1_mainly_clear.svg',2:'wmo_2_partly_cloudy.svg',3:'wmo_3_overcast.svg',"
-        "45:'wmo_45_fog.svg',48:'wmo_48_rime_fog.svg',51:'wmo_51_drizzle_light.svg',53:'wmo_53_drizzle_mod.svg',"
-        "55:'wmo_55_drizzle_dense.svg',56:'wmo_56_freezing_drizzle_light.svg',57:'wmo_57_freezing_drizzle_dense.svg',"
-        "61:'wmo_61_rain_light.svg',63:'wmo_63_rain_mod.svg',65:'wmo_65_rain_heavy.svg',66:'wmo_66_freezing_rain_light.svg',"
-        "67:'wmo_67_freezing_rain_heavy.svg',71:'wmo_71_snow_light.svg',73:'wmo_73_snow_mod.svg',75:'wmo_75_snow_heavy.svg',"
-        "77:'wmo_77_snow_grains.svg',80:'wmo_80_rain_showers_light.svg',81:'wmo_81_rain_showers_mod.svg',"
-        "82:'wmo_82_rain_showers_violent.svg',85:'wmo_85_snow_showers_light.svg',86:'wmo_86_snow_showers_heavy.svg',"
-        "95:'wmo_95_thunderstorm.svg',96:'wmo_96_thunderstorm_hail.svg',99:'wmo_99_thunderstorm_hail_heavy.svg'};"
-        // Preload all icons
-        "const wmoImgs={};"
-        "Object.keys(WMO_FILES).forEach(k=>{const img=new Image();img.src=ICON_CDN+WMO_FILES[k];wmoImgs[k]=img;});"
-
-        // Map any WMO code to available icon code
-        "function getWmoCode(code){"
-        "if(WMO_FILES[code])return code;"
-        "if(code<=2)return WMO_FILES[code]?code:0;"
-        "if(code===3)return 3;"
-        "if(code>=45&&code<=48)return 45;"
-        "if(code>=51&&code<=55)return 51;"
-        "if(code>=56&&code<=57)return 56;"
-        "if(code>=61&&code<=65)return 61;"
-        "if(code>=66&&code<=67)return 66;"
-        "if(code>=71&&code<=75)return 71;"
-        "if(code>=77&&code<=79)return 77;"
-        "if(code>=80&&code<=82)return 80;"
-        "if(code>=85&&code<=86)return 85;"
-        "if(code>=95)return 95;"
-        "return 3;}"  // Default to overcast
-
-        // Draw WMO icon from CDN (uses preloaded images)
-        "function drawWmoIco(code,x,y,sz){"
-        "const c=getWmoCode(code),img=wmoImgs[c];"
-        "if(img&&img.complete)ctx.drawImage(img,x,y,sz,sz);}"
-
-        // Format time with AM/PM
-        "function fmtTime(){"
-        "const n=new Date(),h=n.getHours(),m=n.getMinutes();"
-        "const h12=h%12||12,ap=h<12?'AM':'PM';"
-        "return{time:h12+':'+(m<10?'0':'')+m,ampm:ap};}"
-
-        // Format date
-        "function fmtDate(){"
-        "const n=new Date(),mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];"
-        "return mo[n.getMonth()]+' '+n.getDate();}"
-
-        // Get tomorrow's date + offset
-        "function getTomorrow(offset){"
-        "const d=new Date();d.setDate(d.getDate()+1+offset);"
-        "const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];"
-        "return{day:days[d.getDay()],date:(d.getMonth()+1)+'/'+d.getDate()};}"
-
-        // Temperature color
-        "function tempCol(t){return t<0?C.BLUE:t<10?C.CYAN:t<20?C.WHITE:C.ORANGE;}"
-
-        // Format temp
-        "function fmtTemp(t,c){if(!c)t=t*9/5+32;return Math.round(t)+'°';}"
-
-        // Draw globe icon (matches TFT drawGlobe)
-        "function drawGlobeIcon(x,y,color){"
-        "ctx.strokeStyle=color;ctx.lineWidth=1.5;"
-        "ctx.beginPath();ctx.arc(x+6,y+6,6,0,Math.PI*2);ctx.stroke();"
-        "ctx.beginPath();ctx.ellipse(x+6,y+6,3,6,0,0,Math.PI*2);ctx.stroke();"
-        "ctx.beginPath();ctx.moveTo(x,y+6);ctx.lineTo(x+12,y+6);ctx.stroke();"
-        "ctx.lineWidth=1;}"
-
-        // Draw calendar icon (matches TFT drawCalendar)
-        "function drawCalIcon(x,y,color){"
-        "ctx.strokeStyle=color;ctx.lineWidth=1.5;"
-        "ctx.strokeRect(x+1,y+3,10,9);"
-        "ctx.beginPath();ctx.moveTo(x+3,y+1);ctx.lineTo(x+3,y+5);ctx.stroke();"
-        "ctx.beginPath();ctx.moveTo(x+9,y+1);ctx.lineTo(x+9,y+5);ctx.stroke();"
-        "ctx.beginPath();ctx.moveTo(x+1,y+6);ctx.lineTo(x+11,y+6);ctx.stroke();"
-        "ctx.lineWidth=1;}"
-
-        // Draw up arrow icon
-        "function drawUpArrow(x,y,color){"
-        "ctx.fillStyle=color;"
-        "ctx.beginPath();ctx.moveTo(x+6,y);ctx.lineTo(x+12,y+8);ctx.lineTo(x,y+8);ctx.closePath();ctx.fill();}"
-
-        // Draw down arrow icon
-        "function drawDownArrow(x,y,color){"
-        "ctx.fillStyle=color;"
-        "ctx.beginPath();ctx.moveTo(x+6,y+8);ctx.lineTo(x+12,y);ctx.lineTo(x,y);ctx.closePath();ctx.fill();}"
-
-        // Draw raindrop icon
-        "function drawDropIcon(x,y,color){"
-        "ctx.fillStyle=color;"
-        "ctx.beginPath();ctx.moveTo(x+5,y);ctx.bezierCurveTo(x+5,y,x,y+6,x+2,y+9);"
-        "ctx.bezierCurveTo(x+4,y+11,x+6,y+11,x+8,y+9);ctx.bezierCurveTo(x+10,y+6,x+5,y,x+5,y);ctx.fill();}"
-
-        // Draw current weather screen - matches TFT layout
-        "function drawCurrent(){"
-        "const locs=weatherData?.locations||[];"
-        "if(!locs.length){ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
-        "ctx.fillStyle=C.WHITE;ctx.font='16px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText('No weather data',120,120);return;}"
-        "const loc=locs[currentLoc]||locs[0],w=loc.current||{};"
-        "const useC=weatherData.useCelsius!==false;"
-        "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
-
-        // Header: Time (large, centered) with smaller AM/PM
-        "const t=fmtTime();"
-        "ctx.fillStyle=C.CYAN;ctx.font='bold 32px sans-serif';ctx.textAlign='left';"
-        "const timeW=ctx.measureText(t.time).width;"
-        "ctx.font='14px sans-serif';const ampmW=ctx.measureText(t.ampm).width;"
-        "const totalW=timeW+4+ampmW;const startX=120-totalW/2;"
-        "ctx.font='bold 32px sans-serif';ctx.fillText(t.time,startX,28);"
-        "ctx.font='14px sans-serif';ctx.fillText(t.ampm,startX+timeW+4,20);"
-
-        // Info row: Globe + Location (left), Calendar + Date (right)
-        "const infoY=42;"
-        "drawGlobeIcon(15,infoY-6,C.GRAY);"
-        "ctx.fillStyle=C.GRAY;ctx.font='14px sans-serif';ctx.textAlign='left';"
-        "ctx.fillText(loc.location||'Unknown',32,infoY+6);"
-        "const dateStr=fmtDate();"
-        "ctx.textAlign='right';const dateW=ctx.measureText(dateStr).width;"
-        "drawCalIcon(225-dateW-16,infoY-6,C.GRAY);"
-        "ctx.fillText(dateStr,225,infoY+6);"
-
-        // Main content: Two columns
-        // Left column (0-119): Weather icon (64x64) + condition text
-        "drawWmoIco(w.weatherCode||0,28,58,64);"
-        "ctx.fillStyle=C.WHITE;ctx.font='14px sans-serif';ctx.textAlign='center';"
-        "const cond=w.condition||'Unknown';"
-        "ctx.fillText(cond.length>12?cond.substring(0,12):cond,60,138);"
-
-        // Right column: Large temperature with unit
-        "const temp=w.temperature||0;"
-        "const tempVal=useC?Math.round(temp):Math.round(temp*9/5+32);"
-        "ctx.fillStyle=C.WHITE;ctx.font='bold 56px sans-serif';ctx.textAlign='center';"
-        "const tempStr=tempVal+'°';"
-        "ctx.fillText(tempStr,175,115);"
-        "ctx.font='bold 18px sans-serif';ctx.fillText(useC?'C':'F',210,82);"
-
-        // Detail bar at bottom with rounded rectangle background
-        "ctx.fillStyle=C.CARD;"
-        "ctx.beginPath();ctx.roundRect(8,175,224,36,4);ctx.fill();"
-
-        "const fc=loc.forecast||[];if(fc.length>0){"
-        "const today=fc[0];"
-        "const hi=useC?Math.round(today.tempMax||0):Math.round((today.tempMax||0)*9/5+32);"
-        "const lo=useC?Math.round(today.tempMin||0):Math.round((today.tempMin||0)*9/5+32);"
-
-        // Three sections: High, Low, Precip
-        "const secW=74,sec1X=12,sec2X=86,sec3X=160,contentY=185;"
-        "drawUpArrow(sec1X,contentY,C.ORANGE);"
-        "ctx.fillStyle=C.ORANGE;ctx.font='bold 16px sans-serif';ctx.textAlign='left';"
-        "ctx.fillText(hi,sec1X+14,contentY+14);"
-
-        "drawDownArrow(sec2X,contentY,C.BLUE);"
-        "ctx.fillStyle=C.BLUE;ctx.fillText(lo,sec2X+14,contentY+14);"
-
-        "const pp=today.precipProbability||today.precipitationProb||0;"
-        "const pColor=pp>30?C.CYAN:C.GRAY;"
-        "drawDropIcon(sec3X,contentY,pColor);"
-        "ctx.fillStyle=pColor;ctx.fillText(Math.round(pp)+'%',sec3X+14,contentY+14);}"
-
-        // Screen dots
-        "drawDots();}"
-
-        // Draw forecast screen (3 days starting from startIdx in forecast array)
-        "function drawForecast(startIdx){"
-        "const locs=weatherData?.locations||[];"
-        "if(!locs.length)return;"
-        "const loc=locs[currentLoc]||locs[0],fc=loc.forecast||[];"
-        "const useC=weatherData.useCelsius!==false;"
-        "ctx.fillStyle=C.BG;ctx.fillRect(0,0,240,240);"
-
-        // Header: Time left (cyan) with smaller AM/PM, Globe + Location right (grey)
-        "const t=fmtTime();"
-        "ctx.fillStyle=C.CYAN;ctx.font='bold 18px sans-serif';ctx.textAlign='left';"
-        "ctx.fillText(t.time,8,18);"
-        "const timeW=ctx.measureText(t.time).width;"
-        "ctx.font='12px sans-serif';ctx.fillText(t.ampm,12+timeW,14);"
-
-        // Globe + Location (right aligned, grey)
-        "ctx.fillStyle=C.GRAY;ctx.font='14px sans-serif';ctx.textAlign='right';"
-        "const locName=loc.location||'Unknown';"
-        "ctx.fillText(locName,232,16);"
-        "const locW=ctx.measureText(locName).width;"
-        "drawGlobeIcon(232-locW-18,4,C.GRAY);"
-
-        // 3 forecast cards (skip day 0 which is today, so startIdx+1)
-        "const cw=75,ch=180,sp=5,sx=(240-3*cw-2*sp)/2;"
-        "for(let i=0;i<3;i++){"
-        "const fi=startIdx+i+1;"  // +1 to skip today
-        "if(fi>=fc.length)continue;"
-        "const day=fc[fi],cx=sx+i*(cw+sp);"
-        "ctx.fillStyle=C.CARD;"
-        "ctx.beginPath();ctx.roundRect(cx,35,cw,ch,4);ctx.fill();"
-
-        // Day name at top
-        "ctx.fillStyle=C.CYAN;ctx.font='bold 14px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText(day.day||'---',cx+cw/2,52);"
-
-        // Icon - 32x32 centered
-        "drawWmoIco(day.weatherCode||0,cx+(cw-32)/2,62,32);"
-
-        // High/Low temps with arrow icons
-        "const hi=useC?Math.round(day.tempMax||0):Math.round((day.tempMax||0)*9/5+32);"
-        "const lo=useC?Math.round(day.tempMin||0):Math.round((day.tempMin||0)*9/5+32);"
-        "drawUpArrow(cx+8,110,C.ORANGE);"
-        "ctx.fillStyle=C.ORANGE;ctx.font='bold 14px sans-serif';ctx.textAlign='center';"
-        "ctx.fillText(hi,cx+cw/2+8,124);"
-        "drawDownArrow(cx+8,135,C.BLUE);"
-        "ctx.fillStyle=C.BLUE;ctx.fillText(lo,cx+cw/2+8,149);"
-
-        // Precip with droplet icon
-        "const pp=day.precipProbability||day.precipitationProb||0;"
-        "const pColor=pp>30?C.CYAN:C.GRAY;"
-        "drawDropIcon(cx+8,165,pColor);"
-        "ctx.fillStyle=pColor;ctx.font='12px sans-serif';"
-        "ctx.fillText(Math.round(pp)+'%',cx+cw/2+8,180);}"
-
-        // Screen dots
-        "drawDots();}"
-
-        // Draw boot screen on separate canvas (always visible)
-        // Layout matches actual TFT: centered vertically with text and optional GIF
-        "function renderBootScreen(){"
-        "bootCtx.fillStyle=C.BG;bootCtx.fillRect(0,0,240,240);"
-        "bootCtx.textAlign='center';"
-        // "Epic" in cyan at y=95 (matches TFT)
-        "bootCtx.fillStyle=C.CYAN;bootCtx.font='bold 24px sans-serif';"
-        "bootCtx.fillText('Epic',120,95);"
-        // "WeatherBox" in white at y=130 (matches TFT)
-        "bootCtx.fillStyle='#fff';bootCtx.font='bold 24px sans-serif';"
-        "bootCtx.fillText('WeatherBox',120,130);"
-        // Version in gray at y=165 (matches TFT)
-        "bootCtx.fillStyle=C.GRAY;bootCtx.font='14px sans-serif';"
-        "bootCtx.fillText('v1.0.0',120,165);"
-        // Show "Connecting..." at bottom y=218 (matches TFT - same position as IP)
-        "bootCtx.fillStyle='#666';bootCtx.font='12px sans-serif';"
-        "bootCtx.fillText('Connecting...',120,218);}"
-
-        // Draw screen indicator dots
-        "function drawDots(){"
-        "const locs=weatherData?.locations||[],nLocs=locs.length||1;"
-        "const screens=SCREENS_PER_LOC;"
-        "const total=nLocs*screens,cur=currentLoc*screens+Math.min(currentScreen,screens-1);"
-        "const dotR=3,gap=10,sx=120-(total-1)*gap/2;"
-        "for(let i=0;i<total;i++){"
-        "ctx.fillStyle=i===cur?C.CYAN:C.GRAY;"
-        "ctx.beginPath();ctx.arc(sx+i*gap,232,dotR,0,Math.PI*2);ctx.fill();}}"
-
-        // Update HTML dots for main rotation
-        "function updateHtmlDots(){"
-        "const el=document.getElementById('screenDots');el.innerHTML='';"
-        "const locs=weatherData?.locations||[],nLocs=locs.length||1;"
-        "const screens=SCREENS_PER_LOC;"
-        "const total=nLocs*screens,cur=currentLoc*screens+Math.min(currentScreen,screens-1);"
-        "for(let i=0;i<total;i++){const d=document.createElement('div');"
-        "d.className='dot'+(i===cur?' active':'');el.appendChild(d);}}"
-
-        // Main render - boot screen is always on separate canvas
-        "function render(){"
-        "renderBootScreen();"  // Always render boot screen on left canvas
-        "ctx.clearRect(0,0,240,240);"
-        "const names=['Current Weather','Forecast Days 1-3','Forecast Days 4-6'];"
-        "document.getElementById('screenLabel').textContent=names[currentScreen]||'Unknown';"
-        "if(weatherData?.locations){"
-        "const loc=weatherData.locations[currentLoc];"
-        "document.getElementById('locName').textContent=loc?.location||'Unknown';"
-        "document.getElementById('locIdx').textContent=currentLoc+1;"
-        "document.getElementById('locTotal').textContent=weatherData.locations.length;}"
-        "updateHtmlDots();"
-        "switch(currentScreen){"
-        "case 0:drawCurrent();break;"
-        "case 1:drawForecast(0);break;"
-        "case 2:drawForecast(3);break;}}"
-
-        // Navigation - always cycles, but may skip forecast screens
-        "function nextScreen(){"
-        "const nLocs=weatherData?.locations?.length||1;"
-        "if(!showForecast){"
-        // Only current weather, skip to next location
-        "currentLoc=(currentLoc+1)%nLocs;currentScreen=0;}"
-        "else{"
-        // Full rotation with forecast (3 screens per location)
-        "currentScreen++;"
-        "if(currentScreen>=SCREENS_PER_LOC){currentScreen=0;currentLoc=(currentLoc+1)%nLocs;}}"
-        "render();}"
-
-        "function prevScreen(){"
-        "const nLocs=weatherData?.locations?.length||1;"
-        "if(!showForecast){"
-        "currentLoc=(currentLoc+nLocs-1)%nLocs;currentScreen=0;}"
-        "else{"
-        "currentScreen--;"
-        "if(currentScreen<0){currentScreen=SCREENS_PER_LOC-1;currentLoc=(currentLoc+nLocs-1)%nLocs;}}"
-        "render();}"
-
-        "function toggleAuto(){"
-        "autoPlay=!autoPlay;"
-        "document.getElementById('autoBtn').textContent='Auto: '+(autoPlay?'ON':'OFF');"
-        "document.getElementById('autoBtn').className=autoPlay?'active':'';"
-        "if(autoPlay)startAuto();else stopAuto();}"
-
-        "function toggleTheme(){"
-        "darkMode=!darkMode;C=darkMode?DARK:LIGHT;"
-        "document.getElementById('themeBtn').textContent='Theme: '+(darkMode?'Dark':'Light');"
-        "document.getElementById('themeBtn').className=darkMode?'':'active';"
-        "render();}"
-
-        "function startAuto(){stopAuto();autoTimer=setInterval(nextScreen,screenCycleTime*1000);}"
-        "function stopAuto(){if(autoTimer){clearInterval(autoTimer);autoTimer=null;}}"
-
-        // Fetch config
-        "async function fetchConfig(){"
-        "try{const r=await fetch('/api/config');config=await r.json();"
-        "showForecast=config.showForecast!==false;"
-        "screenCycleTime=config.screenCycleTime||10;"
-        "console.log('Config:',config);"
-        "}catch(e){console.error('Config fetch failed',e);}}"
-
-        // Fetch weather
-        "async function fetchWeather(){"
-        "try{const r=await fetch('/api/weather');weatherData=await r.json();"
-        "console.log('Weather data:',weatherData);render();"
-        "}catch(e){console.error('Fetch failed',e);}}"
-
-        "function refreshWeather(){fetch('/api/weather/refresh').then(()=>setTimeout(fetchWeather,2000));}"
-
-        // Init
-        "fetchConfig().then(()=>{fetchWeather();});if(autoPlay)startAuto();setInterval(fetchWeather,60000);"
-        "</script>");
-
-    html += F("</div></body></html>");
-    server.send(200, "text/html", html);
-}
+// NOTE: handleDisplayPreview was removed in v1.3.1 - preview is now integrated in admin panel
 
 /**
  * Handle 404

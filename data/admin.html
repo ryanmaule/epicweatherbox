@@ -118,7 +118,7 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 
 <!-- CAROUSEL TAB -->
 <div id="carousel" class="tab-content active">
-<p id="carousel-desc" style="font-size:0.85em;color:#888;margin-bottom:12px">Drag to reorder screens. Each location shows 3 screens (current + forecasts).</p>
+<p id="carousel-desc" style="font-size:0.85em;color:#888;margin-bottom:12px">Drag to reorder screens.</p>
 <div id="carousel-list" class="carousel-list"></div>
 <div class="add-buttons">
 <button class="btn btn-add" onclick="openModal('location')">+ Location</button>
@@ -1084,15 +1084,7 @@ async function saveDisplay() {
 }
 
 function updateCarouselDescription() {
-  const showForecast = document.getElementById('show-forecast')?.checked !== false;
-  const descEl = document.getElementById('carousel-desc');
-  if (descEl) {
-    if (showForecast) {
-      descEl.textContent = 'Drag to reorder screens. Each location shows 3 screens (current + forecasts).';
-    } else {
-      descEl.textContent = 'Drag to reorder screens. Each location shows current weather only.';
-    }
-  }
+  // No longer needed - description is now static
 }
 
 async function refreshWeather() {
