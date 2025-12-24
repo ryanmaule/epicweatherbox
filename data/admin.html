@@ -75,6 +75,16 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 .info-box{background:rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
 .info-label{color:#888;font-size:0.85em}
 .info-value{color:#00d4ff;font-weight:500}
+
+/* Toggle switch */
+.toggle-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #333}
+.toggle-row:last-child{border-bottom:none}
+.toggle{position:relative;width:44px;height:24px}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#333;border-radius:24px;transition:0.3s}
+.toggle-slider:before{position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:0.3s}
+.toggle input:checked+.toggle-slider{background:#00d4ff}
+.toggle input:checked+.toggle-slider:before{transform:translateX(20px)}
 </style>
 </head>
 <body>
@@ -91,7 +101,10 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 </div>
 </div>
 <div class="card" style="margin-top:15px">
-<h3>Current Weather</h3>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+<h3 style="margin:0">Current Weather</h3>
+<button class="btn btn-secondary" style="padding:4px 10px;font-size:0.8em" onclick="cycleWeatherLocation()">Next ▶</button>
+</div>
 <div id="weather-display">Loading...</div>
 </div>
 </div>
@@ -105,7 +118,7 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 
 <!-- CAROUSEL TAB -->
 <div id="carousel" class="tab-content active">
-<p style="font-size:0.85em;color:#888;margin-bottom:12px">Drag to reorder screens. Each location shows 3 screens (current + forecasts).</p>
+<p id="carousel-desc" style="font-size:0.85em;color:#888;margin-bottom:12px">Drag to reorder screens. Each location shows 3 screens (current + forecasts).</p>
 <div id="carousel-list" class="carousel-list"></div>
 <div class="add-buttons">
 <button class="btn btn-add" onclick="openModal('location')">+ Location</button>
@@ -140,6 +153,14 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <label>Brightness</label>
 <input type="range" id="brightness" min="10" max="100" value="80">
 <span id="brightness-val">80%</span>
+</div>
+<div class="form-group" style="margin-top:15px">
+<label style="margin-bottom:8px">Screen Options</label>
+<div class="toggle-row">
+<span>Show Forecast Screens</span>
+<label class="toggle"><input type="checkbox" id="show-forecast" checked><span class="toggle-slider"></span></label>
+</div>
+<p style="font-size:0.75em;color:#666;margin-top:8px">When enabled, each location shows 3 screens (current + 2 forecast). When disabled, only current weather is shown.</p>
 </div>
 <div class="btn-row">
 <button class="btn btn-primary" onclick="saveDisplay()">Save Settings</button>
@@ -266,6 +287,8 @@ let locations = [];
 let countdowns = [];
 let customScreens = [];
 let currentScreen = 0;
+let currentWeatherLocationIdx = 0;
+let weatherData = null;
 
 const canvas = document.getElementById('preview');
 const ctx = canvas.getContext('2d');
@@ -602,11 +625,24 @@ async function loadData() {
 }
 
 function updateWeatherDisplay(data) {
-  if (!data.primary || !data.primary.valid) {
+  weatherData = data;  // Store for cycling
+
+  // Use locations array if available, otherwise fall back to primary
+  let w = null;
+  if (data.locations && data.locations.length > 0) {
+    if (currentWeatherLocationIdx >= data.locations.length) {
+      currentWeatherLocationIdx = 0;
+    }
+    w = data.locations[currentWeatherLocationIdx];
+  } else if (data.primary && data.primary.valid) {
+    w = data.primary;
+  }
+
+  if (!w || !w.valid) {
     document.getElementById('weather-display').innerHTML = '<div class="status error">Weather unavailable</div>';
     return;
   }
-  const w = data.primary;
+
   let html = `<div class="weather-now">
     <div class="weather-icon">${w.current.icon}</div>
     <div class="weather-temp">${Math.round(w.current.temperature)}°</div>
@@ -617,6 +653,14 @@ function updateWeatherDisplay(data) {
   });
   html += '</div>';
   document.getElementById('weather-display').innerHTML = html;
+}
+
+function cycleWeatherLocation() {
+  if (!weatherData || !weatherData.locations || weatherData.locations.length <= 1) {
+    return; // Nothing to cycle
+  }
+  currentWeatherLocationIdx = (currentWeatherLocationIdx + 1) % weatherData.locations.length;
+  updateWeatherDisplay(weatherData);
 }
 
 function updateDeviceInfo(s) {
@@ -683,21 +727,39 @@ function updateConfig(c) {
     document.getElementById('brightness-val').textContent = (c.display.brightness || 80) + '%';
   }
 
+  // Load showForecast setting
+  const showForecastEl = document.getElementById('show-forecast');
+  if (showForecastEl) {
+    showForecastEl.checked = c.showForecast !== false;  // Default to true
+    updateCarouselDescription();
+  }
+
   renderCarousel();
 }
 
 function drawPreview(data) {
+  weatherData = data;  // Store for use
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, 240, 240);
-  if (!data || !data.primary || !data.primary.valid) {
+
+  // Get weather data - prefer locations array
+  let w = null;
+  if (data && data.locations && data.locations.length > 0 && data.locations[0].valid) {
+    w = data.locations[0];
+  } else if (data && data.primary && data.primary.valid) {
+    w = data.primary;
+  }
+
+  if (!w) {
     ctx.fillStyle = '#666';
     ctx.font = '16px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('No weather data', 120, 120);
     return;
   }
-  const w = data.primary;
-  drawCurrentWeather(w);
+
+  // Draw based on current screen state
+  drawScreenByIndex(currentScreen, w);
 }
 
 function drawCurrentWeather(w) {
@@ -723,8 +785,280 @@ function drawCurrentWeather(w) {
 }
 
 function cycleScreen() {
-  // Just refresh preview for now
-  fetch('/api/weather').then(r => r.json()).then(drawPreview);
+  const showForecast = document.getElementById('show-forecast')?.checked !== false;
+
+  // Count total screens based on carousel items
+  let totalScreens = 0;
+  carouselItems.forEach(item => {
+    if (item.type === 0) totalScreens += showForecast ? 3 : 1; // Location = 3 or 1 screens
+    else totalScreens += 1; // Countdown or Custom = 1 screen
+  });
+  if (totalScreens === 0) totalScreens = 1;
+
+  currentScreen = (currentScreen + 1) % totalScreens;
+  if (weatherData) {
+    // Get weather data for preview
+    let w = null;
+    if (weatherData.locations && weatherData.locations.length > 0 && weatherData.locations[0].valid) {
+      w = weatherData.locations[0];
+    } else if (weatherData.primary && weatherData.primary.valid) {
+      w = weatherData.primary;
+    }
+    if (w) drawScreenByIndex(currentScreen, w);
+  }
+}
+
+function drawScreenByIndex(screenIdx, weather) {
+  const showForecast = document.getElementById('show-forecast')?.checked !== false;
+
+  // Map screen index to carousel item
+  let idx = 0;
+  for (let i = 0; i < carouselItems.length; i++) {
+    const item = carouselItems[i];
+    if (item.type === 0) {
+      // Location: 3 screens (current, forecast 1-3, forecast 4-6) or just 1
+      const screensForLoc = showForecast ? 3 : 1;
+      if (screenIdx < idx + screensForLoc) {
+        const subScreen = screenIdx - idx;
+        const locIdx = item.dataIndex;
+        // Get weather for this location
+        let w = weather;
+        if (weatherData && weatherData.locations && weatherData.locations[locIdx]) {
+          w = weatherData.locations[locIdx];
+        }
+        if (subScreen === 0) drawCurrentWeather(w);
+        else drawForecastPreview(w, subScreen - 1);
+        return;
+      }
+      idx += screensForLoc;
+    } else if (item.type === 1) {
+      // Countdown: 1 screen
+      if (screenIdx === idx) {
+        const cd = countdowns[item.dataIndex];
+        if (cd) drawCountdownPreview(cd);
+        return;
+      }
+      idx += 1;
+    } else if (item.type === 2) {
+      // Custom: 1 screen
+      if (screenIdx === idx) {
+        const cust = customScreens[item.dataIndex];
+        if (cust) drawCustomPreview(cust);
+        return;
+      }
+      idx += 1;
+    }
+  }
+  // Fallback to current weather
+  drawCurrentWeather(weather);
+}
+
+function drawForecastPreview(w, forecastSet) {
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, 240, 240);
+  ctx.textAlign = 'center';
+
+  // Header
+  ctx.fillStyle = '#00d4ff';
+  ctx.font = '12px sans-serif';
+  const now = new Date();
+  ctx.textAlign = 'left';
+  ctx.fillText(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 10, 20);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#888';
+  ctx.fillText('Forecast', 230, 20);
+
+  // Location
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#00d4ff';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillText(w.location, 120, 45);
+
+  // Forecast days
+  const startDay = forecastSet * 3;
+  const days = w.forecast.slice(startDay, startDay + 3);
+
+  days.forEach((d, i) => {
+    const y = 70 + i * 55;
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillRect(20, y, 200, 48);
+
+    ctx.fillStyle = '#888';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(d.day, 30, y + 18);
+
+    ctx.font = '24px sans-serif';
+    ctx.fillText(d.icon, 30, y + 42);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round(d.tempMax) + '°', 210, y + 35);
+  });
+
+  // Dots
+  drawDots(forecastSet + 1, 3);
+}
+
+function drawCountdownPreview(cd) {
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, 240, 240);
+  ctx.textAlign = 'center';
+
+  // Header
+  ctx.fillStyle = '#00d4ff';
+  ctx.font = '12px sans-serif';
+  const now = new Date();
+  ctx.textAlign = 'left';
+  ctx.fillText(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 10, 20);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#888';
+  ctx.fillText('Countdown', 230, 20);
+
+  // Icon
+  const icon = ICONS.countdown[cd.type] || '📅';
+  ctx.font = '48px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(icon, 120, 85);
+
+  // Title
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillText(cd.title || EVENT_NAMES[cd.type] || 'Event', 120, 125);
+
+  // Calculate days
+  const targetDate = getEventDate(cd);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffTime = targetDate.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  ctx.font = 'bold 36px sans-serif';
+  ctx.fillStyle = '#00d4ff';
+  ctx.fillText(diffDays + ' days', 120, 175);
+
+  // Date
+  ctx.font = '14px sans-serif';
+  ctx.fillStyle = '#888';
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  ctx.fillText(dayNames[targetDate.getDay()] + ', ' + MONTH_NAMES[targetDate.getMonth()] + ' ' + targetDate.getDate(), 120, 200);
+}
+
+function drawCustomPreview(cust) {
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, 240, 240);
+
+  // Header
+  ctx.fillStyle = '#00d4ff';
+  ctx.font = '12px sans-serif';
+  const now = new Date();
+  ctx.textAlign = 'left';
+  ctx.fillText(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 10, 20);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#888';
+  if (cust.header) {
+    ctx.fillText('★ ' + cust.header, 230, 20);
+  }
+
+  // Body text
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff';
+  const bodyLen = (cust.body || '').length;
+  if (bodyLen <= 40) {
+    ctx.font = 'bold 18px sans-serif';
+  } else if (bodyLen <= 80) {
+    ctx.font = 'bold 14px sans-serif';
+  } else {
+    ctx.font = '12px sans-serif';
+  }
+
+  // Simple word wrap
+  const words = (cust.body || '').split(' ');
+  let lines = [];
+  let currentLine = '';
+  words.forEach(word => {
+    const testLine = currentLine ? currentLine + ' ' + word : word;
+    if (ctx.measureText(testLine).width > 200) {
+      if (currentLine) lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
+  });
+  if (currentLine) lines.push(currentLine);
+
+  const lineHeight = bodyLen <= 40 ? 28 : (bodyLen <= 80 ? 22 : 18);
+  const startY = 120 - (lines.length - 1) * lineHeight / 2;
+  lines.forEach((line, i) => {
+    ctx.fillText(line, 120, startY + i * lineHeight);
+  });
+
+  // Footer
+  if (cust.footer) {
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    const footerWidth = ctx.measureText(cust.footer).width + 20;
+    ctx.fillRect(120 - footerWidth / 2, 205, footerWidth, 25);
+    ctx.fillStyle = '#00d4ff';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(cust.footer, 120, 222);
+  }
+}
+
+function getEventDate(cd) {
+  const now = new Date();
+  let year = now.getFullYear();
+  let month = cd.month - 1;
+  let day = cd.day;
+
+  // Easter calculation
+  if (cd.type === 1) {
+    const easter = calculateEaster(year);
+    month = easter.month;
+    day = easter.day;
+  }
+
+  let date = new Date(year, month, day);
+  // If date has passed, use next year
+  if (date < now) {
+    year++;
+    if (cd.type === 1) {
+      const easter = calculateEaster(year);
+      month = easter.month;
+      day = easter.day;
+    }
+    date = new Date(year, month, day);
+  }
+  return date;
+}
+
+function calculateEaster(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1;
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return { month, day };
+}
+
+function drawDots(current, total) {
+  const dotSpacing = 12;
+  const startX = 120 - (total - 1) * dotSpacing / 2;
+  for (let i = 0; i < total; i++) {
+    ctx.beginPath();
+    ctx.arc(startX + i * dotSpacing, 232, 3, 0, Math.PI * 2);
+    ctx.fillStyle = i === current ? '#fff' : '#444';
+    ctx.fill();
+  }
 }
 
 function refreshPreview() {
@@ -732,18 +1066,33 @@ function refreshPreview() {
 }
 
 async function saveDisplay() {
+  const showForecast = document.getElementById('show-forecast').checked;
   const data = {
     display: {
       unit: document.getElementById('temp-unit').value,
       cycle: parseInt(document.getElementById('cycle-time').value),
       brightness: parseInt(document.getElementById('brightness').value)
-    }
+    },
+    showForecast: showForecast
   };
   try {
     const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     const result = await r.json();
     showStatus('display-status', result.success ? 'success' : 'error', result.message);
+    updateCarouselDescription();
   } catch (e) { showStatus('display-status', 'error', 'Failed to save'); }
+}
+
+function updateCarouselDescription() {
+  const showForecast = document.getElementById('show-forecast')?.checked !== false;
+  const descEl = document.getElementById('carousel-desc');
+  if (descEl) {
+    if (showForecast) {
+      descEl.textContent = 'Drag to reorder screens. Each location shows 3 screens (current + forecasts).';
+    } else {
+      descEl.textContent = 'Drag to reorder screens. Each location shows current weather only.';
+    }
+  }
 }
 
 async function refreshWeather() {

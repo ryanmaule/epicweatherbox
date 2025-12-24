@@ -1449,7 +1449,8 @@ const char* getEventTypeName(uint8_t type) {
 }
 
 // Draw large countdown icon (approx 48x48 pixels, centered at cx,cy)
-void drawCountdownIcon(int cx, int cy, uint8_t type, uint16_t color) {
+// For custom events, dayNum is displayed on the calendar icon
+void drawCountdownIcon(int cx, int cy, uint8_t type, uint16_t color, uint8_t dayNum = 0) {
     switch (type) {
         case COUNTDOWN_BIRTHDAY:
             // Large cake icon
@@ -1502,11 +1503,15 @@ void drawCountdownIcon(int cx, int cy, uint8_t type, uint16_t color) {
             // Calendar rings
             tft.fillRoundRect(cx - 12, cy - 22, 6, 10, 2, color);
             tft.fillRoundRect(cx + 6, cy - 22, 6, 10, 2, color);
-            // Date "25" in calendar
-            tft.setFreeFont(FSSB12);
-            tft.setTextDatum(MC_DATUM);
-            tft.setTextColor(getThemeBg());
-            tft.drawString("25", cx, cy + 8, GFXFF);
+            // Date number in calendar (use provided dayNum, default to 25)
+            {
+                char dayStr[4];
+                snprintf(dayStr, sizeof(dayStr), "%d", dayNum > 0 ? dayNum : 25);
+                tft.setFreeFont(FSSB12);
+                tft.setTextDatum(MC_DATUM);
+                tft.setTextColor(getThemeBg());
+                tft.drawString(dayStr, cx, cy + 8, GFXFF);
+            }
             break;
     }
 }
@@ -1572,7 +1577,8 @@ void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScr
     int daysLeft = daysUntil(targetYear, targetMonth, targetDay, year, month, day);
 
     // Draw large icon (centered at 120, 75)
-    drawCountdownIcon(120, 75 + yOff, event.type, cyanColor);
+    // Pass targetDay for custom events to display on calendar icon
+    drawCountdownIcon(120, 75 + yOff, event.type, cyanColor, (uint8_t)targetDay);
 
     // Event title (smaller, below icon)
     const char* title = (strlen(event.title) > 0) ? event.title : getEventTypeName(event.type);
