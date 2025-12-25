@@ -4,7 +4,7 @@ Custom open-source firmware for the GeekMagic SmallTV-Ultra, transforming it int
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-ESP8266-orange.svg)
-![Version](https://img.shields.io/badge/version-1.6.5-green.svg)
+![Version](https://img.shields.io/badge/version-1.7.0-green.svg)
 
 ## Features
 
@@ -13,7 +13,7 @@ Custom open-source firmware for the GeekMagic SmallTV-Ultra, transforming it int
 - **YouTube Stats** - Display your channel's subscriber count, views, and video count
 - **Countdown Timers** - Track days until birthdays, holidays, or custom events
 - **Custom Text Screens** - Display custom messages in the rotation
-- **Unified Carousel** - Drag-and-drop reordering of all screen types
+- **Unified Carousel** - Drag-and-drop reordering of all screen types with inline editing
 - **Theme System** - Classic, Sunset, or fully custom color themes
 - **Dark & Light Modes** - Auto-switches based on time of day, or set manually
 - **Web-Based Admin** - Full configuration via browser with live display preview
@@ -201,6 +201,11 @@ epicweatherbox/
 - Upload working firmware via `/update`
 
 ## Version History
+
+### v1.7.0 (2024-12-25)
+- Location search with city dropdown (uses Open-Meteo geocoding API)
+- Edit button on carousel items for inline editing
+- Add buttons now disabled at limits instead of hidden
 
 ### v1.6.5 (2024-12-24)
 - YouTube Stats screen with channel subscriber/view/video counts
