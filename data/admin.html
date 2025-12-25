@@ -24,6 +24,7 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 .btn-secondary:hover{background:rgba(255,255,255,0.2)}
 .btn-add{background:rgba(0,212,255,0.15);color:#00d4ff;border:1px dashed #00d4ff}
 .btn-add:hover{background:rgba(0,212,255,0.25)}
+.btn-add.disabled{opacity:0.4;cursor:not-allowed;pointer-events:none;border-style:solid}
 .form-group{margin-bottom:12px}
 .form-group label{display:block;margin-bottom:4px;font-size:0.85em;color:#aaa}
 .form-group input,.form-group select,.form-group textarea{width:100%;padding:8px;border:1px solid #333;border-radius:6px;background:#2a2a4e;color:#eee;font-size:0.9em}
@@ -59,6 +60,8 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 .carousel-item .item-info{flex:1}
 .carousel-item .item-title{font-weight:bold;font-size:0.9em}
 .carousel-item .item-desc{font-size:0.75em;color:#888;margin-top:2px}
+.carousel-item .item-edit{background:none;border:none;color:#666;font-size:1em;cursor:pointer;padding:4px 8px}
+.carousel-item .item-edit:hover{color:#00d4ff}
 .carousel-item .item-remove{background:none;border:none;color:#666;font-size:1.2em;cursor:pointer;padding:4px 8px}
 .carousel-item .item-remove:hover{color:#f66}
 .carousel-counters{display:flex;gap:15px;margin-top:10px;font-size:0.8em;color:#888}
@@ -106,6 +109,19 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 .theme-btn .theme-desc{font-size:0.75em;color:#888;margin-top:4px}
 .custom-colors{padding:10px;background:rgba(255,255,255,0.02);border-radius:8px;margin-top:15px}
 .custom-colors.hidden{display:none}
+
+/* Location search dropdown */
+.search-wrap{position:relative}
+.search-dropdown{position:absolute;top:100%;left:0;right:0;background:#2a2a4e;border:1px solid #333;border-top:none;border-radius:0 0 6px 6px;max-height:240px;overflow-y:auto;z-index:10;display:none}
+.search-dropdown.active{display:block}
+.search-dropdown-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid #333}
+.search-dropdown-item:last-child{border-bottom:none}
+.search-dropdown-item:hover{background:rgba(0,212,255,0.1)}
+.search-dropdown-item .city-name{color:#fff;font-weight:500}
+.search-dropdown-item .city-detail{color:#888;font-size:0.8em;margin-top:2px}
+.search-loading{padding:12px;text-align:center;color:#888;font-size:0.85em}
+.search-divider{border-top:1px solid #333;margin:12px 0;padding-top:12px}
+.search-divider-text{font-size:0.75em;color:#666;margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -143,16 +159,16 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <p id="carousel-desc" style="font-size:0.85em;color:#888;margin-bottom:12px">Drag to reorder screens.</p>
 <div id="carousel-list" class="carousel-list"></div>
 <div class="add-buttons">
-<button class="btn btn-add" onclick="openModal('location')">+ Location</button>
-<button class="btn btn-add" onclick="openModal('countdown')">+ Countdown</button>
-<button class="btn btn-add" onclick="openModal('custom')">+ Custom Text</button>
-<button class="btn btn-add" id="add-youtube-btn" onclick="openModal('youtube')">+ YouTube</button>
+<button class="btn btn-add" data-type="location" onclick="openModal('location')">+ Location</button>
+<button class="btn btn-add" data-type="countdown" onclick="openModal('countdown')">+ Countdown</button>
+<button class="btn btn-add" data-type="custom" onclick="openModal('custom')">+ Custom Text</button>
+<button class="btn btn-add" data-type="youtube" onclick="openModal('youtube')">+ YouTube</button>
 </div>
 <div class="carousel-counters">
 <span>Locations: <span id="loc-count">0</span>/3</span>
 <span>Countdowns: <span id="cd-count">0</span>/3</span>
 <span>Custom: <span id="cust-count">0</span>/3</span>
-<span id="yt-counter" style="display:none">YouTube: <span id="yt-count">0</span>/1</span>
+<span>YouTube: <span id="yt-count">0</span>/1</span>
 </div>
 <div class="btn-row" style="margin-top:15px">
 <button class="btn btn-primary" onclick="saveCarousel()">Save Carousel</button>
@@ -305,7 +321,17 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <!-- MODALS -->
 <div id="modal-location" class="modal">
 <div class="modal-content">
-<h3>Add Location</h3>
+<h3 id="modal-location-title">Add Location</h3>
+<div class="form-group">
+<label>Search for City</label>
+<div class="search-wrap">
+<input type="text" id="loc-search" placeholder="Type city name (e.g., Aurora, Ontario)" autocomplete="off">
+<div id="loc-search-results" class="search-dropdown"></div>
+</div>
+</div>
+<div class="search-divider">
+<p class="search-divider-text">Or enter coordinates manually:</p>
+</div>
 <div class="form-group">
 <label>Location Name</label>
 <input type="text" id="new-loc-name" placeholder="e.g., Seattle">
@@ -323,14 +349,14 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <button class="btn btn-secondary" onclick="useMyLocationForNew()" style="width:100%">Use My Location</button>
 <div class="modal-buttons">
 <button class="btn btn-secondary" onclick="closeModal('location')">Cancel</button>
-<button class="btn btn-primary" onclick="addLocation()">Add</button>
+<button class="btn btn-primary" id="btn-location-save" onclick="saveLocation()">Add</button>
 </div>
 </div>
 </div>
 
 <div id="modal-countdown" class="modal">
 <div class="modal-content">
-<h3>Add Countdown</h3>
+<h3 id="modal-countdown-title">Add Countdown</h3>
 <div class="form-group">
 <label>Event Type</label>
 <select id="new-cd-type" onchange="updateCountdownFields()">
@@ -363,14 +389,14 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 </div>
 <div class="modal-buttons">
 <button class="btn btn-secondary" onclick="closeModal('countdown')">Cancel</button>
-<button class="btn btn-primary" onclick="addCountdown()">Add</button>
+<button class="btn btn-primary" id="btn-countdown-save" onclick="saveCountdown()">Add</button>
 </div>
 </div>
 </div>
 
 <div id="modal-custom" class="modal">
 <div class="modal-content">
-<h3>Add Custom Text Screen</h3>
+<h3 id="modal-custom-title">Add Custom Text Screen</h3>
 <div class="form-group">
 <label>Header (max 16 chars)</label>
 <input type="text" id="new-cust-header" maxlength="16" placeholder="e.g., Quote">
@@ -386,14 +412,14 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 </div>
 <div class="modal-buttons">
 <button class="btn btn-secondary" onclick="closeModal('custom')">Cancel</button>
-<button class="btn btn-primary" onclick="addCustomScreen()">Add</button>
+<button class="btn btn-primary" id="btn-custom-save" onclick="saveCustomScreen()">Add</button>
 </div>
 </div>
 </div>
 
 <div id="modal-youtube" class="modal">
 <div class="modal-content">
-<h3>YouTube Channel Stats</h3>
+<h3 id="modal-youtube-title">YouTube Channel Stats</h3>
 <div class="form-group">
 <label>YouTube API Key</label>
 <input type="password" id="yt-api-key" placeholder="AIzaSy...">
@@ -409,7 +435,7 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <div class="modal-buttons">
 <button class="btn btn-secondary" onclick="closeModal('youtube')">Cancel</button>
 <button class="btn btn-secondary" onclick="testYouTube()">Test</button>
-<button class="btn btn-primary" onclick="addYouTube()">Add to Carousel</button>
+<button class="btn btn-primary" id="btn-youtube-save" onclick="saveYouTube()">Add to Carousel</button>
 </div>
 </div>
 </div>
@@ -425,6 +451,10 @@ let currentScreen = 0;
 let currentWeatherLocationIdx = 0;
 let weatherData = null;
 let themeData = null;
+
+// Edit mode tracking
+let editingItem = null; // {carouselIdx, type, dataIndex} when editing, null when adding
+let searchTimeout = null; // Debounce timer for location search
 
 const canvas = document.getElementById('preview');
 const ctx = canvas.getContext('2d');
@@ -468,14 +498,20 @@ document.getElementById('new-cust-body').oninput = e => {
 
 // Modal handling
 function openModal(type) {
+  editingItem = null; // Reset to add mode
+  updateModalMode(type, false);
   document.getElementById('modal-' + type).classList.add('active');
   if (type === 'countdown') updateCountdownFields();
 }
 
 function closeModal(type) {
   document.getElementById('modal-' + type).classList.remove('active');
+  editingItem = null; // Reset edit mode
   // Clear fields
   if (type === 'location') {
+    document.getElementById('loc-search').value = '';
+    document.getElementById('loc-search-results').classList.remove('active');
+    document.getElementById('loc-search-results').innerHTML = '';
     document.getElementById('new-loc-name').value = '';
     document.getElementById('new-loc-lat').value = '';
     document.getElementById('new-loc-lon').value = '';
@@ -568,6 +604,7 @@ function renderCarousel() {
         <div class="item-title">${escapeHtml(title)}</div>
         <div class="item-desc">${escapeHtml(desc)}</div>
       </div>
+      <button class="item-edit" onclick="editCarouselItem(${idx})">✎</button>
       <button class="item-remove" onclick="removeCarouselItem(${idx})">×</button>
     `;
 
@@ -597,16 +634,22 @@ function renderCarousel() {
   document.getElementById('cust-count').textContent = custCount;
   document.getElementById('yt-count').textContent = ytCount;
 
-  // Show/hide YouTube button based on whether already in carousel (max 1)
-  const ytBtn = document.getElementById('add-youtube-btn');
-  const ytCounter = document.getElementById('yt-counter');
-  if (ytCount >= 1) {
-    ytBtn.style.display = 'none';
-    ytCounter.style.display = 'inline';
-  } else {
-    ytBtn.style.display = 'inline-block';
-    ytCounter.style.display = 'inline';
-  }
+  // Update add button states based on limits
+  updateAddButtonStates(locCount, cdCount, custCount, ytCount);
+}
+
+function updateAddButtonStates(locCount, cdCount, custCount, ytCount) {
+  const limits = { location: 3, countdown: 3, custom: 3, youtube: 1 };
+  const counts = { location: locCount, countdown: cdCount, custom: custCount, youtube: ytCount };
+
+  document.querySelectorAll('.add-buttons .btn-add').forEach(btn => {
+    const type = btn.dataset.type;
+    if (type && limits[type] !== undefined) {
+      const isDisabled = counts[type] >= limits[type];
+      btn.classList.toggle('disabled', isDisabled);
+      btn.disabled = isDisabled;
+    }
+  });
 }
 
 function escapeHtml(text) {
@@ -615,12 +658,8 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// Add items
-function addLocation() {
-  if (locations.length >= 3) {
-    alert('Maximum 3 locations allowed');
-    return;
-  }
+// Add/Edit items
+function saveLocation() {
   const name = document.getElementById('new-loc-name').value.trim();
   const lat = parseFloat(document.getElementById('new-loc-lat').value);
   const lon = parseFloat(document.getElementById('new-loc-lon').value);
@@ -630,45 +669,133 @@ function addLocation() {
     return;
   }
 
-  const idx = locations.length;
-  locations.push({ name, lat, lon, enabled: true });
-  carouselItems.push({ type: 0, dataIndex: idx });
+  if (editingItem && editingItem.type === 0) {
+    // Update existing location
+    locations[editingItem.dataIndex] = { name, lat, lon, enabled: true };
+  } else {
+    // Add new location
+    if (locations.length >= 3) {
+      alert('Maximum 3 locations allowed');
+      return;
+    }
+    const idx = locations.length;
+    locations.push({ name, lat, lon, enabled: true });
+    carouselItems.push({ type: 0, dataIndex: idx });
+  }
+
   closeModal('location');
   renderCarousel();
 }
 
-function addCountdown() {
-  if (countdowns.length >= 3) {
-    alert('Maximum 3 countdowns allowed');
-    return;
+// Location search functions
+function initLocationSearch() {
+  const searchInput = document.getElementById('loc-search');
+  const resultsDiv = document.getElementById('loc-search-results');
+  if (!searchInput || !resultsDiv) return;
+
+  searchInput.oninput = function() {
+    const query = this.value.trim();
+    if (searchTimeout) clearTimeout(searchTimeout);
+
+    if (query.length < 2) {
+      resultsDiv.classList.remove('active');
+      resultsDiv.innerHTML = '';
+      return;
+    }
+
+    resultsDiv.innerHTML = '<div class="search-loading">Searching...</div>';
+    resultsDiv.classList.add('active');
+    searchTimeout = setTimeout(() => searchLocation(query), 300);
+  };
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', function(e) {
+    if (!searchInput.contains(e.target) && !resultsDiv.contains(e.target)) {
+      resultsDiv.classList.remove('active');
+    }
+  });
+}
+
+async function searchLocation(query) {
+  const resultsDiv = document.getElementById('loc-search-results');
+  try {
+    const r = await fetch('/api/geocode?q=' + encodeURIComponent(query));
+    const data = await r.json();
+
+    if (data.error) {
+      resultsDiv.innerHTML = '<div class="search-loading">' + escapeHtml(data.error) + '</div>';
+      return;
+    }
+
+    if (!data.results || data.results.length === 0) {
+      resultsDiv.innerHTML = '<div class="search-loading">No results found</div>';
+      return;
+    }
+
+    let html = '';
+    data.results.slice(0, 20).forEach(loc => {
+      const name = escapeHtml(loc.name);
+      const display = escapeHtml(loc.display);
+      const lat = loc.lat.toFixed(4);
+      const lon = loc.lon.toFixed(4);
+      html += '<div class="search-dropdown-item" onclick="selectSearchResult(\'' + escapeAttr(loc.name) + '\', ' + lat + ', ' + lon + ')">' +
+        '<div class="city-name">' + name + '</div>' +
+        '<div class="city-detail">' + display + '</div>' +
+        '</div>';
+    });
+    resultsDiv.innerHTML = html;
+  } catch (e) {
+    resultsDiv.innerHTML = '<div class="search-loading">Search failed</div>';
   }
+}
+
+function selectSearchResult(name, lat, lon) {
+  document.getElementById('new-loc-name').value = name;
+  document.getElementById('new-loc-lat').value = lat;
+  document.getElementById('new-loc-lon').value = lon;
+  document.getElementById('loc-search').value = '';
+  document.getElementById('loc-search-results').classList.remove('active');
+}
+
+function escapeAttr(text) {
+  return (text || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
+function saveCountdown() {
   const type = parseInt(document.getElementById('new-cd-type').value);
   let title = document.getElementById('new-cd-title').value.trim();
   let month = parseInt(document.getElementById('new-cd-month').value);
   let day = parseInt(document.getElementById('new-cd-day').value);
 
   // Set defaults for preset types
-  if (type === 1) { month = 4; day = 1; title = 'Easter'; } // Easter - date calculated
-  else if (type === 2) { month = 10; day = 31; title = 'Halloween'; }
-  else if (type === 3) { month = 2; day = 14; title = 'Valentine\'s Day'; }
-  else if (type === 4) { month = 12; day = 25; title = 'Christmas'; }
+  if (type === 1) { month = 4; day = 1; title = title || 'Easter'; }
+  else if (type === 2) { month = 10; day = 31; title = title || 'Halloween'; }
+  else if (type === 3) { month = 2; day = 14; title = title || "Valentine's Day"; }
+  else if (type === 4) { month = 12; day = 25; title = title || 'Christmas'; }
   else if (!title) {
     alert('Please enter a title');
     return;
   }
 
-  const idx = countdowns.length;
-  countdowns.push({ type, month, day, title });
-  carouselItems.push({ type: 1, dataIndex: idx });
+  if (editingItem && editingItem.type === 1) {
+    // Update existing countdown
+    countdowns[editingItem.dataIndex] = { type, month, day, title };
+  } else {
+    // Add new countdown
+    if (countdowns.length >= 3) {
+      alert('Maximum 3 countdowns allowed');
+      return;
+    }
+    const idx = countdowns.length;
+    countdowns.push({ type, month, day, title });
+    carouselItems.push({ type: 1, dataIndex: idx });
+  }
+
   closeModal('countdown');
   renderCarousel();
 }
 
-function addCustomScreen() {
-  if (customScreens.length >= 3) {
-    alert('Maximum 3 custom screens allowed');
-    return;
-  }
+function saveCustomScreen() {
   const header = document.getElementById('new-cust-header').value.trim();
   const body = document.getElementById('new-cust-body').value.trim();
   const footer = document.getElementById('new-cust-footer').value.trim();
@@ -678,11 +805,92 @@ function addCustomScreen() {
     return;
   }
 
-  const idx = customScreens.length;
-  customScreens.push({ header, body, footer });
-  carouselItems.push({ type: 2, dataIndex: idx });
+  if (editingItem && editingItem.type === 2) {
+    // Update existing custom screen
+    customScreens[editingItem.dataIndex] = { header, body, footer };
+  } else {
+    // Add new custom screen
+    if (customScreens.length >= 3) {
+      alert('Maximum 3 custom screens allowed');
+      return;
+    }
+    const idx = customScreens.length;
+    customScreens.push({ header, body, footer });
+    carouselItems.push({ type: 2, dataIndex: idx });
+  }
+
   closeModal('custom');
   renderCarousel();
+}
+
+// Modal mode management for Add vs Edit
+function updateModalMode(type, isEdit) {
+  const titles = {
+    location: ['Add Location', 'Edit Location'],
+    countdown: ['Add Countdown', 'Edit Countdown'],
+    custom: ['Add Custom Text Screen', 'Edit Custom Screen'],
+    youtube: ['YouTube Channel Stats', 'Edit YouTube']
+  };
+  const buttons = {
+    location: ['Add', 'Update'],
+    countdown: ['Add', 'Update'],
+    custom: ['Add', 'Update'],
+    youtube: ['Add to Carousel', 'Update']
+  };
+
+  const titleEl = document.getElementById('modal-' + type + '-title');
+  const btnEl = document.getElementById('btn-' + type + '-save');
+
+  if (titleEl && titles[type]) {
+    titleEl.textContent = titles[type][isEdit ? 1 : 0];
+  }
+  if (btnEl && buttons[type]) {
+    btnEl.textContent = buttons[type][isEdit ? 1 : 0];
+  }
+}
+
+function editCarouselItem(carouselIdx) {
+  const item = carouselItems[carouselIdx];
+  if (!item) return;
+
+  editingItem = { carouselIdx, type: item.type, dataIndex: item.dataIndex };
+
+  if (item.type === 0) { // Location
+    const loc = locations[item.dataIndex];
+    if (!loc) return;
+    document.getElementById('loc-search').value = '';
+    document.getElementById('loc-search-results').classList.remove('active');
+    document.getElementById('new-loc-name').value = loc.name || '';
+    document.getElementById('new-loc-lat').value = loc.lat || '';
+    document.getElementById('new-loc-lon').value = loc.lon || '';
+    updateModalMode('location', true);
+    document.getElementById('modal-location').classList.add('active');
+
+  } else if (item.type === 1) { // Countdown
+    const cd = countdowns[item.dataIndex];
+    if (!cd) return;
+    document.getElementById('new-cd-type').value = cd.type || 0;
+    document.getElementById('new-cd-title').value = cd.title || '';
+    document.getElementById('new-cd-month').value = cd.month || 1;
+    document.getElementById('new-cd-day').value = cd.day || 1;
+    updateCountdownFields();
+    updateModalMode('countdown', true);
+    document.getElementById('modal-countdown').classList.add('active');
+
+  } else if (item.type === 2) { // Custom
+    const cust = customScreens[item.dataIndex];
+    if (!cust) return;
+    document.getElementById('new-cust-header').value = cust.header || '';
+    document.getElementById('new-cust-body').value = cust.body || '';
+    document.getElementById('new-cust-footer').value = cust.footer || '';
+    document.getElementById('new-body-count').textContent = (cust.body || '').length;
+    updateModalMode('custom', true);
+    document.getElementById('modal-custom').classList.add('active');
+
+  } else if (item.type === 3) { // YouTube
+    updateModalMode('youtube', true);
+    document.getElementById('modal-youtube').classList.add('active');
+  }
 }
 
 function removeCarouselItem(idx) {
@@ -1562,14 +1770,7 @@ async function loadYouTube() {
   }
 }
 
-async function addYouTube() {
-  // Check if YouTube is already in carousel
-  const hasYoutube = carouselItems.some(item => item.type === 3);
-  if (hasYoutube) {
-    alert('YouTube is already in the carousel');
-    return;
-  }
-
+async function saveYouTube() {
   const apiKey = document.getElementById('yt-api-key').value.trim();
   const channel = document.getElementById('yt-channel').value.trim().replace(/^@/, '');
 
@@ -1595,8 +1796,14 @@ async function addYouTube() {
     return;
   }
 
-  // Add to carousel and close modal
-  carouselItems.push({ type: 3, dataIndex: 0 });
+  // Add to carousel only if not editing (YouTube already in carousel)
+  if (!editingItem || editingItem.type !== 3) {
+    const hasYoutube = carouselItems.some(item => item.type === 3);
+    if (!hasYoutube) {
+      carouselItems.push({ type: 3, dataIndex: 0 });
+    }
+  }
+
   closeModal('youtube');
   renderCarousel();
   await loadYouTube();  // Refresh data
@@ -1688,6 +1895,7 @@ async function testYouTube() {
 
 loadData();
 loadYouTube();
+initLocationSearch();
 setInterval(loadData, 60000);
 </script>
 </body>
