@@ -173,8 +173,11 @@ Keep these files updated:
 |------|-------------|
 | `CLAUDE.md` | Major features, architecture changes, new phases |
 | `README.md` | User-facing features, installation, usage |
-| `src/config.h` | Version numbers, feature flags |
+| `src/config.h` | Version numbers, feature flags, **FIRMWARE_VERSION when admin.html changes** |
 | `.beads/` | Issue tracking (via `bd` commands) |
+
+**CRITICAL - Admin HTML Version Requirement**:
+When `data/admin.html` is modified, you MUST increment `FIRMWARE_VERSION` in `src/config.h`. The admin panel uses a PROGMEM → LittleFS caching system that only reprovisions when the firmware version changes. Without a version bump, the old admin.html will continue to be served. See the ESP8266 Developer agent for full details.
 
 ## DECISION FRAMEWORK
 
@@ -226,6 +229,7 @@ bd create --title="Add [feature]" --type=feature --priority=2
 bd update <id> --status=in_progress
 
 # 3. Work on it (use TodoWrite for session tasks)
+#    NOTE: If modifying data/admin.html, bump FIRMWARE_VERSION in src/config.h!
 
 # 4. When done
 bd close <id>

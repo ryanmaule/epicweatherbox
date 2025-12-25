@@ -72,36 +72,43 @@ Run through ALL of these checks before approving any firmware for deployment:
 
 ### Phase 4: Code Analysis
 
-9. **PROGMEM Usage**
-   - Large constant strings should use PROGMEM
-   - Check `src/admin_html.h` uses PROGMEM for HTML
-   - WARN if large strings not in PROGMEM
+9. **Admin HTML Version Check** (CRITICAL)
+   - If `data/admin.html` has been modified, `FIRMWARE_VERSION` MUST be incremented
+   - Admin HTML is embedded in PROGMEM and provisioned to LittleFS on boot
+   - Provisioning only occurs when version changes - without a version bump, old admin.html is served
+   - Check: `git diff --name-only HEAD~5 | grep admin.html` to see if recently changed
+   - FAIL if admin.html changed but version not incremented
 
-10. **Infinite Loops**
+10. **PROGMEM Usage**
+    - Large constant strings should use PROGMEM
+    - Check `src/admin_html.h` uses PROGMEM for HTML
+    - WARN if large strings not in PROGMEM
+
+11. **Infinite Loops**
     - Look for `while(true)` or `while(1)` without `yield()` or `delay()` inside
     - These cause watchdog resets
     - WARN if found
 
-11. **Blocking Code**
+12. **Blocking Code**
     - Look for `delay()` calls >5000ms (very long delays)
     - Check HTTP clients have timeouts set
     - WARN if problematic blocking found
 
-12. **Memory Allocations**
+13. **Memory Allocations**
     - Look for large stack arrays (>2KB is risky on ESP8266)
     - Check malloc/new are balanced with free/delete
     - WARN if potential memory leaks
 
 ### Phase 5: Feature Verification
 
-13. **Critical Features Present**
+14. **Critical Features Present**
     - WiFi connection capability
     - Web server for configuration
     - NTP time sync
     - Weather API integration
     - Display driver initialization
 
-14. **Version Updated**
+15. **Version Updated**
     - Check `FIRMWARE_VERSION` in `src/config.h` matches intended release
     - Version should follow semver (e.g., "1.2.0")
 
@@ -139,6 +146,9 @@ grep -E "(char|uint8_t|byte)\s+\w+\[[0-9]{4,}\]" src/main.cpp
 
 # Check firmware version
 grep "FIRMWARE_VERSION" src/config.h
+
+# Check if admin.html was modified recently (requires version bump if so)
+git diff --name-only HEAD~5 | grep -E "(admin\.html|admin_html\.h)" || echo "No recent admin.html changes"
 ```
 
 ## Report Format
@@ -158,6 +168,7 @@ CRITICAL CHECKS:
 [PASS/FAIL] OTA Handler Present
 [PASS/FAIL] Build Successful
 [PASS/FAIL] Firmware Size (XXX KB / 1024 KB max)
+[PASS/FAIL] Admin HTML Version (if admin.html changed, version must be bumped)
 
 WARNING CHECKS:
 [PASS/WARN] Watchdog Timer Serviced
