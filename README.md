@@ -4,7 +4,7 @@ Custom open-source firmware for the GeekMagic SmallTV-Ultra, transforming it int
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-ESP8266-orange.svg)
-![Version](https://img.shields.io/badge/version-1.7.0-green.svg)
+![Version](https://img.shields.io/badge/version-1.7.1-green.svg)
 
 ## Features
 
