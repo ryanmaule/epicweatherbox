@@ -50,3 +50,6 @@ docs/DEVICE_ACCESS.md
 docs/IMPLEMENTATION_PLAN.md
 docs/PROJECT_PLAN.md
 docs/REVERSE_ENGINEERING.md
+
+# Environment variables / secrets
+.env
