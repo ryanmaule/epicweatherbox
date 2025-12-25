@@ -9,6 +9,7 @@
 #include "config.h"
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <LittleFS.h>
 
 // =============================================================================
@@ -72,6 +73,13 @@ static CustomScreenConfig customScreens[MAX_CUSTOM_SCREENS] = {
     {"", "", ""}
 };
 static uint8_t customScreenCount = 0;
+
+// YouTube stats
+static YouTubeConfig youtubeConfig = {"", "", false};
+static YouTubeData youtubeData = {"", "", "", 0, 0, 0, false, 0, ""};
+static unsigned long youtubeLastUpdateTime = 0;
+static bool youtubeInitialized = false;
+static const char* YOUTUBE_CONFIG_FILE = "/youtube_config.json";
 
 // Timing
 static unsigned long lastUpdateTime = 0;
@@ -1259,4 +1267,306 @@ void weatherToJson(const WeatherData& data, JsonDocument& doc) {
         day["condition"] = conditionToString(data.forecast[i].condition);
         day["icon"] = conditionToIcon(data.forecast[i].condition, true);
     }
+}
+
+// =============================================================================
+// YOUTUBE STATS
+// =============================================================================
+
+/**
+ * Fetch YouTube channel stats from API
+ */
+static bool fetchYouTubeStats() {
+    if (WiFi.status() != WL_CONNECTED) {
+        strncpy(youtubeData.lastError, "WiFi not connected", sizeof(youtubeData.lastError));
+        return false;
+    }
+
+    if (strlen(youtubeConfig.apiKey) == 0 || strlen(youtubeConfig.channelHandle) == 0) {
+        strncpy(youtubeData.lastError, "API key or channel not configured", sizeof(youtubeData.lastError));
+        return false;
+    }
+
+    // Build YouTube API URL
+    String url = "https://www.googleapis.com/youtube/v3/channels";
+    url += "?part=statistics,snippet";
+    url += "&forHandle=" + String(youtubeConfig.channelHandle);
+    url += "&key=" + String(youtubeConfig.apiKey);
+
+    Serial.printf("[YOUTUBE] Fetching: %s\n", url.c_str());
+
+    // Use WiFiClientSecure for HTTPS
+    WiFiClientSecure client;
+    client.setInsecure();  // Skip certificate validation (OK for non-sensitive API calls)
+
+    HTTPClient http;
+    http.setTimeout(15000);  // 15 second timeout (HTTPS is slower)
+
+    if (!http.begin(client, url)) {
+        strncpy(youtubeData.lastError, "HTTP begin failed", sizeof(youtubeData.lastError));
+        Serial.println(F("[YOUTUBE] HTTP begin failed"));
+        return false;
+    }
+
+    int httpCode = http.GET();
+
+    if (httpCode != HTTP_CODE_OK) {
+        snprintf(youtubeData.lastError, sizeof(youtubeData.lastError), "HTTP error: %d", httpCode);
+        Serial.printf("[YOUTUBE] HTTP error: %d\n", httpCode);
+        http.end();
+        return false;
+    }
+
+    String payload = http.getString();
+    http.end();
+
+    Serial.printf("[YOUTUBE] Response size: %d bytes\n", payload.length());
+
+    // Parse JSON response
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, payload);
+
+    if (error) {
+        snprintf(youtubeData.lastError, sizeof(youtubeData.lastError), "JSON error: %s", error.c_str());
+        Serial.printf("[YOUTUBE] JSON parse error: %s\n", error.c_str());
+        return false;
+    }
+
+    // Check if items exist
+    JsonArray items = doc["items"];
+    if (items.size() == 0) {
+        strncpy(youtubeData.lastError, "Channel not found", sizeof(youtubeData.lastError));
+        Serial.println(F("[YOUTUBE] Channel not found"));
+        return false;
+    }
+
+    JsonObject channel = items[0];
+
+    // Get snippet (channel info)
+    JsonObject snippet = channel["snippet"];
+    if (snippet) {
+        const char* title = snippet["title"];
+        if (title) {
+            strncpy(youtubeData.channelName, title, sizeof(youtubeData.channelName) - 1);
+            youtubeData.channelName[sizeof(youtubeData.channelName) - 1] = '\0';
+        }
+    }
+
+    // Get channel ID
+    const char* channelId = channel["id"];
+    if (channelId) {
+        strncpy(youtubeData.channelId, channelId, sizeof(youtubeData.channelId) - 1);
+        youtubeData.channelId[sizeof(youtubeData.channelId) - 1] = '\0';
+    }
+
+    // Get statistics
+    JsonObject stats = channel["statistics"];
+    if (stats) {
+        // YouTube API returns these as strings
+        const char* subs = stats["subscriberCount"];
+        const char* views = stats["viewCount"];
+        const char* videos = stats["videoCount"];
+
+        youtubeData.subscribers = subs ? strtoul(subs, NULL, 10) : 0;
+        youtubeData.views = views ? strtoul(views, NULL, 10) : 0;
+        youtubeData.videos = videos ? strtoul(videos, NULL, 10) : 0;
+    }
+
+    // Copy channel handle
+    strncpy(youtubeData.channelHandle, youtubeConfig.channelHandle, sizeof(youtubeData.channelHandle) - 1);
+    youtubeData.channelHandle[sizeof(youtubeData.channelHandle) - 1] = '\0';
+
+    // Success!
+    youtubeData.valid = true;
+    youtubeData.lastUpdate = millis();
+    youtubeData.lastError[0] = '\0';
+
+    Serial.printf("[YOUTUBE] Success! %s: %u subs, %u views, %u videos\n",
+                  youtubeData.channelName,
+                  youtubeData.subscribers,
+                  youtubeData.views,
+                  youtubeData.videos);
+
+    return true;
+}
+
+/**
+ * Initialize YouTube system
+ */
+void initYouTube() {
+    if (youtubeInitialized) return;
+
+    Serial.println(F("[YOUTUBE] Initializing..."));
+
+    // Clear data
+    memset(&youtubeData, 0, sizeof(YouTubeData));
+
+    // Load saved configuration
+    loadYouTubeConfig();
+
+    youtubeInitialized = true;
+    Serial.printf("[YOUTUBE] Initialized, enabled=%d\n", youtubeConfig.enabled);
+}
+
+/**
+ * Update YouTube stats if interval has elapsed
+ */
+bool updateYouTube() {
+    if (!youtubeInitialized) {
+        initYouTube();
+    }
+
+    // Don't update if not enabled or not configured
+    if (!youtubeConfig.enabled || !isYouTubeConfigured()) {
+        return false;
+    }
+
+    unsigned long now = millis();
+
+    // Check if update is needed (30 minute interval)
+    if (youtubeLastUpdateTime > 0 && (now - youtubeLastUpdateTime) < YOUTUBE_UPDATE_INTERVAL_MS) {
+        return false;  // Not time yet
+    }
+
+    return forceYouTubeUpdate();
+}
+
+/**
+ * Force immediate YouTube stats update
+ */
+bool forceYouTubeUpdate() {
+    if (!isYouTubeConfigured()) {
+        Serial.println(F("[YOUTUBE] Cannot update - not configured"));
+        return false;
+    }
+
+    Serial.println(F("[YOUTUBE] Updating stats..."));
+    bool success = fetchYouTubeStats();
+    youtubeLastUpdateTime = millis();
+    return success;
+}
+
+/**
+ * Get YouTube configuration
+ */
+const YouTubeConfig& getYouTubeConfig() {
+    return youtubeConfig;
+}
+
+/**
+ * Get YouTube stats data
+ */
+const YouTubeData& getYouTubeData() {
+    return youtubeData;
+}
+
+/**
+ * Set YouTube API key
+ */
+void setYouTubeApiKey(const char* key) {
+    if (key) {
+        strncpy(youtubeConfig.apiKey, key, sizeof(youtubeConfig.apiKey) - 1);
+        youtubeConfig.apiKey[sizeof(youtubeConfig.apiKey) - 1] = '\0';
+    } else {
+        youtubeConfig.apiKey[0] = '\0';
+    }
+    // Invalidate cached data when key changes
+    youtubeData.valid = false;
+}
+
+/**
+ * Set YouTube channel handle
+ */
+void setYouTubeChannelHandle(const char* handle) {
+    if (handle) {
+        // Remove @ prefix if present
+        const char* h = (handle[0] == '@') ? handle + 1 : handle;
+        strncpy(youtubeConfig.channelHandle, h, sizeof(youtubeConfig.channelHandle) - 1);
+        youtubeConfig.channelHandle[sizeof(youtubeConfig.channelHandle) - 1] = '\0';
+    } else {
+        youtubeConfig.channelHandle[0] = '\0';
+    }
+    // Invalidate cached data when channel changes
+    youtubeData.valid = false;
+}
+
+/**
+ * Enable/disable YouTube screen
+ */
+void setYouTubeEnabled(bool enabled) {
+    youtubeConfig.enabled = enabled;
+}
+
+/**
+ * Check if YouTube is properly configured
+ */
+bool isYouTubeConfigured() {
+    return strlen(youtubeConfig.apiKey) > 0 && strlen(youtubeConfig.channelHandle) > 0;
+}
+
+/**
+ * Save YouTube config to LittleFS
+ */
+bool saveYouTubeConfig() {
+    JsonDocument doc;
+
+    doc["apiKey"] = youtubeConfig.apiKey;
+    doc["channelHandle"] = youtubeConfig.channelHandle;
+    doc["enabled"] = youtubeConfig.enabled;
+
+    File file = LittleFS.open(YOUTUBE_CONFIG_FILE, "w");
+    if (!file) {
+        Serial.println(F("[YOUTUBE] Failed to open config file for writing"));
+        return false;
+    }
+
+    serializeJson(doc, file);
+    file.close();
+
+    Serial.printf("[YOUTUBE] Configuration saved (enabled=%d, channel=%s)\n",
+                  youtubeConfig.enabled, youtubeConfig.channelHandle);
+    return true;
+}
+
+/**
+ * Load YouTube config from LittleFS
+ */
+bool loadYouTubeConfig() {
+    if (!LittleFS.exists(YOUTUBE_CONFIG_FILE)) {
+        Serial.println(F("[YOUTUBE] No config file, using defaults"));
+        return false;
+    }
+
+    File file = LittleFS.open(YOUTUBE_CONFIG_FILE, "r");
+    if (!file) {
+        Serial.println(F("[YOUTUBE] Failed to open config file"));
+        return false;
+    }
+
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, file);
+    file.close();
+
+    if (error) {
+        Serial.printf("[YOUTUBE] Config parse error: %s\n", error.c_str());
+        return false;
+    }
+
+    const char* apiKey = doc["apiKey"];
+    if (apiKey) {
+        strncpy(youtubeConfig.apiKey, apiKey, sizeof(youtubeConfig.apiKey) - 1);
+        youtubeConfig.apiKey[sizeof(youtubeConfig.apiKey) - 1] = '\0';
+    }
+
+    const char* handle = doc["channelHandle"];
+    if (handle) {
+        strncpy(youtubeConfig.channelHandle, handle, sizeof(youtubeConfig.channelHandle) - 1);
+        youtubeConfig.channelHandle[sizeof(youtubeConfig.channelHandle) - 1] = '\0';
+    }
+
+    youtubeConfig.enabled = doc["enabled"] | false;
+
+    Serial.printf("[YOUTUBE] Config loaded (enabled=%d, channel=%s)\n",
+                  youtubeConfig.enabled, youtubeConfig.channelHandle);
+    return true;
 }

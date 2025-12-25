@@ -28,10 +28,11 @@
 // Maximum number of locations supported
 #define MAX_WEATHER_LOCATIONS 5
 
-// Maximum carousel items (3 locations + 3 countdowns + 3 custom = 9)
-#define MAX_CAROUSEL_ITEMS 9
+// Maximum carousel items (3 locations + 3 countdowns + 3 custom + 1 youtube = 10)
+#define MAX_CAROUSEL_ITEMS 10
 #define MAX_COUNTDOWN_EVENTS 3
 #define MAX_CUSTOM_SCREENS 3
+#define MAX_YOUTUBE_CHANNELS 1
 
 // =============================================================================
 // CAROUSEL & COUNTDOWN TYPES
@@ -43,7 +44,8 @@
 enum CarouselItemType {
     CAROUSEL_LOCATION = 0,   // Weather location (shows 3 screens: current + 2 forecast)
     CAROUSEL_COUNTDOWN = 1,  // Countdown event (single screen)
-    CAROUSEL_CUSTOM = 2      // Custom text screen (single screen)
+    CAROUSEL_CUSTOM = 2,     // Custom text screen (single screen)
+    CAROUSEL_YOUTUBE = 3     // YouTube channel stats (single screen)
 };
 
 /**
@@ -75,6 +77,37 @@ struct CustomScreenConfig {
     char header[17];        // Top-right text (16 chars + null)
     char body[81];          // Center text (80 chars + null) - e.g., "My Weather Clock is AWESOME!"
     char footer[31];        // Bottom bar text (30 chars + null)
+};
+
+/**
+ * YouTube channel configuration
+ */
+struct YouTubeChannel {
+    char channelHandle[32]; // Channel handle without @ (e.g., "sterlings.funtube")
+};
+
+/**
+ * YouTube channel stats (fetched from API)
+ */
+struct YouTubeData {
+    char channelName[48];   // Display name from API
+    char channelHandle[32]; // Channel handle
+    char channelId[32];     // Channel ID (UCxxxx)
+    uint32_t subscribers;   // Subscriber count
+    uint32_t views;         // Total view count
+    uint32_t videos;        // Video count
+    bool valid;             // Is this data valid?
+    unsigned long lastUpdate; // Last successful update time
+    char lastError[64];     // Last error message
+};
+
+/**
+ * YouTube configuration
+ */
+struct YouTubeConfig {
+    char apiKey[48];        // YouTube Data API v3 key
+    char channelHandle[32]; // Channel to display
+    bool enabled;           // Is YouTube screen enabled?
 };
 
 /**
@@ -537,5 +570,67 @@ bool updateCustomScreenConfig(uint8_t index, const char* header, const char* bod
  * Remove custom screen by index
  */
 bool removeCustomScreenConfig(uint8_t index);
+
+// =============================================================================
+// YOUTUBE STATS
+// =============================================================================
+
+/**
+ * Initialize YouTube system
+ */
+void initYouTube();
+
+/**
+ * Update YouTube stats if needed (checks interval)
+ * Call in loop() - handles timing internally
+ * Returns true if an update was performed
+ */
+bool updateYouTube();
+
+/**
+ * Force immediate YouTube stats update
+ * Returns true if update was successful
+ */
+bool forceYouTubeUpdate();
+
+/**
+ * Get YouTube configuration
+ */
+const YouTubeConfig& getYouTubeConfig();
+
+/**
+ * Get YouTube stats data
+ */
+const YouTubeData& getYouTubeData();
+
+/**
+ * Set YouTube API key
+ */
+void setYouTubeApiKey(const char* key);
+
+/**
+ * Set YouTube channel handle
+ */
+void setYouTubeChannelHandle(const char* handle);
+
+/**
+ * Enable/disable YouTube screen
+ */
+void setYouTubeEnabled(bool enabled);
+
+/**
+ * Check if YouTube is properly configured (has API key and channel)
+ */
+bool isYouTubeConfigured();
+
+/**
+ * Save YouTube config to LittleFS
+ */
+bool saveYouTubeConfig();
+
+/**
+ * Load YouTube config from LittleFS
+ */
+bool loadYouTubeConfig();
 
 #endif // WEATHER_H

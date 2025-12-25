@@ -135,6 +135,7 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <div class="tab active" data-tab="carousel">Carousel</div>
 <div class="tab" data-tab="display">Display</div>
 <div class="tab" data-tab="theme">Theme</div>
+<div class="tab" data-tab="youtube">YouTube</div>
 <div class="tab" data-tab="system">System</div>
 </div>
 
@@ -146,11 +147,13 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <button class="btn btn-add" onclick="openModal('location')">+ Location</button>
 <button class="btn btn-add" onclick="openModal('countdown')">+ Countdown</button>
 <button class="btn btn-add" onclick="openModal('custom')">+ Custom Text</button>
+<button class="btn btn-add" id="add-youtube-btn" onclick="addYouTubeToCarousel()" style="display:none">+ YouTube</button>
 </div>
 <div class="carousel-counters">
 <span>Locations: <span id="loc-count">0</span>/3</span>
 <span>Countdowns: <span id="cd-count">0</span>/3</span>
 <span>Custom: <span id="cust-count">0</span>/3</span>
+<span id="yt-counter" style="display:none">YouTube: <span id="yt-count">0</span>/1</span>
 </div>
 <div class="btn-row" style="margin-top:15px">
 <button class="btn btn-primary" onclick="saveCarousel()">Save Carousel</button>
@@ -263,6 +266,39 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <button class="btn btn-primary" onclick="saveTheme()">Save Theme</button>
 </div>
 <div id="theme-status"></div>
+</div>
+
+<!-- YOUTUBE TAB -->
+<div id="youtube" class="tab-content">
+<div class="form-group">
+<label>YouTube API Key</label>
+<input type="password" id="yt-api-key" placeholder="AIzaSy...">
+<p style="font-size:0.75em;color:#666;margin-top:4px">Get a free key from <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#00d4ff">Google Cloud Console</a>. Enable YouTube Data API v3.</p>
+</div>
+<div class="form-group">
+<label>Channel Handle</label>
+<input type="text" id="yt-channel" placeholder="sterlings.funtube">
+<p style="font-size:0.75em;color:#666;margin-top:4px">Without the @ symbol. Example: sterlings.funtube</p>
+</div>
+<div class="form-group">
+<div class="toggle-row">
+<span>Enable YouTube Screen</span>
+<label class="toggle"><input type="checkbox" id="yt-enabled"><span class="toggle-slider"></span></label>
+</div>
+<p style="font-size:0.75em;color:#666;margin-top:4px">When enabled, adds YouTube stats to the carousel.</p>
+</div>
+<div class="btn-row">
+<button class="btn btn-primary" onclick="saveYouTube()">Save Settings</button>
+<button class="btn btn-secondary" onclick="testYouTube()">Test Connection</button>
+<button class="btn btn-secondary" onclick="refreshYouTube()">Refresh Stats</button>
+</div>
+<div id="youtube-status"></div>
+<div class="form-group" style="margin-top:20px">
+<label>Channel Stats</label>
+<div id="youtube-stats">
+<div class="info-box"><span class="info-label">Status</span><span class="info-value" id="yt-status-val">Not configured</span></div>
+</div>
+</div>
 </div>
 
 <!-- SYSTEM TAB -->
@@ -395,6 +431,7 @@ let carouselItems = [];
 let locations = [];
 let countdowns = [];
 let customScreens = [];
+let youtubeData = null;  // YouTube configuration and stats
 let currentScreen = 0;
 let currentWeatherLocationIdx = 0;
 let weatherData = null;
@@ -413,7 +450,8 @@ const ICONS = {
     4: '🎄', // Christmas
     5: '📅'  // Custom
   },
-  custom: '📝'
+  custom: '📝',
+  youtube: '▶️'
 };
 
 const EVENT_NAMES = ['Birthday', 'Easter', 'Halloween', 'Valentine\'s', 'Christmas', 'Custom'];
@@ -496,7 +534,7 @@ function renderCarousel() {
   const list = document.getElementById('carousel-list');
   list.innerHTML = '';
 
-  let locCount = 0, cdCount = 0, custCount = 0;
+  let locCount = 0, cdCount = 0, custCount = 0, ytCount = 0;
 
   carouselItems.forEach((item, idx) => {
     const div = document.createElement('div');
@@ -521,12 +559,17 @@ function renderCarousel() {
         desc = MONTH_NAMES[(cd.month || 1) - 1] + ' ' + (cd.day || 1);
       }
       cdCount++;
-    } else { // Custom
+    } else if (item.type === 2) { // Custom
       const cust = customScreens[item.dataIndex] || {};
       icon = ICONS.custom;
       title = cust.header || 'Custom Screen';
       desc = (cust.body || '').substring(0, 40) + (cust.body?.length > 40 ? '...' : '');
       custCount++;
+    } else if (item.type === 3) { // YouTube
+      icon = ICONS.youtube;
+      title = youtubeData?.channelName || youtubeData?.channelHandle || 'YouTube';
+      desc = youtubeData?.valid ? `${formatNumber(youtubeData.subscribers)} subscribers` : 'Channel stats';
+      ytCount++;
     }
 
     div.innerHTML = `
@@ -563,6 +606,21 @@ function renderCarousel() {
   document.getElementById('loc-count').textContent = locCount;
   document.getElementById('cd-count').textContent = cdCount;
   document.getElementById('cust-count').textContent = custCount;
+  document.getElementById('yt-count').textContent = ytCount;
+
+  // Show/hide YouTube button based on whether YouTube is configured and not already in carousel
+  const ytBtn = document.getElementById('add-youtube-btn');
+  const ytCounter = document.getElementById('yt-counter');
+  if (youtubeData && youtubeData.enabled && ytCount === 0) {
+    ytBtn.style.display = 'inline-block';
+    ytCounter.style.display = 'inline';
+  } else if (ytCount > 0) {
+    ytBtn.style.display = 'none';
+    ytCounter.style.display = 'inline';
+  } else {
+    ytBtn.style.display = 'none';
+    ytCounter.style.display = 'none';
+  }
 }
 
 function escapeHtml(text) {
@@ -695,6 +753,9 @@ async function saveCarousel() {
         usedCusts.push(cust);
         newCarousel.push({ type: 2, dataIndex: newIdx });
       }
+    } else if (item.type === 3) { // YouTube
+      // YouTube has no dataIndex array - just add type 3 with dataIndex 0
+      newCarousel.push({ type: 3, dataIndex: 0 });
     }
   });
 
@@ -987,6 +1048,13 @@ function drawScreenByIndex(screenIdx, weather) {
         return;
       }
       idx += 1;
+    } else if (item.type === 3) {
+      // YouTube: 1 screen
+      if (screenIdx === idx) {
+        drawYouTubePreview();
+        return;
+      }
+      idx += 1;
     }
   }
   // Fallback to current weather
@@ -1143,6 +1211,74 @@ function drawCustomPreview(cust) {
     ctx.font = '12px sans-serif';
     ctx.fillText(cust.footer, 120, 222);
   }
+}
+
+function drawYouTubePreview() {
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, 240, 240);
+
+  // Header
+  ctx.fillStyle = '#00d4ff';
+  ctx.font = '12px sans-serif';
+  const now = new Date();
+  ctx.textAlign = 'left';
+  ctx.fillText(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 10, 20);
+
+  // YouTube play button icon (red rectangle with white triangle)
+  ctx.fillStyle = '#FF0000';
+  ctx.fillRect(200, 8, 30, 20);
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(210, 12);
+  ctx.lineTo(222, 18);
+  ctx.lineTo(210, 24);
+  ctx.closePath();
+  ctx.fill();
+
+  // Channel name
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 16px sans-serif';
+  const channelName = youtubeData?.channelName || youtubeData?.channelHandle || 'YouTube Channel';
+  ctx.fillText(channelName, 120, 50);
+
+  // Subscriber count (large)
+  ctx.fillStyle = '#00d4ff';
+  ctx.font = 'bold 36px sans-serif';
+  const subs = youtubeData?.valid ? formatNumber(youtubeData.subscribers) : '0';
+  ctx.fillText(subs, 120, 110);
+  ctx.font = '14px sans-serif';
+  ctx.fillStyle = '#888';
+  ctx.fillText('subscribers', 120, 130);
+
+  // Views and Videos in cards
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  ctx.fillRect(20, 150, 95, 55);
+  ctx.fillRect(125, 150, 95, 55);
+
+  // Views
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 18px sans-serif';
+  const views = youtubeData?.valid ? formatNumber(youtubeData.views) : '0';
+  ctx.fillText(views, 67, 175);
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = '#888';
+  ctx.fillText('views', 67, 192);
+
+  // Videos
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 18px sans-serif';
+  const videos = youtubeData?.valid ? formatNumber(youtubeData.videos) : '0';
+  ctx.fillText(videos, 172, 175);
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = '#888';
+  ctx.fillText('videos', 172, 192);
+
+  // Last updated
+  ctx.font = '10px sans-serif';
+  ctx.fillStyle = '#666';
+  const lastUpdate = youtubeData?.lastUpdate ? 'Updated ' + formatTimeAgo(youtubeData.lastUpdate) : '';
+  ctx.fillText(lastUpdate, 120, 225);
 }
 
 function getEventDate(cd) {
@@ -1424,7 +1560,153 @@ async function resetCustomTheme() {
   }
 }
 
+// YouTube functions
+async function loadYouTube() {
+  try {
+    const r = await fetch('/api/youtube');
+    const data = await r.json();
+    youtubeData = data;  // Store for carousel display
+    updateYouTubeUI(data);
+    renderCarousel();  // Re-render to update YouTube button visibility
+  } catch (e) {
+    console.error('Failed to load YouTube data:', e);
+  }
+}
+
+function addYouTubeToCarousel() {
+  // Check if YouTube is already in carousel
+  const hasYoutube = carouselItems.some(item => item.type === 3);
+  if (hasYoutube) {
+    alert('YouTube is already in the carousel');
+    return;
+  }
+  if (!youtubeData || !youtubeData.enabled) {
+    alert('Please enable YouTube in the YouTube tab first');
+    return;
+  }
+  carouselItems.push({ type: 3, dataIndex: 0 });
+  renderCarousel();
+}
+
+function updateYouTubeUI(data) {
+  if (!data) return;
+
+  // Update form fields
+  document.getElementById('yt-api-key').value = data.apiKey || '';
+  document.getElementById('yt-channel').value = data.channelHandle || '';
+  document.getElementById('yt-enabled').checked = data.enabled || false;
+
+  // Update stats display
+  const statsDiv = document.getElementById('youtube-stats');
+  if (data.valid) {
+    statsDiv.innerHTML = `
+      <div class="info-box"><span class="info-label">Channel</span><span class="info-value">${escapeHtml(data.channelName || data.channelHandle)}</span></div>
+      <div class="info-box"><span class="info-label">Subscribers</span><span class="info-value">${formatNumber(data.subscribers)}</span></div>
+      <div class="info-box"><span class="info-label">Views</span><span class="info-value">${formatNumber(data.views)}</span></div>
+      <div class="info-box"><span class="info-label">Videos</span><span class="info-value">${formatNumber(data.videos)}</span></div>
+      <div class="info-box"><span class="info-label">Last Update</span><span class="info-value">${data.lastUpdate ? formatTimeAgo(data.lastUpdate) : 'Never'}</span></div>
+    `;
+  } else if (data.lastError) {
+    statsDiv.innerHTML = `
+      <div class="info-box"><span class="info-label">Status</span><span class="info-value" style="color:#f66">${escapeHtml(data.lastError)}</span></div>
+    `;
+  } else if (!data.apiKey || !data.channelHandle) {
+    statsDiv.innerHTML = `
+      <div class="info-box"><span class="info-label">Status</span><span class="info-value" style="color:#888">Not configured</span></div>
+    `;
+  } else {
+    statsDiv.innerHTML = `
+      <div class="info-box"><span class="info-label">Status</span><span class="info-value" style="color:#888">Waiting for data...</span></div>
+    `;
+  }
+}
+
+function formatNumber(num) {
+  if (!num && num !== 0) return '0';
+  num = parseInt(num);
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+  return num.toString();
+}
+
+function formatTimeAgo(timestamp) {
+  if (!timestamp) return 'Never';
+  const now = Date.now();
+  const diff = now - timestamp;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return mins + 'm ago';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return hours + 'h ago';
+  return Math.floor(hours / 24) + 'd ago';
+}
+
+async function saveYouTube() {
+  const data = {
+    apiKey: document.getElementById('yt-api-key').value.trim(),
+    channelHandle: document.getElementById('yt-channel').value.trim().replace(/^@/, ''),
+    enabled: document.getElementById('yt-enabled').checked
+  };
+
+  try {
+    const r = await fetch('/api/youtube', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const result = await r.json();
+    showStatus('youtube-status', result.success ? 'success' : 'error', result.message);
+    if (result.success) {
+      setTimeout(loadYouTube, 1000);
+    }
+  } catch (e) {
+    showStatus('youtube-status', 'error', 'Failed to save');
+  }
+}
+
+async function testYouTube() {
+  showStatus('youtube-status', 'success', 'Testing connection...');
+
+  // Save first, then refresh
+  const data = {
+    apiKey: document.getElementById('yt-api-key').value.trim(),
+    channelHandle: document.getElementById('yt-channel').value.trim().replace(/^@/, ''),
+    enabled: document.getElementById('yt-enabled').checked
+  };
+
+  try {
+    await fetch('/api/youtube', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    const r = await fetch('/api/youtube/refresh');
+    const result = await r.json();
+    showStatus('youtube-status', result.success ? 'success' : 'error', result.message);
+    if (result.success) {
+      setTimeout(loadYouTube, 500);
+    }
+  } catch (e) {
+    showStatus('youtube-status', 'error', 'Connection test failed');
+  }
+}
+
+async function refreshYouTube() {
+  try {
+    const r = await fetch('/api/youtube/refresh');
+    const result = await r.json();
+    showStatus('youtube-status', result.success ? 'success' : 'error', result.message);
+    if (result.success) {
+      setTimeout(loadYouTube, 500);
+    }
+  } catch (e) {
+    showStatus('youtube-status', 'error', 'Failed to refresh');
+  }
+}
+
 loadData();
+loadYouTube();
 setInterval(loadData, 60000);
 </script>
 </body>

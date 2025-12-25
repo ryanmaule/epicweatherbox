@@ -11,7 +11,7 @@
 // =============================================================================
 // FIRMWARE INFO
 // =============================================================================
-#define FIRMWARE_VERSION "1.5.0"
+#define FIRMWARE_VERSION "1.6.0"
 #define DEVICE_NAME "EpicWeatherBox"
 #define DEVICE_MODEL "EpicWeatherBox"
 
@@ -74,6 +74,9 @@
 #define WEATHER_UPDATE_INTERVAL_DEFAULT 20
 #define WEATHER_UPDATE_INTERVAL_MIN 5
 #define WEATHER_UPDATE_INTERVAL_MAX 60
+
+// YouTube API update interval (30 minutes to conserve API quota)
+#define YOUTUBE_UPDATE_INTERVAL_MS (30 * 60 * 1000)
 
 // Forecast days
 #define FORECAST_DAYS_ORIGINAL 3
@@ -158,6 +161,7 @@
 // Disabled features (not needed for EpicWeatherBox)
 #define FEATURE_STOCK_TICKER 0        // Disabled - not needed
 #define FEATURE_BILIBILI 0            // Disabled - not needed
+#define FEATURE_YOUTUBE_STATS 1       // YouTube channel stats screen
 // Note: Countdown events are now part of the carousel system (weather.h)
 
 // =============================================================================

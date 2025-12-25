@@ -1693,6 +1693,164 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
     }
 }
 
+// Draw YouTube stats screen
+void drawYouTubeScreen(int currentScreen, int totalScreens) {
+    const YouTubeData& data = getYouTubeData();
+
+    // Get theme colors
+    int yOff = -getUiNudgeY();
+    uint16_t bgColor = getThemeBg();
+    uint16_t cardColor = getThemeCard();
+    uint16_t cyanColor = getThemeCyan();
+    uint16_t grayColor = getThemeGray();
+    uint16_t textColor = getThemeText();
+    uint16_t orangeColor = getThemeOrange();
+
+    tft.fillScreen(bgColor);
+
+    // Get current time
+    const WeatherData& primaryWeather = getWeather(0);
+    long localEpoch = timeClient.getEpochTime() + primaryWeather.utcOffsetSeconds;
+    int hours = (localEpoch % 86400L) / 3600;
+    int minutes = (localEpoch % 3600) / 60;
+    int h12 = hours % 12;
+    if (h12 == 0) h12 = 12;
+    const char* ampm = (hours < 12) ? "AM" : "PM";
+
+    // HEADER: Time (left) + YouTube icon and channel name (right)
+    char timeStr[16];
+    snprintf(timeStr, sizeof(timeStr), "%d:%02d", h12, minutes);
+    tft.setFreeFont(FSSB12);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(cyanColor);
+    tft.drawString(timeStr, 8, 8 + yOff, GFXFF);
+
+    int16_t timeW = tft.textWidth(timeStr, GFXFF);
+    tft.setFreeFont(FSS9);
+    tft.drawString(ampm, 8 + timeW + 4, 10 + yOff, GFXFF);
+
+    // YouTube "play" icon (simplified triangle in rectangle)
+    int iconX = 140;
+    int iconY = 12 + yOff;
+    // Red rectangle background
+    tft.fillRoundRect(iconX, iconY - 6, 20, 14, 3, 0xF800);  // Red
+    // White play triangle
+    tft.fillTriangle(iconX + 7, iconY - 3, iconX + 7, iconY + 5, iconX + 14, iconY + 1, TFT_WHITE);
+
+    // Channel name (right side, truncated if needed)
+    tft.setTextDatum(TR_DATUM);
+    tft.setTextColor(grayColor);
+    tft.setFreeFont(FSS9);
+    String channelName = data.valid ? data.channelName : "Not configured";
+    if (channelName.length() > 12) {
+        channelName = channelName.substring(0, 11) + "...";
+    }
+    tft.drawString(channelName.c_str(), 232, 10 + yOff, GFXFF);
+
+    if (!data.valid) {
+        // Show error or "not configured" message
+        tft.setFreeFont(FSSB12);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextColor(grayColor);
+        if (strlen(data.lastError) > 0) {
+            tft.drawString(data.lastError, 120, 120 + yOff, GFXFF);
+        } else {
+            tft.drawString("Configure in Admin", 120, 120 + yOff, GFXFF);
+        }
+    } else {
+        // MAIN STATS DISPLAY
+
+        // Subscribers - large, centered
+        tft.setFreeFont(FSSB24);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextColor(cyanColor);
+
+        // Format subscriber count
+        char subsStr[16];
+        if (data.subscribers >= 1000000) {
+            snprintf(subsStr, sizeof(subsStr), "%.1fM", data.subscribers / 1000000.0);
+        } else if (data.subscribers >= 1000) {
+            snprintf(subsStr, sizeof(subsStr), "%.1fK", data.subscribers / 1000.0);
+        } else {
+            snprintf(subsStr, sizeof(subsStr), "%u", data.subscribers);
+        }
+        tft.drawString(subsStr, 120, 70 + yOff, GFXFF);
+
+        // "subscribers" label
+        tft.setFreeFont(FSS9);
+        tft.setTextColor(grayColor);
+        tft.drawString("subscribers", 120, 100 + yOff, GFXFF);
+
+        // Stats cards - Views and Videos side by side
+        int cardY = 130 + yOff;
+        int cardH = 50;
+        int cardW = 100;
+        int cardMargin = 10;
+
+        // Views card (left)
+        tft.fillRoundRect(cardMargin, cardY, cardW, cardH, 4, cardColor);
+        tft.setFreeFont(FSSB12);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextColor(textColor);
+
+        char viewsStr[16];
+        if (data.views >= 1000000) {
+            snprintf(viewsStr, sizeof(viewsStr), "%.1fM", data.views / 1000000.0);
+        } else if (data.views >= 1000) {
+            snprintf(viewsStr, sizeof(viewsStr), "%.1fK", data.views / 1000.0);
+        } else {
+            snprintf(viewsStr, sizeof(viewsStr), "%u", data.views);
+        }
+        tft.drawString(viewsStr, cardMargin + cardW/2, cardY + 18, GFXFF);
+
+        tft.setFreeFont(FSS9);
+        tft.setTextColor(grayColor);
+        tft.drawString("views", cardMargin + cardW/2, cardY + 38, GFXFF);
+
+        // Videos card (right)
+        int card2X = 240 - cardMargin - cardW;
+        tft.fillRoundRect(card2X, cardY, cardW, cardH, 4, cardColor);
+        tft.setFreeFont(FSSB12);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextColor(textColor);
+
+        char videosStr[16];
+        snprintf(videosStr, sizeof(videosStr), "%u", data.videos);
+        tft.drawString(videosStr, card2X + cardW/2, cardY + 18, GFXFF);
+
+        tft.setFreeFont(FSS9);
+        tft.setTextColor(grayColor);
+        tft.drawString("videos", card2X + cardW/2, cardY + 38, GFXFF);
+
+        // Last updated indicator (small, at bottom above dots)
+        unsigned long age = (millis() - data.lastUpdate) / 1000;
+        char ageStr[32];
+        if (age < 60) {
+            snprintf(ageStr, sizeof(ageStr), "Updated just now");
+        } else if (age < 3600) {
+            snprintf(ageStr, sizeof(ageStr), "Updated %lum ago", age / 60);
+        } else {
+            snprintf(ageStr, sizeof(ageStr), "Updated %luh ago", age / 3600);
+        }
+        tft.setFreeFont(FSS9);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextColor(grayColor);
+        tft.drawString(ageStr, 120, 200 + yOff, GFXFF);
+    }
+
+    // Navigation dots
+    if (totalScreens > 1) {
+        int dotSpacing = 12;
+        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = 230 + yOff;
+        if (dotY > 236) dotY = 236;
+        for (int i = 0; i < totalScreens; i++) {
+            uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
+            tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
+        }
+    }
+}
+
 // Track carousel position
 static uint8_t currentCarouselIndex = 0;
 static uint8_t currentSubScreen = 0;  // For locations: 0=current, 1=forecast1, 2=forecast2
@@ -1711,6 +1869,7 @@ int calculateTotalScreens() {
                 break;
             case CAROUSEL_COUNTDOWN:
             case CAROUSEL_CUSTOM:
+            case CAROUSEL_YOUTUBE:
                 total += 1;
                 break;
         }
@@ -1731,6 +1890,7 @@ int calculateCurrentScreenIndex() {
                 break;
             case CAROUSEL_COUNTDOWN:
             case CAROUSEL_CUSTOM:
+            case CAROUSEL_YOUTUBE:
                 index += 1;
                 break;
         }
@@ -1805,6 +1965,11 @@ void updateTftDisplay() {
 
             case CAROUSEL_CUSTOM:
                 drawCustomScreenByIndex(item.dataIndex, currentScreenIdx, totalScreens);
+                currentCarouselIndex = (currentCarouselIndex + 1) % carouselCount;
+                break;
+
+            case CAROUSEL_YOUTUBE:
+                drawYouTubeScreen(currentScreenIdx, totalScreens);
                 currentCarouselIndex = (currentCarouselIndex + 1) % carouselCount;
                 break;
         }
@@ -1963,6 +2128,10 @@ void setup() {
         Serial.println(F("[BOOT] Initializing weather..."));
         initWeather();
 
+        // Initialize YouTube stats system
+        Serial.println(F("[BOOT] Initializing YouTube..."));
+        initYouTube();
+
         // Fetch initial weather data
         Serial.println(F("[BOOT] Fetching initial weather..."));
         forceWeatherUpdate();
@@ -2018,6 +2187,9 @@ void loop() {
 
     // Update weather data (checks interval internally)
     updateWeather();
+
+    // Update YouTube stats (checks interval internally)
+    updateYouTube();
 
     // Update TFT display
 #if ENABLE_TFT_TEST
@@ -2611,6 +2783,97 @@ void setupWebServer() {
         }
 
         server.send(200, "application/json", "{\"success\":true,\"message\":\"Theme saved\"}");
+    });
+
+    // YouTube API endpoints
+    server.on("/api/youtube", HTTP_GET, []() {
+        JsonDocument doc;
+        const YouTubeConfig& config = getYouTubeConfig();
+        const YouTubeData& data = getYouTubeData();
+
+        doc["enabled"] = config.enabled;
+        doc["configured"] = isYouTubeConfigured();
+        doc["channelHandle"] = config.channelHandle;
+        // Don't expose full API key, just indicate if set
+        doc["hasApiKey"] = strlen(config.apiKey) > 0;
+
+        if (data.valid) {
+            doc["channelName"] = data.channelName;
+            doc["channelId"] = data.channelId;
+            doc["subscribers"] = data.subscribers;
+            doc["views"] = data.views;
+            doc["videos"] = data.videos;
+            doc["lastUpdate"] = data.lastUpdate;
+            doc["valid"] = true;
+        } else {
+            doc["valid"] = false;
+            if (strlen(data.lastError) > 0) {
+                doc["error"] = data.lastError;
+            }
+        }
+
+        String response;
+        serializeJson(doc, response);
+        server.send(200, "application/json", response);
+    });
+
+    server.on("/api/youtube", HTTP_POST, []() {
+        if (!server.hasArg("plain")) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"No data\"}");
+            return;
+        }
+
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, server.arg("plain"));
+        if (error) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
+            return;
+        }
+
+        // Update API key
+        if (doc["apiKey"].is<const char*>()) {
+            setYouTubeApiKey(doc["apiKey"]);
+        }
+
+        // Update channel handle
+        if (doc["channelHandle"].is<const char*>()) {
+            setYouTubeChannelHandle(doc["channelHandle"]);
+        }
+
+        // Update enabled state
+        if (doc["enabled"].is<bool>()) {
+            setYouTubeEnabled(doc["enabled"]);
+        }
+
+        // Save config
+        saveYouTubeConfig();
+
+        // If now configured and enabled, trigger immediate update
+        if (isYouTubeConfigured() && getYouTubeConfig().enabled) {
+            forceYouTubeUpdate();
+        }
+
+        server.send(200, "application/json", "{\"success\":true,\"message\":\"YouTube settings saved\"}");
+    });
+
+    server.on("/api/youtube/refresh", HTTP_GET, []() {
+        if (!isYouTubeConfigured()) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"YouTube not configured\"}");
+            return;
+        }
+
+        bool success = forceYouTubeUpdate();
+        if (success) {
+            server.send(200, "application/json", "{\"success\":true,\"message\":\"YouTube stats refreshed\"}");
+        } else {
+            const YouTubeData& data = getYouTubeData();
+            JsonDocument doc;
+            doc["success"] = false;
+            doc["message"] = strlen(data.lastError) > 0 ? data.lastError : "Refresh failed";
+            String response;
+            serializeJson(doc, response);
+            server.send(500, "application/json", response);
+        }
     });
 
     // Admin page - minimal location config
