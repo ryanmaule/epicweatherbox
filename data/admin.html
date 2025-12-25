@@ -135,7 +135,6 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <div class="tab active" data-tab="carousel">Carousel</div>
 <div class="tab" data-tab="display">Display</div>
 <div class="tab" data-tab="theme">Theme</div>
-<div class="tab" data-tab="youtube">YouTube</div>
 <div class="tab" data-tab="system">System</div>
 </div>
 
@@ -147,7 +146,7 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <button class="btn btn-add" onclick="openModal('location')">+ Location</button>
 <button class="btn btn-add" onclick="openModal('countdown')">+ Countdown</button>
 <button class="btn btn-add" onclick="openModal('custom')">+ Custom Text</button>
-<button class="btn btn-add" id="add-youtube-btn" onclick="addYouTubeToCarousel()" style="display:none">+ YouTube</button>
+<button class="btn btn-add" id="add-youtube-btn" onclick="openModal('youtube')">+ YouTube</button>
 </div>
 <div class="carousel-counters">
 <span>Locations: <span id="loc-count">0</span>/3</span>
@@ -266,39 +265,6 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <button class="btn btn-primary" onclick="saveTheme()">Save Theme</button>
 </div>
 <div id="theme-status"></div>
-</div>
-
-<!-- YOUTUBE TAB -->
-<div id="youtube" class="tab-content">
-<div class="form-group">
-<label>YouTube API Key</label>
-<input type="password" id="yt-api-key" placeholder="AIzaSy...">
-<p style="font-size:0.75em;color:#666;margin-top:4px">Get a free key from <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#00d4ff">Google Cloud Console</a>. Enable YouTube Data API v3.</p>
-</div>
-<div class="form-group">
-<label>Channel Handle</label>
-<input type="text" id="yt-channel" placeholder="sterlings.funtube">
-<p style="font-size:0.75em;color:#666;margin-top:4px">Without the @ symbol. Example: sterlings.funtube</p>
-</div>
-<div class="form-group">
-<div class="toggle-row">
-<span>Enable YouTube Screen</span>
-<label class="toggle"><input type="checkbox" id="yt-enabled"><span class="toggle-slider"></span></label>
-</div>
-<p style="font-size:0.75em;color:#666;margin-top:4px">When enabled, adds YouTube stats to the carousel.</p>
-</div>
-<div class="btn-row">
-<button class="btn btn-primary" onclick="saveYouTube()">Save Settings</button>
-<button class="btn btn-secondary" onclick="testYouTube()">Test Connection</button>
-<button class="btn btn-secondary" onclick="refreshYouTube()">Refresh Stats</button>
-</div>
-<div id="youtube-status"></div>
-<div class="form-group" style="margin-top:20px">
-<label>Channel Stats</label>
-<div id="youtube-stats">
-<div class="info-box"><span class="info-label">Status</span><span class="info-value" id="yt-status-val">Not configured</span></div>
-</div>
-</div>
 </div>
 
 <!-- SYSTEM TAB -->
@@ -421,6 +387,29 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <div class="modal-buttons">
 <button class="btn btn-secondary" onclick="closeModal('custom')">Cancel</button>
 <button class="btn btn-primary" onclick="addCustomScreen()">Add</button>
+</div>
+</div>
+</div>
+
+<div id="modal-youtube" class="modal">
+<div class="modal-content">
+<h3>YouTube Channel Stats</h3>
+<div class="form-group">
+<label>YouTube API Key</label>
+<input type="password" id="yt-api-key" placeholder="AIzaSy...">
+<p style="font-size:0.75em;color:#666;margin-top:4px">Get a free key from <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#00d4ff">Google Cloud Console</a>. Enable YouTube Data API v3.</p>
+</div>
+<div class="form-group">
+<label>Channel Handle</label>
+<input type="text" id="yt-channel" placeholder="sterlings.funtube">
+<p style="font-size:0.75em;color:#666;margin-top:4px">Without the @ symbol. Example: sterlings.funtube</p>
+</div>
+<div id="youtube-status"></div>
+<div id="youtube-stats" style="margin-top:10px"></div>
+<div class="modal-buttons">
+<button class="btn btn-secondary" onclick="closeModal('youtube')">Cancel</button>
+<button class="btn btn-secondary" onclick="testYouTube()">Test</button>
+<button class="btn btn-primary" onclick="addYouTube()">Add to Carousel</button>
 </div>
 </div>
 </div>
@@ -608,18 +597,15 @@ function renderCarousel() {
   document.getElementById('cust-count').textContent = custCount;
   document.getElementById('yt-count').textContent = ytCount;
 
-  // Show/hide YouTube button based on whether YouTube is configured and not already in carousel
+  // Show/hide YouTube button based on whether already in carousel (max 1)
   const ytBtn = document.getElementById('add-youtube-btn');
   const ytCounter = document.getElementById('yt-counter');
-  if (youtubeData && youtubeData.enabled && ytCount === 0) {
-    ytBtn.style.display = 'inline-block';
-    ytCounter.style.display = 'inline';
-  } else if (ytCount > 0) {
+  if (ytCount >= 1) {
     ytBtn.style.display = 'none';
     ytCounter.style.display = 'inline';
   } else {
-    ytBtn.style.display = 'none';
-    ytCounter.style.display = 'none';
+    ytBtn.style.display = 'inline-block';
+    ytCounter.style.display = 'inline';
   }
 }
 
@@ -1217,68 +1203,71 @@ function drawYouTubePreview() {
   ctx.fillStyle = '#1a1a2e';
   ctx.fillRect(0, 0, 240, 240);
 
-  // Header
+  // Header - time on left
   ctx.fillStyle = '#00d4ff';
   ctx.font = '12px sans-serif';
   const now = new Date();
   ctx.textAlign = 'left';
   ctx.fillText(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 10, 20);
 
-  // YouTube play button icon (red rectangle with white triangle)
+  // YouTube logo-style play button (centered, larger)
+  const logoX = 120, logoY = 55;
+  // Red rounded rectangle background
   ctx.fillStyle = '#FF0000';
-  ctx.fillRect(200, 8, 30, 20);
+  ctx.beginPath();
+  ctx.roundRect(logoX - 28, logoY - 18, 56, 36, 8);
+  ctx.fill();
+  // White play triangle
   ctx.fillStyle = '#fff';
   ctx.beginPath();
-  ctx.moveTo(210, 12);
-  ctx.lineTo(222, 18);
-  ctx.lineTo(210, 24);
+  ctx.moveTo(logoX - 10, logoY - 12);
+  ctx.lineTo(logoX + 14, logoY);
+  ctx.lineTo(logoX - 10, logoY + 12);
   ctx.closePath();
   ctx.fill();
 
-  // Channel name
+  // Channel name below logo
   ctx.textAlign = 'center';
   ctx.fillStyle = '#fff';
-  ctx.font = 'bold 16px sans-serif';
+  ctx.font = 'bold 14px sans-serif';
   const channelName = youtubeData?.channelName || youtubeData?.channelHandle || 'YouTube Channel';
-  ctx.fillText(channelName, 120, 50);
+  ctx.fillText(channelName, 120, 100);
 
-  // Subscriber count (large)
+  // Subscriber count (large, prominent)
   ctx.fillStyle = '#00d4ff';
-  ctx.font = 'bold 36px sans-serif';
+  ctx.font = 'bold 42px sans-serif';
   const subs = youtubeData?.valid ? formatNumber(youtubeData.subscribers) : '0';
-  ctx.fillText(subs, 120, 110);
-  ctx.font = '14px sans-serif';
+  ctx.fillText(subs, 120, 150);
+  ctx.font = '13px sans-serif';
   ctx.fillStyle = '#888';
-  ctx.fillText('subscribers', 120, 130);
+  ctx.fillText('subscribers', 120, 168);
 
-  // Views and Videos in cards
+  // Views and Videos side by side
   ctx.fillStyle = 'rgba(255,255,255,0.05)';
-  ctx.fillRect(20, 150, 95, 55);
-  ctx.fillRect(125, 150, 95, 55);
+  ctx.beginPath();
+  ctx.roundRect(20, 180, 95, 45, 6);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(125, 180, 95, 45, 6);
+  ctx.fill();
 
   // Views
   ctx.fillStyle = '#fff';
-  ctx.font = 'bold 18px sans-serif';
+  ctx.font = 'bold 16px sans-serif';
   const views = youtubeData?.valid ? formatNumber(youtubeData.views) : '0';
-  ctx.fillText(views, 67, 175);
-  ctx.font = '11px sans-serif';
+  ctx.fillText(views, 67, 200);
+  ctx.font = '10px sans-serif';
   ctx.fillStyle = '#888';
-  ctx.fillText('views', 67, 192);
+  ctx.fillText('views', 67, 215);
 
   // Videos
   ctx.fillStyle = '#fff';
-  ctx.font = 'bold 18px sans-serif';
+  ctx.font = 'bold 16px sans-serif';
   const videos = youtubeData?.valid ? formatNumber(youtubeData.videos) : '0';
-  ctx.fillText(videos, 172, 175);
-  ctx.font = '11px sans-serif';
-  ctx.fillStyle = '#888';
-  ctx.fillText('videos', 172, 192);
-
-  // Last updated
+  ctx.fillText(videos, 172, 200);
   ctx.font = '10px sans-serif';
-  ctx.fillStyle = '#666';
-  const lastUpdate = youtubeData?.lastUpdate ? 'Updated ' + formatTimeAgo(youtubeData.lastUpdate) : '';
-  ctx.fillText(lastUpdate, 120, 225);
+  ctx.fillStyle = '#888';
+  ctx.fillText('videos', 172, 215);
 }
 
 function getEventDate(cd) {
@@ -1573,50 +1562,75 @@ async function loadYouTube() {
   }
 }
 
-function addYouTubeToCarousel() {
+async function addYouTube() {
   // Check if YouTube is already in carousel
   const hasYoutube = carouselItems.some(item => item.type === 3);
   if (hasYoutube) {
     alert('YouTube is already in the carousel');
     return;
   }
-  if (!youtubeData || !youtubeData.enabled) {
-    alert('Please enable YouTube in the YouTube tab first');
+
+  const apiKey = document.getElementById('yt-api-key').value.trim();
+  const channel = document.getElementById('yt-channel').value.trim().replace(/^@/, '');
+
+  if (!apiKey || !channel) {
+    showStatus('youtube-status', 'error', 'Please enter API key and channel handle');
     return;
   }
+
+  // Save config first
+  try {
+    const r = await fetch('/api/youtube', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey, channelHandle: channel, enabled: true })
+    });
+    const result = await r.json();
+    if (!result.success) {
+      showStatus('youtube-status', 'error', result.message || 'Failed to save');
+      return;
+    }
+  } catch (e) {
+    showStatus('youtube-status', 'error', 'Failed to save config');
+    return;
+  }
+
+  // Add to carousel and close modal
   carouselItems.push({ type: 3, dataIndex: 0 });
+  closeModal('youtube');
   renderCarousel();
+  await loadYouTube();  // Refresh data
 }
 
 function updateYouTubeUI(data) {
   if (!data) return;
 
-  // Update form fields
-  document.getElementById('yt-api-key').value = data.apiKey || '';
-  document.getElementById('yt-channel').value = data.channelHandle || '';
-  document.getElementById('yt-enabled').checked = data.enabled || false;
+  // Update form fields in modal
+  const apiKeyField = document.getElementById('yt-api-key');
+  const channelField = document.getElementById('yt-channel');
+  if (apiKeyField) apiKeyField.value = data.apiKey || '';
+  if (channelField) channelField.value = data.channelHandle || '';
 
-  // Update stats display
+  // Update stats display in modal
   const statsDiv = document.getElementById('youtube-stats');
+  if (!statsDiv) return;
+
   if (data.valid) {
     statsDiv.innerHTML = `
       <div class="info-box"><span class="info-label">Channel</span><span class="info-value">${escapeHtml(data.channelName || data.channelHandle)}</span></div>
       <div class="info-box"><span class="info-label">Subscribers</span><span class="info-value">${formatNumber(data.subscribers)}</span></div>
       <div class="info-box"><span class="info-label">Views</span><span class="info-value">${formatNumber(data.views)}</span></div>
       <div class="info-box"><span class="info-label">Videos</span><span class="info-value">${formatNumber(data.videos)}</span></div>
-      <div class="info-box"><span class="info-label">Last Update</span><span class="info-value">${data.lastUpdate ? formatTimeAgo(data.lastUpdate) : 'Never'}</span></div>
     `;
   } else if (data.lastError) {
     statsDiv.innerHTML = `
       <div class="info-box"><span class="info-label">Status</span><span class="info-value" style="color:#f66">${escapeHtml(data.lastError)}</span></div>
     `;
   } else if (!data.apiKey || !data.channelHandle) {
-    statsDiv.innerHTML = `
-      <div class="info-box"><span class="info-label">Status</span><span class="info-value" style="color:#888">Not configured</span></div>
-    `;
+    statsDiv.innerHTML = '';
   } else {
     statsDiv.innerHTML = `
-      <div class="info-box"><span class="info-label">Status</span><span class="info-value" style="color:#888">Waiting for data...</span></div>
+      <div class="info-box"><span class="info-label">Status</span><span class="info-value" style="color:#888">Click Test to verify</span></div>
     `;
   }
 }
@@ -1641,46 +1655,26 @@ function formatTimeAgo(timestamp) {
   return Math.floor(hours / 24) + 'd ago';
 }
 
-async function saveYouTube() {
-  const data = {
-    apiKey: document.getElementById('yt-api-key').value.trim(),
-    channelHandle: document.getElementById('yt-channel').value.trim().replace(/^@/, ''),
-    enabled: document.getElementById('yt-enabled').checked
-  };
-
-  try {
-    const r = await fetch('/api/youtube', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    const result = await r.json();
-    showStatus('youtube-status', result.success ? 'success' : 'error', result.message);
-    if (result.success) {
-      setTimeout(loadYouTube, 1000);
-    }
-  } catch (e) {
-    showStatus('youtube-status', 'error', 'Failed to save');
-  }
-}
-
 async function testYouTube() {
+  const apiKey = document.getElementById('yt-api-key').value.trim();
+  const channel = document.getElementById('yt-channel').value.trim().replace(/^@/, '');
+
+  if (!apiKey || !channel) {
+    showStatus('youtube-status', 'error', 'Please enter API key and channel');
+    return;
+  }
+
   showStatus('youtube-status', 'success', 'Testing connection...');
 
-  // Save first, then refresh
-  const data = {
-    apiKey: document.getElementById('yt-api-key').value.trim(),
-    channelHandle: document.getElementById('yt-channel').value.trim().replace(/^@/, ''),
-    enabled: document.getElementById('yt-enabled').checked
-  };
-
   try {
+    // Save config first
     await fetch('/api/youtube', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      body: JSON.stringify({ apiKey, channelHandle: channel, enabled: true })
     });
 
+    // Then refresh to test
     const r = await fetch('/api/youtube/refresh');
     const result = await r.json();
     showStatus('youtube-status', result.success ? 'success' : 'error', result.message);
@@ -1689,19 +1683,6 @@ async function testYouTube() {
     }
   } catch (e) {
     showStatus('youtube-status', 'error', 'Connection test failed');
-  }
-}
-
-async function refreshYouTube() {
-  try {
-    const r = await fetch('/api/youtube/refresh');
-    const result = await r.json();
-    showStatus('youtube-status', result.success ? 'success' : 'error', result.message);
-    if (result.success) {
-      setTimeout(loadYouTube, 500);
-    }
-  } catch (e) {
-    showStatus('youtube-status', 'error', 'Failed to refresh');
   }
 }
 

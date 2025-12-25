@@ -584,7 +584,7 @@ A live device was accessed at `http://192.168.4.235/` running firmware V9.0.40.
 
 **Last Updated**: 2025-12-24
 
-**Current Version**: v1.3.3
+**Current Version**: v1.6.5
 
 ### Research & Analysis - COMPLETE ✅
 - [x] Initial firmware extraction and string analysis
@@ -847,13 +847,61 @@ A live device was accessed at `http://192.168.4.235/` running firmware V9.0.40.
 
 - [x] v1.4.1 release
 
+### Phase 15: YouTube Stats Feature (v1.6.0 - v1.6.5) - COMPLETE ✅
+
+**YouTube Channel Stats Screen**: Display YouTube channel statistics in the carousel rotation.
+
+**Features**:
+- Fetches stats from YouTube Data API v3 (subscribers, views, videos)
+- Requires user's own API key (free from Google Cloud Console)
+- 30-minute refresh interval to conserve API quota
+- Large centered YouTube logo (red rounded rect with play button)
+- Channel name displayed below logo
+- Subscriber count prominently displayed in cyan
+- Views and Videos in side-by-side rounded cards
+
+**Technical Implementation**:
+- Uses WiFiClientSecure with `setBufferSizes(512, 512)` to reduce SSL memory from 32KB to 1KB
+- Requires ~20KB free heap for HTTPS connection
+- Config stored in `/youtube_config.json` on LittleFS
+- Max 1 YouTube screen per carousel (vs 3 for other types)
+
+**Admin UI**:
+- YouTube configuration via modal overlay (not separate tab)
+- API key and channel handle inputs
+- Test button to verify connection
+- "Add to Carousel" button
+- Stats display in modal when configured
+
+**API Endpoints**:
+- `GET /api/youtube` - Get config and stats
+- `POST /api/youtube` - Save config
+- `GET /api/youtube/refresh` - Force stats refresh
+
+**Memory Impact**:
+- RAM: 55.8% (was ~53%)
+- Flash: 64.0% (was ~53%)
+- Free heap: ~25KB at runtime
+
+**Technical Challenges Solved**:
+- HTTPS on ESP8266 with limited memory by reducing SSL buffer sizes
+- Efficient JSON parsing without loading entire response into memory
+- Graceful error handling for API failures
+
+- [x] v1.6.0 release (YouTube Stats feature)
+- [x] v1.6.1 release (Bug fixes)
+- [x] v1.6.2 release (UI improvements)
+- [x] v1.6.3 release (Memory optimizations)
+- [x] v1.6.4 release (Error handling)
+- [x] v1.6.5 release (Polish and stability)
+
 ### Current Device Status
-- **Firmware**: v1.4.1
-- **GitHub Release**: https://github.com/ryanmaule/epicweatherbox/releases/tag/v1.4.1
+- **Firmware**: v1.6.5
+- **GitHub Release**: https://github.com/ryanmaule/epicweatherbox/releases/tag/v1.6.5
 - **Device IP**: 192.168.4.235
 - **OTA URL**: http://192.168.4.235/update
 - **Admin URL**: http://192.168.4.235/admin
-- **Build Stats**: RAM ~53%, Flash ~53%, ~30KB free heap
+- **Build Stats**: RAM ~56%, Flash ~64%, ~25KB free heap
 
 ## Future Enhancements
 

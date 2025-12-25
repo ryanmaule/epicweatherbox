@@ -1287,6 +1287,16 @@ static bool fetchYouTubeStats() {
         return false;
     }
 
+    // Check free heap before attempting HTTPS (BearSSL needs ~15-20KB)
+    uint32_t freeHeap = ESP.getFreeHeap();
+    Serial.printf("[YOUTUBE] Free heap before HTTPS: %u bytes\n", freeHeap);
+
+    if (freeHeap < 20000) {
+        strncpy(youtubeData.lastError, "Insufficient memory for HTTPS", sizeof(youtubeData.lastError));
+        Serial.println(F("[YOUTUBE] Not enough memory for HTTPS connection"));
+        return false;
+    }
+
     // Build YouTube API URL
     String url = "https://www.googleapis.com/youtube/v3/channels";
     url += "?part=statistics,snippet";
@@ -1298,15 +1308,22 @@ static bool fetchYouTubeStats() {
     // Use WiFiClientSecure for HTTPS
     WiFiClientSecure client;
     client.setInsecure();  // Skip certificate validation (OK for non-sensitive API calls)
+    client.setBufferSizes(512, 512);  // Reduce buffer sizes to save memory (default is 16KB each!)
 
     HTTPClient http;
-    http.setTimeout(15000);  // 15 second timeout (HTTPS is slower)
+    http.setTimeout(20000);  // 20 second timeout (HTTPS on ESP8266 is slow)
+    http.setReuse(false);    // Don't keep connection open
+
+    // Give the system some time to free up memory
+    yield();
 
     if (!http.begin(client, url)) {
         strncpy(youtubeData.lastError, "HTTP begin failed", sizeof(youtubeData.lastError));
         Serial.println(F("[YOUTUBE] HTTP begin failed"));
         return false;
     }
+
+    Serial.printf("[YOUTUBE] Free heap during request: %u bytes\n", ESP.getFreeHeap());
 
     int httpCode = http.GET();
 

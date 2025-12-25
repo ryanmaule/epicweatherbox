@@ -1704,7 +1704,6 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
     uint16_t cyanColor = getThemeCyan();
     uint16_t grayColor = getThemeGray();
     uint16_t textColor = getThemeText();
-    uint16_t orangeColor = getThemeOrange();
 
     tft.fillScreen(bgColor);
 
@@ -1717,7 +1716,7 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
     if (h12 == 0) h12 = 12;
     const char* ampm = (hours < 12) ? "AM" : "PM";
 
-    // HEADER: Time (left) + YouTube icon and channel name (right)
+    // HEADER: Time (left)
     char timeStr[16];
     snprintf(timeStr, sizeof(timeStr), "%d:%02d", h12, minutes);
     tft.setFreeFont(FSSB12);
@@ -1729,38 +1728,42 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
     tft.setFreeFont(FSS9);
     tft.drawString(ampm, 8 + timeW + 4, 10 + yOff, GFXFF);
 
-    // YouTube "play" icon (simplified triangle in rectangle)
-    int iconX = 140;
-    int iconY = 12 + yOff;
-    // Red rectangle background
-    tft.fillRoundRect(iconX, iconY - 6, 20, 14, 3, 0xF800);  // Red
-    // White play triangle
-    tft.fillTriangle(iconX + 7, iconY - 3, iconX + 7, iconY + 5, iconX + 14, iconY + 1, TFT_WHITE);
+    // Large centered YouTube logo (red rounded rect with play button)
+    int logoX = 120;  // Center
+    int logoY = 50 + yOff;
+    int logoW = 56;
+    int logoH = 38;
+    // Red rounded rectangle background
+    tft.fillRoundRect(logoX - logoW/2, logoY - logoH/2, logoW, logoH, 8, 0xF800);  // YouTube red
+    // White play triangle (centered in logo)
+    int triX = logoX - 8;
+    int triY = logoY;
+    tft.fillTriangle(triX, triY - 10, triX, triY + 10, triX + 18, triY, TFT_WHITE);
 
-    // Channel name (right side, truncated if needed)
-    tft.setTextDatum(TR_DATUM);
-    tft.setTextColor(grayColor);
-    tft.setFreeFont(FSS9);
-    String channelName = data.valid ? data.channelName : "Not configured";
-    if (channelName.length() > 12) {
-        channelName = channelName.substring(0, 11) + "...";
+    // Channel name below logo
+    tft.setFreeFont(FSSB12);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(textColor);
+    String channelName = data.valid ? data.channelName : (strlen(data.lastError) > 0 ? "Error" : "Not configured");
+    if (channelName.length() > 20) {
+        channelName = channelName.substring(0, 19) + "...";
     }
-    tft.drawString(channelName.c_str(), 232, 10 + yOff, GFXFF);
+    tft.drawString(channelName.c_str(), 120, 88 + yOff, GFXFF);
 
     if (!data.valid) {
         // Show error or "not configured" message
-        tft.setFreeFont(FSSB12);
+        tft.setFreeFont(FSS9);
         tft.setTextDatum(MC_DATUM);
         tft.setTextColor(grayColor);
         if (strlen(data.lastError) > 0) {
-            tft.drawString(data.lastError, 120, 120 + yOff, GFXFF);
+            tft.drawString(data.lastError, 120, 140 + yOff, GFXFF);
         } else {
-            tft.drawString("Configure in Admin", 120, 120 + yOff, GFXFF);
+            tft.drawString("Configure in Admin panel", 120, 140 + yOff, GFXFF);
         }
     } else {
         // MAIN STATS DISPLAY
 
-        // Subscribers - large, centered
+        // Subscribers - large, centered, prominent
         tft.setFreeFont(FSSB24);
         tft.setTextDatum(MC_DATUM);
         tft.setTextColor(cyanColor);
@@ -1774,21 +1777,21 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
         } else {
             snprintf(subsStr, sizeof(subsStr), "%u", data.subscribers);
         }
-        tft.drawString(subsStr, 120, 70 + yOff, GFXFF);
+        tft.drawString(subsStr, 120, 130 + yOff, GFXFF);
 
         // "subscribers" label
         tft.setFreeFont(FSS9);
         tft.setTextColor(grayColor);
-        tft.drawString("subscribers", 120, 100 + yOff, GFXFF);
+        tft.drawString("subscribers", 120, 155 + yOff, GFXFF);
 
         // Stats cards - Views and Videos side by side
-        int cardY = 130 + yOff;
-        int cardH = 50;
+        int cardY = 170 + yOff;
+        int cardH = 42;
         int cardW = 100;
-        int cardMargin = 10;
+        int cardMargin = 12;
 
         // Views card (left)
-        tft.fillRoundRect(cardMargin, cardY, cardW, cardH, 4, cardColor);
+        tft.fillRoundRect(cardMargin, cardY, cardW, cardH, 6, cardColor);
         tft.setFreeFont(FSSB12);
         tft.setTextDatum(MC_DATUM);
         tft.setTextColor(textColor);
@@ -1801,41 +1804,26 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
         } else {
             snprintf(viewsStr, sizeof(viewsStr), "%u", data.views);
         }
-        tft.drawString(viewsStr, cardMargin + cardW/2, cardY + 18, GFXFF);
+        tft.drawString(viewsStr, cardMargin + cardW/2, cardY + 14, GFXFF);
 
         tft.setFreeFont(FSS9);
         tft.setTextColor(grayColor);
-        tft.drawString("views", cardMargin + cardW/2, cardY + 38, GFXFF);
+        tft.drawString("views", cardMargin + cardW/2, cardY + 32, GFXFF);
 
         // Videos card (right)
         int card2X = 240 - cardMargin - cardW;
-        tft.fillRoundRect(card2X, cardY, cardW, cardH, 4, cardColor);
+        tft.fillRoundRect(card2X, cardY, cardW, cardH, 6, cardColor);
         tft.setFreeFont(FSSB12);
         tft.setTextDatum(MC_DATUM);
         tft.setTextColor(textColor);
 
         char videosStr[16];
         snprintf(videosStr, sizeof(videosStr), "%u", data.videos);
-        tft.drawString(videosStr, card2X + cardW/2, cardY + 18, GFXFF);
+        tft.drawString(videosStr, card2X + cardW/2, cardY + 14, GFXFF);
 
         tft.setFreeFont(FSS9);
         tft.setTextColor(grayColor);
-        tft.drawString("videos", card2X + cardW/2, cardY + 38, GFXFF);
-
-        // Last updated indicator (small, at bottom above dots)
-        unsigned long age = (millis() - data.lastUpdate) / 1000;
-        char ageStr[32];
-        if (age < 60) {
-            snprintf(ageStr, sizeof(ageStr), "Updated just now");
-        } else if (age < 3600) {
-            snprintf(ageStr, sizeof(ageStr), "Updated %lum ago", age / 60);
-        } else {
-            snprintf(ageStr, sizeof(ageStr), "Updated %luh ago", age / 3600);
-        }
-        tft.setFreeFont(FSS9);
-        tft.setTextDatum(MC_DATUM);
-        tft.setTextColor(grayColor);
-        tft.drawString(ageStr, 120, 200 + yOff, GFXFF);
+        tft.drawString("videos", card2X + cardW/2, cardY + 32, GFXFF);
     }
 
     // Navigation dots
@@ -2794,7 +2782,7 @@ void setupWebServer() {
         doc["enabled"] = config.enabled;
         doc["configured"] = isYouTubeConfigured();
         doc["channelHandle"] = config.channelHandle;
-        // Don't expose full API key, just indicate if set
+        doc["apiKey"] = config.apiKey;  // Return key so admin UI can display it
         doc["hasApiKey"] = strlen(config.apiKey) > 0;
 
         if (data.valid) {
