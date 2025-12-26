@@ -212,6 +212,31 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 </div>
 <p style="font-size:0.75em;color:#666;margin-top:8px">When enabled, each location shows 3 screens (current + 2 forecast). When disabled, only current weather is shown.</p>
 </div>
+<div class="form-group" style="margin-top:15px">
+<label style="margin-bottom:8px">Night Mode</label>
+<div class="toggle-row">
+<span>Enable Night Mode</span>
+<label class="toggle"><input type="checkbox" id="night-mode-enabled"><span class="toggle-slider"></span></label>
+</div>
+<div id="night-mode-settings" style="margin-top:10px">
+<div class="form-row">
+<div class="form-group">
+<label>Start (dim)</label>
+<select id="night-start"></select>
+</div>
+<div class="form-group">
+<label>End (brighten)</label>
+<select id="night-end"></select>
+</div>
+</div>
+<div class="form-group">
+<label>Night Brightness</label>
+<input type="range" id="night-brightness" min="5" max="50" value="20">
+<span id="night-brightness-val">20%</span>
+</div>
+</div>
+<p style="font-size:0.75em;color:#666;margin-top:8px">Dims display during night hours. Sunrise/Sunset options use weather data.</p>
+</div>
 <div class="btn-row">
 <button class="btn btn-primary" onclick="saveDisplay()">Save Settings</button>
 </div>
@@ -500,6 +525,36 @@ document.querySelectorAll('.tab').forEach(tab => {
 document.getElementById('brightness').oninput = e => {
   document.getElementById('brightness-val').textContent = e.target.value + '%';
 };
+
+// Night brightness slider
+document.getElementById('night-brightness').oninput = e => {
+  document.getElementById('night-brightness-val').textContent = e.target.value + '%';
+};
+
+// Night mode toggle - show/hide settings
+document.getElementById('night-mode-enabled').onchange = function() {
+  document.getElementById('night-mode-settings').style.display = this.checked ? 'block' : 'none';
+};
+
+// Initialize night mode time dropdowns
+function initNightModeSelects() {
+  const startSel = document.getElementById('night-start');
+  const endSel = document.getElementById('night-end');
+  // Add sunrise/sunset options
+  let opts = '<option value="-1">Sunset</option><option value="-2">Sunrise</option>';
+  // Add hour options
+  for (let h = 0; h < 24; h++) {
+    const ampm = h < 12 ? 'AM' : 'PM';
+    const hour12 = h === 0 ? 12 : (h > 12 ? h - 12 : h);
+    opts += '<option value="' + h + '">' + hour12 + ':00 ' + ampm + '</option>';
+  }
+  startSel.innerHTML = opts;
+  endSel.innerHTML = opts;
+  // Set defaults
+  startSel.value = '22';  // 10 PM
+  endSel.value = '7';     // 7 AM
+}
+initNightModeSelects();
 
 // Body character counter for new custom screen
 document.getElementById('new-cust-body').oninput = e => {
@@ -1139,6 +1194,14 @@ function updateConfig(c) {
     updateCarouselDescription();
   }
 
+  // Load night mode settings
+  document.getElementById('night-mode-enabled').checked = c.nightModeEnabled !== false;
+  document.getElementById('night-start').value = c.nightModeStartHour !== undefined ? c.nightModeStartHour : 22;
+  document.getElementById('night-end').value = c.nightModeEndHour !== undefined ? c.nightModeEndHour : 7;
+  document.getElementById('night-brightness').value = c.nightModeBrightness || 20;
+  document.getElementById('night-brightness-val').textContent = (c.nightModeBrightness || 20) + '%';
+  document.getElementById('night-mode-settings').style.display = (c.nightModeEnabled !== false) ? 'block' : 'none';
+
   renderCarousel();
 }
 
@@ -1556,7 +1619,11 @@ async function saveDisplay() {
       cycle: parseInt(document.getElementById('cycle-time').value),
       brightness: parseInt(document.getElementById('brightness').value)
     },
-    showForecast: showForecast
+    showForecast: showForecast,
+    nightModeEnabled: document.getElementById('night-mode-enabled').checked,
+    nightModeStartHour: parseInt(document.getElementById('night-start').value),
+    nightModeEndHour: parseInt(document.getElementById('night-end').value),
+    nightModeBrightness: parseInt(document.getElementById('night-brightness').value)
   };
   try {
     const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });

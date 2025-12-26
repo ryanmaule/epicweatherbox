@@ -201,6 +201,10 @@ struct WeatherData {
     ForecastDay forecast[WEATHER_FORECAST_DAYS];
     int forecastDays;           // Number of valid forecast days
 
+    // Sunrise/sunset times (hour only, for night mode)
+    uint8_t sunriseHour;        // Hour of sunrise (0-23)
+    uint8_t sunsetHour;         // Hour of sunset (0-23)
+
     // Status
     bool valid;                 // Is this data valid?
     unsigned long lastUpdate;   // Last successful update time
