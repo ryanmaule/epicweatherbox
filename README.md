@@ -4,7 +4,7 @@ Custom open-source firmware for the GeekMagic SmallTV-Ultra, transforming it int
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-ESP8266-orange.svg)
-![Version](https://img.shields.io/badge/version-1.7.1-green.svg)
+![Version](https://img.shields.io/badge/version-1.8.0-green.svg)
 
 ## Features
 
@@ -66,6 +66,19 @@ The display cycles through screens in your configured carousel order:
 4. Wait for reboot, then connect to the `EpicWeatherBox` WiFi network
 5. Configure your home WiFi through the captive portal
 6. Access the admin panel at `http://<new-device-ip>/admin`
+
+### Upgrading from Stock SmallTV-Ultra Firmware
+
+If you get a "Not Enough Space" error when flashing from stock GeekMagic firmware, you'll need to use the **recovery firmware** first:
+
+1. Download `recovery.bin` from [Releases](https://github.com/ryanmaule/epicweatherbox/releases)
+2. Flash `recovery.bin` via the stock firmware's update page (`http://<device-ip>/update`)
+3. Connect to the `EpicWeatherBox-Recovery` WiFi network (open, no password)
+4. Navigate to `http://192.168.4.1/update` in your browser
+5. Upload the full `firmware.bin`
+6. Device will reboot with full EpicWeatherBox firmware
+
+> **Why is this needed?** The stock firmware uses more flash space than our recovery firmware. The recovery image is minimal (~340KB) and clears the filesystem, making room for the full EpicWeatherBox firmware (~670KB).
 
 ### Option 2: Build from Source
 
@@ -201,6 +214,12 @@ epicweatherbox/
 - Upload working firmware via `/update`
 
 ## Version History
+
+### v1.8.0 (2025-12-26)
+- **Night Mode UI restored** - Enable/disable, start/end times, and brightness settings
+- **Sunrise/Sunset options** - Night mode can start at sunset and end at sunrise using weather data
+- **Recovery firmware** - Minimal firmware for upgrading from stock SmallTV-Ultra
+- Weather API now fetches sunrise/sunset times from Open-Meteo
 
 ### v1.7.0 (2024-12-25)
 - Location search with city dropdown (uses Open-Meteo geocoding API)
