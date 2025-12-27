@@ -97,6 +97,23 @@ static int currentDisplayLocation = 0;
 // Emergency safe mode - stops normal operation to allow recovery
 static bool emergencySafeMode = false;
 
+// Track last applied brightness to avoid redundant writes
+static int lastAppliedBrightness = -1;
+
+/**
+ * Apply brightness to backlight PWM
+ * Called when brightness changes or in loop for night mode
+ * Note: PWM is inverted - 0 = full brightness, 100 = off
+ */
+void applyBrightness(int brightness) {
+    if (brightness != lastAppliedBrightness) {
+        int pwmValue = 100 - constrain(brightness, 0, 100);  // Invert: 100% brightness = PWM 0
+        analogWrite(TFT_BL_PIN, pwmValue);
+        lastAppliedBrightness = brightness;
+        Serial.printf("[TFT] Brightness set to %d%% (PWM: %d)\n", brightness, pwmValue);
+    }
+}
+
 // Colors are now managed by themes.h/themes.cpp
 // Icon colors used as default values for drawing functions
 #define ICON_SUN       0x07FF  // Yellow/cyan (used for sun icon rays)
@@ -534,7 +551,7 @@ void initTftMinimal() {
     pinMode(TFT_BL_PIN, OUTPUT);
     analogWriteRange(100);
     analogWriteFreq(1000);
-    analogWrite(TFT_BL_PIN, getBrightness());
+    applyBrightness(getBrightness());
     Serial.println(F("[TFT] Backlight on"));
 
     ESP.wdtFeed();
@@ -2183,6 +2200,14 @@ void loop() {
 #if ENABLE_TFT_TEST
     updateTftDisplay();
 #endif
+
+    // Update brightness based on night mode
+    int currentHour = timeClient.getHours();
+    if (isNightModeActive(currentHour)) {
+        applyBrightness(getNightModeBrightness());
+    } else {
+        applyBrightness(getBrightness());
+    }
 
     // Small yield to prevent watchdog issues
     yield();

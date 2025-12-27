@@ -657,10 +657,16 @@ bool getNightModeEnabled() { return nightModeEnabled; }
 void setNightModeEnabled(bool enabled) { nightModeEnabled = enabled; }
 
 int getNightModeStartHour() { return nightModeStartHour; }
-void setNightModeStartHour(int hour) { nightModeStartHour = constrain(hour, 0, 23); }
+void setNightModeStartHour(int hour) {
+    // -1 = sunset, -2 = sunrise, 0-23 = specific hour
+    nightModeStartHour = (hour == -1 || hour == -2) ? hour : constrain(hour, 0, 23);
+}
 
 int getNightModeEndHour() { return nightModeEndHour; }
-void setNightModeEndHour(int hour) { nightModeEndHour = constrain(hour, 0, 23); }
+void setNightModeEndHour(int hour) {
+    // -1 = sunset, -2 = sunrise, 0-23 = specific hour
+    nightModeEndHour = (hour == -1 || hour == -2) ? hour : constrain(hour, 0, 23);
+}
 
 int getNightModeBrightness() { return nightModeBrightness; }
 void setNightModeBrightness(int b) { nightModeBrightness = constrain(b, 0, 100); }
