@@ -4,7 +4,7 @@ Custom open-source firmware for the GeekMagic SmallTV-Ultra, transforming it int
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-ESP8266-orange.svg)
-![Version](https://img.shields.io/badge/version-1.8.0-green.svg)
+![Version](https://img.shields.io/badge/version-1.8.1-green.svg)
 
 ## Features
 
@@ -74,11 +74,13 @@ If you get a "Not Enough Space" error when flashing from stock GeekMagic firmwar
 1. Download `recovery.bin` from [Releases](https://github.com/ryanmaule/epicweatherbox/releases)
 2. Flash `recovery.bin` via the stock firmware's update page (`http://<device-ip>/update`)
 3. Connect to the `EpicWeatherBox-Recovery` WiFi network (open, no password)
-4. Navigate to `http://192.168.4.1/update` in your browser
+4. A captive portal will automatically open with two options:
+   - **Upload Firmware**: Flash directly from the recovery network
+   - **Join Network**: Connect the device to your home WiFi first, then flash from your regular network
 5. Upload the full `firmware.bin`
 6. Device will reboot with full EpicWeatherBox firmware
 
-> **Why is this needed?** The stock firmware uses more flash space than our recovery firmware. The recovery image is minimal (~340KB) and clears the filesystem, making room for the full EpicWeatherBox firmware (~670KB).
+> **Why is this needed?** The stock firmware uses more flash space than our recovery firmware. The recovery image is minimal (~350KB) and clears the filesystem, making room for the full EpicWeatherBox firmware (~670KB).
 
 ### Option 2: Build from Source
 
@@ -214,6 +216,10 @@ epicweatherbox/
 - Upload working firmware via `/update`
 
 ## Version History
+
+### v1.8.1 (2025-12-26)
+- **Enhanced Recovery Mode** - Captive portal with WiFi join option before flashing
+- **Styled WiFi Setup** - WiFiManager captive portal now matches EpicWeatherBox dark theme
 
 ### v1.8.0 (2025-12-26)
 - **Night Mode UI restored** - Enable/disable, start/end times, and brightness settings

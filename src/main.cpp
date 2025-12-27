@@ -2228,6 +2228,23 @@ void setupWiFi() {
     // Set minimum signal quality to show networks (%)
     wifiManager.setMinimumSignalQuality(15);
 
+    // Custom CSS to match EpicWeatherBox admin UI
+    wifiManager.setCustomHeadElement(
+        "<style>"
+        "body{background:#1a1a2e!important;color:#eee!important;font-family:-apple-system,system-ui,sans-serif!important}"
+        ".c{text-align:center}"
+        ".q{color:#aaa!important}"
+        "div{color:#eee!important}"
+        "h1,h2,h3{color:#00d4ff!important}"
+        "input,select{background:#2a2a4e!important;border:1px solid #333!important;color:#eee!important;border-radius:6px!important;padding:10px!important}"
+        "input:focus,select:focus{border-color:#00d4ff!important;outline:none!important}"
+        "button,.button,input[type=submit],input[type=button]{background:#00d4ff!important;color:#1a1a2e!important;border:none!important;border-radius:8px!important;padding:12px 20px!important;font-weight:bold!important;cursor:pointer!important}"
+        "button:hover,.button:hover,input[type=submit]:hover,input[type=button]:hover{background:#00a8cc!important}"
+        "a{color:#00d4ff!important}"
+        ".msg{background:rgba(255,255,255,0.05)!important;border:1px solid #333!important;border-radius:8px!important;padding:10px!important}"
+        "</style>"
+    );
+
     // Set static IP if desired (optional)
     // wifiManager.setSTAStaticIPConfig(IPAddress(192,168,1,99),
     //                                   IPAddress(192,168,1,1),
