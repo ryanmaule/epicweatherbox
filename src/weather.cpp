@@ -416,21 +416,23 @@ bool fetchWeather(float lat, float lon, WeatherData& data) {
         // Parse sunrise/sunset for today (index 0) - format: "2024-01-01T07:23"
         const char* sunriseStr = daily["sunrise"][0];
         const char* sunsetStr = daily["sunset"][0];
-        if (sunriseStr && strlen(sunriseStr) >= 13) {
-            int hour = 0;
-            sscanf(sunriseStr + 11, "%d", &hour);  // Skip "YYYY-MM-DDTHH"
-            data.sunriseHour = (uint8_t)hour;
+        if (sunriseStr && strlen(sunriseStr) >= 16) {  // Need at least "YYYY-MM-DDTHH:MM"
+            int hour = 0, minute = 0;
+            sscanf(sunriseStr + 11, "%d:%d", &hour, &minute);
+            data.sunriseMinutes = (uint16_t)(hour * 60 + minute);
         } else {
-            data.sunriseHour = 6;  // Default 6 AM
+            data.sunriseMinutes = 6 * 60;  // Default 6:00 AM
         }
-        if (sunsetStr && strlen(sunsetStr) >= 13) {
-            int hour = 0;
-            sscanf(sunsetStr + 11, "%d", &hour);
-            data.sunsetHour = (uint8_t)hour;
+        if (sunsetStr && strlen(sunsetStr) >= 16) {
+            int hour = 0, minute = 0;
+            sscanf(sunsetStr + 11, "%d:%d", &hour, &minute);
+            data.sunsetMinutes = (uint16_t)(hour * 60 + minute);
         } else {
-            data.sunsetHour = 18;  // Default 6 PM
+            data.sunsetMinutes = 18 * 60;  // Default 6:00 PM
         }
-        Serial.printf("[WEATHER] Sunrise: %d:00, Sunset: %d:00\n", data.sunriseHour, data.sunsetHour);
+        Serial.printf("[WEATHER] Sunrise: %d:%02d, Sunset: %d:%02d\n",
+                      data.sunriseMinutes / 60, data.sunriseMinutes % 60,
+                      data.sunsetMinutes / 60, data.sunsetMinutes % 60);
     }
 
     // Success!
@@ -1027,52 +1029,58 @@ bool removeCustomScreenConfig(uint8_t index) {
 }
 
 /**
- * Check if currently in night mode based on hour
+ * Check if currently in night mode based on time
  * Supports special values: -1 = sunset, -2 = sunrise (from weather data)
+ * @param currentMinutes Minutes since midnight in local time (0-1439)
  */
-bool isNightModeActive(int currentHour) {
+bool isNightModeActive(int currentMinutes) {
     if (!nightModeEnabled) return false;
 
-    // Resolve start hour: -1 = sunset, -2 = sunrise, else use configured hour
-    int startHour = nightModeStartHour;
-    if (startHour == -1) {
+    // Resolve start time: -1 = sunset, -2 = sunrise, else use configured hour * 60
+    int startMinutes;
+    if (nightModeStartHour == -1) {
         // Use sunset from first location's weather data
         if (locationCount > 0 && weatherData[0].valid) {
-            startHour = weatherData[0].sunsetHour;
+            startMinutes = weatherData[0].sunsetMinutes;
         } else {
-            startHour = 18;  // Default 6 PM if no weather data
+            startMinutes = 18 * 60;  // Default 6:00 PM if no weather data
         }
-    } else if (startHour == -2) {
+    } else if (nightModeStartHour == -2) {
         // Use sunrise from first location's weather data
         if (locationCount > 0 && weatherData[0].valid) {
-            startHour = weatherData[0].sunriseHour;
+            startMinutes = weatherData[0].sunriseMinutes;
         } else {
-            startHour = 6;  // Default 6 AM if no weather data
+            startMinutes = 6 * 60;  // Default 6:00 AM if no weather data
         }
+    } else {
+        // User-configured hour (convert to minutes at start of hour)
+        startMinutes = nightModeStartHour * 60;
     }
 
-    // Resolve end hour: -1 = sunset, -2 = sunrise, else use configured hour
-    int endHour = nightModeEndHour;
-    if (endHour == -1) {
+    // Resolve end time: -1 = sunset, -2 = sunrise, else use configured hour * 60
+    int endMinutes;
+    if (nightModeEndHour == -1) {
         if (locationCount > 0 && weatherData[0].valid) {
-            endHour = weatherData[0].sunsetHour;
+            endMinutes = weatherData[0].sunsetMinutes;
         } else {
-            endHour = 18;
+            endMinutes = 18 * 60;
         }
-    } else if (endHour == -2) {
+    } else if (nightModeEndHour == -2) {
         if (locationCount > 0 && weatherData[0].valid) {
-            endHour = weatherData[0].sunriseHour;
+            endMinutes = weatherData[0].sunriseMinutes;
         } else {
-            endHour = 6;
+            endMinutes = 6 * 60;
         }
+    } else {
+        endMinutes = nightModeEndHour * 60;
     }
 
-    // Handle overnight range (e.g., 22:00 to 7:00)
-    if (startHour > endHour) {
-        return currentHour >= startHour || currentHour < endHour;
+    // Handle overnight range (e.g., sunset 16:46 to sunrise 7:51)
+    if (startMinutes > endMinutes) {
+        return currentMinutes >= startMinutes || currentMinutes < endMinutes;
     }
     // Handle same-day range (e.g., 1:00 to 5:00)
-    return currentHour >= startHour && currentHour < endHour;
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
 }
 
 // =============================================================================

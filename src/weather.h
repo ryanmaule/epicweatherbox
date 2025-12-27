@@ -201,9 +201,9 @@ struct WeatherData {
     ForecastDay forecast[WEATHER_FORECAST_DAYS];
     int forecastDays;           // Number of valid forecast days
 
-    // Sunrise/sunset times (hour only, for night mode)
-    uint8_t sunriseHour;        // Hour of sunrise (0-23)
-    uint8_t sunsetHour;         // Hour of sunset (0-23)
+    // Sunrise/sunset times (minutes since midnight for precise night mode)
+    uint16_t sunriseMinutes;    // Minutes since midnight (0-1439)
+    uint16_t sunsetMinutes;     // Minutes since midnight (0-1439)
 
     // Status
     bool valid;                 // Is this data valid?
@@ -411,8 +411,9 @@ void setNightModeBrightness(int brightness);
 
 /**
  * Check if currently in night mode based on time
+ * @param currentMinutes Minutes since midnight in local time (0-1439)
  */
-bool isNightModeActive(int currentHour);
+bool isNightModeActive(int currentMinutes);
 
 /**
  * Show forecast screens in rotation

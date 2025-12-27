@@ -2202,8 +2202,13 @@ void loop() {
 #endif
 
     // Update brightness based on night mode
-    int currentHour = timeClient.getHours();
-    if (isNightModeActive(currentHour)) {
+    // Get local time in minutes since midnight using timezone offset
+    long localEpoch = timeClient.getEpochTime();
+    if (getLocationCount() > 0 && getWeather(0).valid) {
+        localEpoch += getWeather(0).utcOffsetSeconds;
+    }
+    int currentMinutes = (localEpoch % 86400L) / 60;  // Minutes since midnight (0-1439)
+    if (isNightModeActive(currentMinutes)) {
         applyBrightness(getNightModeBrightness());
     } else {
         applyBrightness(getBrightness());
@@ -3052,8 +3057,49 @@ void setupWebServer() {
         LittleFS.remove("/admin.version");
         LittleFS.remove("/admin.html.gz");
         Serial.println(F("[ADMIN] Admin files deleted, will reprovision on reboot"));
-        server.send(200, "application/json",
-            "{\"success\":true,\"message\":\"Admin files cleared. Rebooting to reprovision...\"}");
+
+        // Send a styled reconnect page that auto-reloads when device is back
+        server.send(200, "text/html",
+            F("<!DOCTYPE html><html><head>"
+              "<meta charset='UTF-8'>"
+              "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+              "<title>Reloading Admin</title>"
+              "<style>"
+              "*{box-sizing:border-box;margin:0;padding:0}"
+              "body{font-family:-apple-system,system-ui,sans-serif;background:#1a1a2e;color:#eee;"
+              "min-height:100vh;display:flex;align-items:center;justify-content:center}"
+              ".container{text-align:center;padding:40px}"
+              ".logo{font-size:3em;margin-bottom:20px}"
+              "h1{color:#00d4ff;margin-bottom:10px;font-size:1.5em}"
+              ".status{color:#888;margin-bottom:30px}"
+              ".spinner{width:40px;height:40px;border:4px solid #333;border-top-color:#00d4ff;"
+              "border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}"
+              "@keyframes spin{to{transform:rotate(360deg)}}"
+              ".attempt{color:#666;font-size:0.85em}"
+              "</style>"
+              "</head><body>"
+              "<div class='container'>"
+              "<div class='logo'>☀️</div>"
+              "<h1>Reloading Admin Panel</h1>"
+              "<p class='status'>Device is rebooting...</p>"
+              "<div class='spinner'></div>"
+              "<p class='attempt'>Attempt: <span id='count'>1</span></p>"
+              "</div>"
+              "<script>"
+              "let attempts=0,maxAttempts=30;"
+              "function tryReconnect(){"
+              "attempts++;"
+              "document.getElementById('count').textContent=attempts;"
+              "fetch('/api/status',{method:'GET',cache:'no-store'})"
+              ".then(r=>{if(r.ok)window.location.href='/admin';})"
+              ".catch(()=>{});"
+              "if(attempts<maxAttempts)setTimeout(tryReconnect,2000);"
+              "else document.querySelector('.status').textContent='Device not responding. Try refreshing manually.';"
+              "}"
+              "setTimeout(tryReconnect,3000);"
+              "</script>"
+              "</body></html>"));
+
         delay(500);
         ESP.restart();
     });
