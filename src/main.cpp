@@ -571,19 +571,52 @@ void initTftMinimal() {
     tft.fillScreen(0x0841);  // Dark background
     tft.setTextDatum(MC_DATUM);  // Middle center
 
+    // Draw sun logo at top center (y=50, radius=22)
+    // Colors: Yellow 0xFEE0, Orange 0xFBE0 (for face features)
+    int sunX = 120, sunY = 50, sunR = 22;
+    uint16_t sunYellow = 0xFEE0;  // Bright yellow
+    uint16_t sunOrange = 0xFBE0;  // Orange for face
+
+    // Draw 8 sun rays
+    for (int i = 0; i < 8; i++) {
+        float angle = i * 0.785398f;  // 45 degrees in radians
+        int x1 = sunX + (int)(cos(angle) * (sunR + 4));
+        int y1 = sunY + (int)(sin(angle) * (sunR + 4));
+        int x2 = sunX + (int)(cos(angle) * (sunR + 12));
+        int y2 = sunY + (int)(sin(angle) * (sunR + 12));
+        tft.drawLine(x1, y1, x2, y2, sunYellow);
+        // Draw thicker rays
+        tft.drawLine(x1+1, y1, x2+1, y2, sunYellow);
+        tft.drawLine(x1, y1+1, x2, y2+1, sunYellow);
+    }
+
+    // Draw sun circle
+    tft.fillCircle(sunX, sunY, sunR, sunYellow);
+
+    // Draw happy face - eyes
+    tft.fillCircle(sunX - 7, sunY - 4, 3, sunOrange);
+    tft.fillCircle(sunX + 7, sunY - 4, 3, sunOrange);
+
+    // Draw smile (arc using short line segments)
+    for (int i = -6; i <= 6; i++) {
+        int sx = sunX + i;
+        int sy = sunY + 6 + (i * i) / 12;  // Parabola for smile curve
+        tft.fillCircle(sx, sy, 1, sunOrange);
+    }
+
     // "Epic" in bold 18pt cyan
     tft.setFreeFont(FSSB18);
     tft.setTextColor(0x07FF);  // Cyan
-    tft.drawString("Epic", 120, 95, GFXFF);
+    tft.drawString("Epic", 120, 100, GFXFF);
 
     // "WeatherBox" in bold 18pt white
     tft.setTextColor(0xFFFF);  // White
-    tft.drawString("WeatherBox", 120, 130, GFXFF);
+    tft.drawString("WeatherBox", 120, 135, GFXFF);
 
     // Version in small gray
     tft.setFreeFont(FSS9);
     tft.setTextColor(0x8410);  // Gray
-    tft.drawString("v" FIRMWARE_VERSION, 120, 165, GFXFF);
+    tft.drawString("v" FIRMWARE_VERSION, 120, 170, GFXFF);
 
     // Status text at bottom (y=218 to match IP position - keeps 4+ pixels from bottom edge)
     tft.setTextColor(0x4208);  // Dark gray
