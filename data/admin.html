@@ -324,10 +324,18 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <label>Device Info</label>
 <div id="device-info">Loading...</div>
 </div>
-<div class="btn-row">
+<div class="form-group" style="margin-top:15px">
+<label>System Actions</label>
+<div class="btn-row" style="flex-wrap:wrap">
 <button class="btn btn-secondary" onclick="refreshWeather()">Refresh Weather</button>
 <button class="btn btn-secondary" onclick="location.href='/update'">Firmware Update</button>
-<button class="btn btn-secondary" style="background:#c33" onclick="if(confirm('Reboot?'))location.href='/reboot'">Reboot</button>
+<button class="btn btn-secondary" style="background:#c33" onclick="if(confirm('Reboot device?'))location.href='/reboot'">Reboot</button>
+</div>
+<div class="btn-row" style="margin-top:8px;flex-wrap:wrap">
+<button class="btn btn-secondary" style="background:#963" onclick="if(confirm('Safe Mode boots with minimal features for recovery. Continue?'))location.href='/api/safemode'">Safe Mode</button>
+<button class="btn btn-secondary" style="background:#369" onclick="if(confirm('Reload Admin refreshes the UI from firmware and reboots. Continue?'))location.href='/api/reprovision'">Reload Admin</button>
+<button class="btn btn-secondary" style="background:#933" onclick="if(confirm('Factory Reset clears all settings and WiFi credentials. This cannot be undone. Continue?'))location.href='/reset'">Factory Reset</button>
+</div>
 </div>
 <div class="form-group" style="margin-top:20px">
 <label>API Endpoints</label>
@@ -345,11 +353,8 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 </div>
 </div>
 </div>
-<div class="links">
-<a href="https://github.com/ryanmaule/epicweatherbox" target="_blank">GitHub</a>
-<a href="/api/safemode" style="color:#f90">Safe Mode</a>
-<a href="/api/reprovision" style="color:#6cf" onclick="return confirm('Reload Admin will refresh the admin UI and reboot. Continue?')">Reload Admin</a>
-<a href="/reset" style="color:#f66" onclick="return confirm('Factory Reset will clear WiFi settings and reboot. Continue?')">Factory Reset</a>
+<div class="links" style="padding:20px 0;color:#666;font-size:0.85em">
+&copy; 2025 <a href="https://github.com/ryanmaule" target="_blank">ryanmaule</a> | <a href="https://github.com/ryanmaule/epicweatherbox" target="_blank">EpicWeatherBox</a>
 </div>
 </div>
 
