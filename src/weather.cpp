@@ -148,6 +148,95 @@ const char* conditionToShortString(WeatherCondition condition) {
 }
 
 /**
+ * Normalize UTF-8 string to ASCII for TFT display
+ * Converts common Latin diacritics to their base characters
+ * e.g., "Cancún" -> "Cancun", "São Paulo" -> "Sao Paulo"
+ */
+void normalizeToAscii(char* dest, const char* src, size_t maxLen) {
+    size_t j = 0;
+    for (size_t i = 0; src[i] != '\0' && j < maxLen - 1; ) {
+        unsigned char c = (unsigned char)src[i];
+
+        // ASCII characters pass through
+        if (c < 0x80) {
+            dest[j++] = src[i++];
+            continue;
+        }
+
+        // UTF-8 two-byte sequences (0xC0-0xDF followed by 0x80-0xBF)
+        if ((c & 0xE0) == 0xC0 && (src[i+1] & 0xC0) == 0x80) {
+            uint16_t codepoint = ((c & 0x1F) << 6) | (src[i+1] & 0x3F);
+            char replacement = '?';
+
+            // Common Latin diacritics
+            switch (codepoint) {
+                // A variants
+                case 0x00C0: case 0x00C1: case 0x00C2: case 0x00C3: case 0x00C4: case 0x00C5:
+                    replacement = 'A'; break;
+                case 0x00E0: case 0x00E1: case 0x00E2: case 0x00E3: case 0x00E4: case 0x00E5:
+                    replacement = 'a'; break;
+                // C variants
+                case 0x00C7: replacement = 'C'; break;
+                case 0x00E7: replacement = 'c'; break;
+                // E variants
+                case 0x00C8: case 0x00C9: case 0x00CA: case 0x00CB:
+                    replacement = 'E'; break;
+                case 0x00E8: case 0x00E9: case 0x00EA: case 0x00EB:
+                    replacement = 'e'; break;
+                // I variants
+                case 0x00CC: case 0x00CD: case 0x00CE: case 0x00CF:
+                    replacement = 'I'; break;
+                case 0x00EC: case 0x00ED: case 0x00EE: case 0x00EF:
+                    replacement = 'i'; break;
+                // N variants
+                case 0x00D1: replacement = 'N'; break;
+                case 0x00F1: replacement = 'n'; break;
+                // O variants
+                case 0x00D2: case 0x00D3: case 0x00D4: case 0x00D5: case 0x00D6: case 0x00D8:
+                    replacement = 'O'; break;
+                case 0x00F2: case 0x00F3: case 0x00F4: case 0x00F5: case 0x00F6: case 0x00F8:
+                    replacement = 'o'; break;
+                // U variants
+                case 0x00D9: case 0x00DA: case 0x00DB: case 0x00DC:
+                    replacement = 'U'; break;
+                case 0x00F9: case 0x00FA: case 0x00FB: case 0x00FC:
+                    replacement = 'u'; break;
+                // Y variants
+                case 0x00DD: replacement = 'Y'; break;
+                case 0x00FD: case 0x00FF: replacement = 'y'; break;
+                // German sharp s
+                case 0x00DF: replacement = 's'; break;
+                // AE ligature
+                case 0x00C6: replacement = 'A'; break;  // Æ -> A
+                case 0x00E6: replacement = 'a'; break;  // æ -> a
+                default: replacement = '?'; break;
+            }
+            dest[j++] = replacement;
+            i += 2;
+            continue;
+        }
+
+        // UTF-8 three-byte sequences - skip and replace with ?
+        if ((c & 0xF0) == 0xE0) {
+            dest[j++] = '?';
+            i += 3;
+            continue;
+        }
+
+        // UTF-8 four-byte sequences - skip and replace with ?
+        if ((c & 0xF8) == 0xF0) {
+            dest[j++] = '?';
+            i += 4;
+            continue;
+        }
+
+        // Invalid UTF-8, skip byte
+        i++;
+    }
+    dest[j] = '\0';
+}
+
+/**
  * Get weather icon (emoji-style for web, can adapt for icon fonts)
  */
 const char* conditionToIcon(WeatherCondition condition, bool isDay) {
@@ -469,18 +558,18 @@ bool addLocation(const char* name, float lat, float lon) {
     }
 
     int idx = locationCount;
-    strncpy(locations[idx].name, name, sizeof(locations[idx].name) - 1);
-    locations[idx].name[sizeof(locations[idx].name) - 1] = '\0';
+    // Normalize name to ASCII for TFT display (e.g., "Cancún" -> "Cancun")
+    normalizeToAscii(locations[idx].name, name, sizeof(locations[idx].name));
     locations[idx].latitude = lat;
     locations[idx].longitude = lon;
     locations[idx].enabled = true;
 
     // Clear weather data for new location
     memset(&weatherData[idx], 0, sizeof(WeatherData));
-    strncpy(weatherData[idx].locationName, name, sizeof(weatherData[idx].locationName) - 1);
+    normalizeToAscii(weatherData[idx].locationName, name, sizeof(weatherData[idx].locationName));
 
     locationCount++;
-    Serial.printf("[WEATHER] Added location %d: %s (%.4f, %.4f)\n", idx, name, lat, lon);
+    Serial.printf("[WEATHER] Added location %d: %s (%.4f, %.4f)\n", idx, locations[idx].name, lat, lon);
     return true;
 }
 
@@ -521,17 +610,17 @@ bool updateLocation(int index, const char* name, float lat, float lon) {
         return false;
     }
 
-    strncpy(locations[index].name, name, sizeof(locations[index].name) - 1);
-    locations[index].name[sizeof(locations[index].name) - 1] = '\0';
+    // Normalize name to ASCII for TFT display (e.g., "Cancún" -> "Cancun")
+    normalizeToAscii(locations[index].name, name, sizeof(locations[index].name));
     locations[index].latitude = lat;
     locations[index].longitude = lon;
     locations[index].enabled = true;
 
     // Update weather data location name and invalidate cache
-    strncpy(weatherData[index].locationName, name, sizeof(weatherData[index].locationName) - 1);
+    normalizeToAscii(weatherData[index].locationName, name, sizeof(weatherData[index].locationName));
     weatherData[index].valid = false;
 
-    Serial.printf("[WEATHER] Updated location %d: %s (%.4f, %.4f)\n", index, name, lat, lon);
+    Serial.printf("[WEATHER] Updated location %d: %s (%.4f, %.4f)\n", index, locations[index].name, lat, lon);
     return true;
 }
 
@@ -1100,8 +1189,8 @@ bool loadWeatherConfig() {
 
             const char* name = loc["name"];
             if (name && strlen(name) > 0) {
-                strncpy(locations[locationCount].name, name, sizeof(locations[locationCount].name) - 1);
-                locations[locationCount].name[sizeof(locations[locationCount].name) - 1] = '\0';
+                // Normalize name to ASCII for TFT display
+                normalizeToAscii(locations[locationCount].name, name, sizeof(locations[locationCount].name));
                 locations[locationCount].latitude = loc["lat"] | 0.0f;
                 locations[locationCount].longitude = loc["lon"] | 0.0f;
                 locations[locationCount].enabled = loc["enabled"] | true;
@@ -1130,7 +1219,8 @@ bool loadWeatherConfig() {
         JsonObject primary = doc["primary"];
         const char* name = primary["name"];
         if (name && strlen(name) > 0) {
-            strncpy(locations[0].name, name, sizeof(locations[0].name) - 1);
+            // Normalize name to ASCII for TFT display
+            normalizeToAscii(locations[0].name, name, sizeof(locations[0].name));
             locations[0].latitude = primary["lat"] | 47.6062;
             locations[0].longitude = primary["lon"] | -122.3321;
             locations[0].enabled = primary["enabled"] | true;
@@ -1143,7 +1233,8 @@ bool loadWeatherConfig() {
             bool secondaryEnabled = secondary["enabled"] | false;
             const char* secName = secondary["name"];
             if (secondaryEnabled && secName && strlen(secName) > 0) {
-                strncpy(locations[1].name, secName, sizeof(locations[1].name) - 1);
+                // Normalize name to ASCII for TFT display
+                normalizeToAscii(locations[1].name, secName, sizeof(locations[1].name));
                 locations[1].latitude = secondary["lat"] | 0.0f;
                 locations[1].longitude = secondary["lon"] | 0.0f;
                 locations[1].enabled = true;
