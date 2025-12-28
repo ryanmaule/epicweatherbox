@@ -48,9 +48,10 @@ extern "C" {
 #if ENABLE_TFT_TEST
 #include <TFT_eSPI.h>
 #include <NTPClient.h>
+#include <JPEGDecoder.h>  // For custom image screen support
 // AnimatedGIF disabled - uses too much RAM (~25KB) for ESP8266 with only 80KB total
 // The ESP8266 runs out of heap when GIF decoder is loaded alongside web server
-// TODO: Consider ESP32 upgrade or simpler static image support
+// JPEGDecoder is much more memory efficient (~4-8KB vs 25KB)
 // #include <AnimatedGIF.h>
 #define GIF_SUPPORT_DISABLED 1
 
@@ -1889,6 +1890,160 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
     }
 }
 
+/**
+ * Render JPEG blocks to TFT display
+ * Called by JPEGDecoder after decoding each MCU (minimum coded unit)
+ */
+void jpegRender(int xpos, int ypos) {
+    uint16_t *pImg;
+    uint16_t mcu_w = JpegDec.MCUWidth;
+    uint16_t mcu_h = JpegDec.MCUHeight;
+    uint32_t max_x = JpegDec.width;
+    uint32_t max_y = JpegDec.height;
+
+    // Read each MCU block until done
+    while (JpegDec.read()) {
+        // Feed watchdog every few blocks to prevent reset
+        static int blockCount = 0;
+        if (++blockCount % 20 == 0) {
+            ESP.wdtFeed();
+            yield();
+        }
+
+        pImg = JpegDec.pImage;
+        int mcu_x = JpegDec.MCUx * mcu_w + xpos;
+        int mcu_y = JpegDec.MCUy * mcu_h + ypos;
+
+        // Check bounds
+        if (mcu_x + mcu_w <= 240 && mcu_y + mcu_h <= 240) {
+            // Block fits entirely on screen
+            tft.pushImage(mcu_x, mcu_y, mcu_w, mcu_h, pImg);
+        } else if (mcu_x < 240 && mcu_y < 240) {
+            // Partial block - clip to screen
+            uint16_t draw_w = min((uint16_t)(240 - mcu_x), mcu_w);
+            uint16_t draw_h = min((uint16_t)(240 - mcu_y), mcu_h);
+            tft.pushImage(mcu_x, mcu_y, draw_w, draw_h, pImg);
+        }
+    }
+}
+
+/**
+ * Draw custom image screen
+ * Shows uploaded JPG image with header bar matching custom screen style
+ */
+void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
+    // Get theme colors
+    uint16_t bgColor = getThemeBg();
+    uint16_t textColor = getThemeText();
+    uint16_t cyanColor = getThemeCyan();
+    uint16_t grayColor = getThemeGray();
+    uint16_t cardColor = getThemeCard();
+    int yOff = getUiNudgeY();
+
+    // Fill background
+    tft.fillScreen(bgColor);
+
+    // ===== HEADER BAR =====
+    // Get current time
+    const WeatherData& primaryWeather = getWeather(0);
+    long localEpoch = timeClient.getEpochTime() + primaryWeather.utcOffsetSeconds;
+    int hours = (localEpoch % 86400L) / 3600;
+    int minutes = (localEpoch % 3600) / 60;
+    int h12 = hours % 12;
+    if (h12 == 0) h12 = 12;
+    const char* ampm = (hours < 12) ? "AM" : "PM";
+
+    // Time on left (12-hour format with AM/PM)
+    char timeStr[16];
+    snprintf(timeStr, sizeof(timeStr), "%d:%02d", h12, minutes);
+    tft.setFreeFont(FSSB12);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(cyanColor);
+    tft.drawString(timeStr, 8, 8 + yOff, GFXFF);
+
+    int16_t timeW = tft.textWidth(timeStr, GFXFF);
+    tft.setFreeFont(FSS9);
+    tft.drawString(ampm, 10 + timeW, 12 + yOff, GFXFF);
+
+    // "Image" label on right (similar to custom screen)
+    tft.setTextDatum(TR_DATUM);
+    tft.setTextColor(grayColor);
+    tft.drawString("Image", 210, 8 + yOff, GFXFF);
+
+    // Star icon in top-right corner
+    tft.setTextColor(cyanColor);
+    tft.drawString("*", 228, 6 + yOff, GFXFF);
+
+    // ===== IMAGE CONTENT =====
+    // Content area starts below header (y ~35) and ends above dots (y ~220)
+    int contentY = 35 + yOff;
+    int contentH = 185;  // Available height for image
+
+    const ImageScreenConfig& config = getImageScreenConfig(imageIndex);
+
+    if (config.valid && config.filename[0] != '\0') {
+        // Try to decode and display the JPEG
+        Serial.printf("[IMAGE] Rendering %s\n", config.filename);
+
+        // Open file
+        File imgFile = LittleFS.open(config.filename, "r");
+        if (imgFile) {
+            // Decode JPEG
+            if (JpegDec.decodeFsFile(config.filename)) {
+                // Calculate position to center image in content area
+                int imgW = JpegDec.width;
+                int imgH = JpegDec.height;
+
+                // Center horizontally
+                int imgX = (240 - imgW) / 2;
+                if (imgX < 0) imgX = 0;
+
+                // Center vertically in content area
+                int imgY = contentY + (contentH - imgH) / 2;
+                if (imgY < contentY) imgY = contentY;
+
+                // Render the image
+                jpegRender(imgX, imgY);
+
+                Serial.printf("[IMAGE] Rendered %dx%d at (%d,%d)\n", imgW, imgH, imgX, imgY);
+            } else {
+                // Decode failed
+                tft.setFreeFont(FSS9);
+                tft.setTextDatum(MC_DATUM);
+                tft.setTextColor(grayColor);
+                tft.drawString("Decode Error", 120, 120 + yOff, GFXFF);
+                Serial.println("[IMAGE] JPEG decode failed");
+            }
+            imgFile.close();
+        } else {
+            // File not found
+            tft.setFreeFont(FSS9);
+            tft.setTextDatum(MC_DATUM);
+            tft.setTextColor(grayColor);
+            tft.drawString("File Not Found", 120, 120 + yOff, GFXFF);
+            Serial.printf("[IMAGE] File not found: %s\n", config.filename);
+        }
+    } else {
+        // No image configured
+        tft.setFreeFont(FSS9);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextColor(grayColor);
+        tft.drawString("No Image", 120, 120 + yOff, GFXFF);
+    }
+
+    // ===== NAVIGATION DOTS =====
+    if (totalScreens > 1) {
+        int dotSpacing = 12;
+        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = 230 + yOff;
+        if (dotY > 236) dotY = 236;
+        for (int i = 0; i < totalScreens; i++) {
+            uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
+            tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
+        }
+    }
+}
+
 // Track carousel position
 static uint8_t currentCarouselIndex = 0;
 static uint8_t currentSubScreen = 0;  // For locations: 0=current, 1=forecast1, 2=forecast2
@@ -1908,6 +2063,7 @@ int calculateTotalScreens() {
             case CAROUSEL_COUNTDOWN:
             case CAROUSEL_CUSTOM:
             case CAROUSEL_YOUTUBE:
+            case CAROUSEL_IMAGE:
                 total += 1;
                 break;
         }
@@ -1929,6 +2085,7 @@ int calculateCurrentScreenIndex() {
             case CAROUSEL_COUNTDOWN:
             case CAROUSEL_CUSTOM:
             case CAROUSEL_YOUTUBE:
+            case CAROUSEL_IMAGE:
                 index += 1;
                 break;
         }
@@ -2008,6 +2165,11 @@ void updateTftDisplay() {
 
             case CAROUSEL_YOUTUBE:
                 drawYouTubeScreen(currentScreenIdx, totalScreens);
+                currentCarouselIndex = (currentCarouselIndex + 1) % carouselCount;
+                break;
+
+            case CAROUSEL_IMAGE:
+                drawImageScreen(item.dataIndex, currentScreenIdx, totalScreens);
                 currentCarouselIndex = (currentCarouselIndex + 1) % carouselCount;
                 break;
         }
@@ -2943,6 +3105,189 @@ void setupWebServer() {
             server.send(500, "application/json", response);
         }
     });
+
+    // ===== IMAGE SCREEN API ENDPOINTS =====
+
+    // GET /api/images - list all image screens
+    server.on("/api/images", HTTP_GET, []() {
+        JsonDocument doc;
+        JsonArray images = doc["images"].to<JsonArray>();
+
+        uint8_t count = getImageScreenCount();
+        for (uint8_t i = 0; i < count; i++) {
+            const ImageScreenConfig& img = getImageScreenConfig(i);
+            JsonObject imgObj = images.add<JsonObject>();
+            imgObj["index"] = i;
+            imgObj["filename"] = img.filename;
+            imgObj["valid"] = img.valid;
+
+            // Get file size if valid
+            if (img.valid && LittleFS.exists(img.filename)) {
+                File f = LittleFS.open(img.filename, "r");
+                if (f) {
+                    imgObj["size"] = f.size();
+                    f.close();
+                }
+            }
+        }
+        doc["count"] = count;
+        doc["maxCount"] = MAX_IMAGE_SCREENS;
+        doc["maxSize"] = MAX_IMAGE_FILE_SIZE;
+
+        String response;
+        serializeJson(doc, response);
+        server.send(200, "application/json", response);
+    });
+
+    // POST /api/images/delete - delete an image
+    server.on("/api/images/delete", HTTP_POST, []() {
+        if (!server.hasArg("index")) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Missing index parameter\"}");
+            return;
+        }
+
+        int index = server.arg("index").toInt();
+        if (index < 0 || index >= getImageScreenCount()) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Invalid index\"}");
+            return;
+        }
+
+        // Remove from config (also deletes file)
+        if (removeImageScreenConfig(index)) {
+            saveWeatherConfig();
+            server.send(200, "application/json", "{\"success\":true,\"message\":\"Image deleted\"}");
+        } else {
+            server.send(500, "application/json", "{\"success\":false,\"message\":\"Failed to delete image\"}");
+        }
+    });
+
+    // POST /api/upload/image - upload a new image (multipart form)
+    // Static variables for upload state
+    static File uploadFile;
+    static String uploadFilename;
+    static size_t uploadSize;
+    static bool uploadError;
+    static String uploadErrorMsg;
+
+    server.on("/api/upload/image", HTTP_POST,
+        // Completion handler - called after upload finishes
+        []() {
+            if (uploadError) {
+                // Clean up failed upload
+                if (uploadFilename.length() > 0 && LittleFS.exists(uploadFilename)) {
+                    LittleFS.remove(uploadFilename);
+                }
+                server.send(400, "application/json", "{\"success\":false,\"message\":\"" + uploadErrorMsg + "\"}");
+                return;
+            }
+
+            // Validate the uploaded file
+            if (!validateImageFile(uploadFilename.c_str())) {
+                LittleFS.remove(uploadFilename);
+                server.send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JPG file\"}");
+                return;
+            }
+
+            // Add to config
+            int idx = addImageScreenConfig(uploadFilename.c_str());
+            if (idx < 0) {
+                LittleFS.remove(uploadFilename);
+                server.send(400, "application/json", "{\"success\":false,\"message\":\"Max images reached (3)\"}");
+                return;
+            }
+
+            saveWeatherConfig();
+
+            JsonDocument doc;
+            doc["success"] = true;
+            doc["message"] = "Image uploaded";
+            doc["index"] = idx;
+            doc["filename"] = uploadFilename;
+            doc["size"] = uploadSize;
+
+            String response;
+            serializeJson(doc, response);
+            server.send(200, "application/json", response);
+
+            Serial.printf("[IMAGE] Uploaded %s (%u bytes) at index %d\n",
+                         uploadFilename.c_str(), uploadSize, idx);
+        },
+        // Upload handler - called for each chunk of file data
+        []() {
+            HTTPUpload& upload = server.upload();
+
+            if (upload.status == UPLOAD_FILE_START) {
+                // Reset state
+                uploadError = false;
+                uploadErrorMsg = "";
+                uploadSize = 0;
+
+                // Check if we can add more images
+                if (getImageScreenCount() >= MAX_IMAGE_SCREENS) {
+                    uploadError = true;
+                    uploadErrorMsg = "Max images reached (3)";
+                    return;
+                }
+
+                // Create /images directory if needed
+                if (!LittleFS.exists("/images")) {
+                    LittleFS.mkdir("/images");
+                }
+
+                // Generate filename: /images/image_N.jpg
+                uploadFilename = "/images/image_" + String(getImageScreenCount()) + ".jpg";
+
+                uploadFile = LittleFS.open(uploadFilename, "w");
+                if (!uploadFile) {
+                    uploadError = true;
+                    uploadErrorMsg = "Failed to create file";
+                    return;
+                }
+
+                Serial.printf("[IMAGE] Upload start: %s\n", uploadFilename.c_str());
+
+            } else if (upload.status == UPLOAD_FILE_WRITE) {
+                if (uploadError) return;
+
+                // Check size limit
+                if (uploadSize + upload.currentSize > MAX_IMAGE_FILE_SIZE) {
+                    uploadError = true;
+                    uploadErrorMsg = "File too large (max 100KB)";
+                    uploadFile.close();
+                    return;
+                }
+
+                // Write chunk
+                if (uploadFile) {
+                    uploadFile.write(upload.buf, upload.currentSize);
+                    uploadSize += upload.currentSize;
+
+                    // Feed watchdog every 1KB
+                    static size_t lastFeed = 0;
+                    if (uploadSize - lastFeed >= 1024) {
+                        ESP.wdtFeed();
+                        yield();
+                        lastFeed = uploadSize;
+                    }
+                }
+
+            } else if (upload.status == UPLOAD_FILE_END) {
+                if (uploadFile) {
+                    uploadFile.close();
+                }
+                Serial.printf("[IMAGE] Upload complete: %u bytes\n", uploadSize);
+
+            } else if (upload.status == UPLOAD_FILE_ABORTED) {
+                if (uploadFile) {
+                    uploadFile.close();
+                }
+                if (uploadFilename.length() > 0 && LittleFS.exists(uploadFilename)) {
+                    LittleFS.remove(uploadFilename);
+                }
+                Serial.println("[IMAGE] Upload aborted");
+            }
+        }
+    );
 
     // Admin page - minimal location config
     server.on("/admin", HTTP_GET, handleAdmin);

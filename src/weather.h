@@ -28,11 +28,13 @@
 // Maximum number of locations supported
 #define MAX_WEATHER_LOCATIONS 5
 
-// Maximum carousel items (3 locations + 3 countdowns + 3 custom + 1 youtube = 10)
-#define MAX_CAROUSEL_ITEMS 10
+// Maximum carousel items (3 locations + 3 countdowns + 3 custom + 1 youtube + 3 images = 13)
+#define MAX_CAROUSEL_ITEMS 13
 #define MAX_COUNTDOWN_EVENTS 3
 #define MAX_CUSTOM_SCREENS 3
 #define MAX_YOUTUBE_CHANNELS 1
+#define MAX_IMAGE_SCREENS 3
+#define MAX_IMAGE_FILE_SIZE 102400  // 100KB max per image
 
 // =============================================================================
 // CAROUSEL & COUNTDOWN TYPES
@@ -45,7 +47,8 @@ enum CarouselItemType {
     CAROUSEL_LOCATION = 0,   // Weather location (shows 3 screens: current + 2 forecast)
     CAROUSEL_COUNTDOWN = 1,  // Countdown event (single screen)
     CAROUSEL_CUSTOM = 2,     // Custom text screen (single screen)
-    CAROUSEL_YOUTUBE = 3     // YouTube channel stats (single screen)
+    CAROUSEL_YOUTUBE = 3,    // YouTube channel stats (single screen)
+    CAROUSEL_IMAGE = 4       // Custom image screen (single screen)
 };
 
 /**
@@ -108,6 +111,14 @@ struct YouTubeConfig {
     char apiKey[48];        // YouTube Data API v3 key
     char channelHandle[32]; // Channel to display
     bool enabled;           // Is YouTube screen enabled?
+};
+
+/**
+ * Image screen configuration
+ */
+struct ImageScreenConfig {
+    char filename[24];      // e.g., "/images/image_0.jpg"
+    bool valid;             // Is image file present?
 };
 
 /**
@@ -637,5 +648,35 @@ bool saveYouTubeConfig();
  * Load YouTube config from LittleFS
  */
 bool loadYouTubeConfig();
+
+// =============================================================================
+// IMAGE SCREENS
+// =============================================================================
+
+/**
+ * Get number of image screens
+ */
+uint8_t getImageScreenCount();
+
+/**
+ * Get image screen config by index
+ */
+const ImageScreenConfig& getImageScreenConfig(uint8_t index);
+
+/**
+ * Add image screen (when file uploaded)
+ * @return index of new screen, or -1 if at max capacity
+ */
+int addImageScreenConfig(const char* filename);
+
+/**
+ * Remove image screen by index (also deletes file)
+ */
+bool removeImageScreenConfig(uint8_t index);
+
+/**
+ * Validate image file (check JPG header, size)
+ */
+bool validateImageFile(const char* filename);
 
 #endif // WEATHER_H

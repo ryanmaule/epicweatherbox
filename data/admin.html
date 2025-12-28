@@ -173,12 +173,14 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 <button class="btn btn-add" data-type="countdown" onclick="openModal('countdown')">+ Countdown</button>
 <button class="btn btn-add" data-type="custom" onclick="openModal('custom')">+ Custom Text</button>
 <button class="btn btn-add" data-type="youtube" onclick="openModal('youtube')">+ YouTube</button>
+<button class="btn btn-add" data-type="image" onclick="openModal('image')">+ Image</button>
 </div>
 <div class="carousel-counters">
 <span>Locations: <span id="loc-count">0</span>/3</span>
 <span>Countdowns: <span id="cd-count">0</span>/3</span>
 <span>Custom: <span id="cust-count">0</span>/3</span>
 <span>YouTube: <span id="yt-count">0</span>/1</span>
+<span>Images: <span id="img-count">0</span>/3</span>
 </div>
 <div class="btn-row" style="margin-top:15px">
 <button class="btn btn-primary" onclick="saveCarousel()">Save Carousel</button>
@@ -480,6 +482,26 @@ h1{color:#00d4ff;text-align:center;padding:15px 0;font-size:1.5em}
 </div>
 </div>
 
+<div id="modal-image" class="modal">
+<div class="modal-content">
+<h3 id="modal-image-title">Upload Image</h3>
+<div class="form-group">
+<label>Select JPG Image (max 100KB)</label>
+<input type="file" id="image-file" accept=".jpg,.jpeg" onchange="validateImagePreview()">
+<p style="font-size:0.75em;color:#666;margin-top:4px">Recommended size: 240x240 pixels. Images will be centered on display.</p>
+</div>
+<div id="image-preview-wrap" style="display:none;margin-top:10px;text-align:center">
+<img id="image-preview" style="max-width:200px;max-height:200px;border-radius:6px;border:1px solid #333">
+<div id="image-size" style="font-size:0.8em;color:#888;margin-top:5px"></div>
+</div>
+<div id="image-status"></div>
+<div class="modal-buttons">
+<button class="btn btn-secondary" onclick="closeModal('image')">Cancel</button>
+<button class="btn btn-primary" id="btn-image-upload" onclick="uploadImage()" disabled>Upload</button>
+</div>
+</div>
+</div>
+
 <script>
 // Data storage
 let carouselItems = [];
@@ -487,6 +509,7 @@ let locations = [];
 let countdowns = [];
 let customScreens = [];
 let youtubeData = null;  // YouTube configuration and stats
+let imageScreens = [];   // Image screen data
 let currentScreen = 0;
 let currentWeatherLocationIdx = 0;
 let weatherData = null;
@@ -510,7 +533,8 @@ const ICONS = {
     5: '📅'  // Custom
   },
   custom: '📝',
-  youtube: '▶️'
+  youtube: '▶️',
+  image: '🖼️'
 };
 
 const EVENT_NAMES = ['Birthday', 'Easter', 'Halloween', 'Valentine\'s', 'Christmas', 'Custom'];
@@ -595,6 +619,11 @@ function closeModal(type) {
     document.getElementById('new-cust-body').value = '';
     document.getElementById('new-cust-footer').value = '';
     document.getElementById('new-body-count').textContent = '0';
+  } else if (type === 'image') {
+    document.getElementById('image-file').value = '';
+    document.getElementById('image-preview-wrap').style.display = 'none';
+    document.getElementById('image-status').innerHTML = '';
+    document.getElementById('btn-image-upload').disabled = true;
   }
 }
 
@@ -629,7 +658,7 @@ function renderCarousel() {
   const list = document.getElementById('carousel-list');
   list.innerHTML = '';
 
-  let locCount = 0, cdCount = 0, custCount = 0, ytCount = 0;
+  let locCount = 0, cdCount = 0, custCount = 0, ytCount = 0, imgCount = 0;
 
   carouselItems.forEach((item, idx) => {
     const div = document.createElement('div');
@@ -665,6 +694,12 @@ function renderCarousel() {
       title = youtubeData?.channelName || youtubeData?.channelHandle || 'YouTube';
       desc = youtubeData?.valid ? `${formatNumber(youtubeData.subscribers)} subscribers` : 'Channel stats';
       ytCount++;
+    } else if (item.type === 4) { // Image
+      const img = imageScreens[item.dataIndex] || {};
+      icon = ICONS.image;
+      title = img.filename ? img.filename.split('/').pop() : 'Image ' + (item.dataIndex + 1);
+      desc = img.size ? formatBytes(img.size) : (img.valid ? 'Uploaded' : 'Not found');
+      imgCount++;
     }
 
     div.innerHTML = `
@@ -703,14 +738,15 @@ function renderCarousel() {
   document.getElementById('cd-count').textContent = cdCount;
   document.getElementById('cust-count').textContent = custCount;
   document.getElementById('yt-count').textContent = ytCount;
+  document.getElementById('img-count').textContent = imgCount;
 
   // Update add button states based on limits
-  updateAddButtonStates(locCount, cdCount, custCount, ytCount);
+  updateAddButtonStates(locCount, cdCount, custCount, ytCount, imgCount);
 }
 
-function updateAddButtonStates(locCount, cdCount, custCount, ytCount) {
-  const limits = { location: 3, countdown: 3, custom: 3, youtube: 1 };
-  const counts = { location: locCount, countdown: cdCount, custom: custCount, youtube: ytCount };
+function updateAddButtonStates(locCount, cdCount, custCount, ytCount, imgCount) {
+  const limits = { location: 3, countdown: 3, custom: 3, youtube: 1, image: 3 };
+  const counts = { location: locCount, countdown: cdCount, custom: custCount, youtube: ytCount, image: imgCount };
 
   document.querySelectorAll('.add-buttons .btn-add').forEach(btn => {
     const type = btn.dataset.type;
@@ -1975,8 +2011,143 @@ async function testYouTube() {
   }
 }
 
+// Image functions
+async function loadImages() {
+  try {
+    const r = await fetch('/api/images');
+    const data = await r.json();
+    imageScreens = data.images || [];
+    renderCarousel();  // Re-render to update image info
+  } catch (e) {
+    console.error('Failed to load images:', e);
+  }
+}
+
+function validateImagePreview() {
+  const fileInput = document.getElementById('image-file');
+  const previewWrap = document.getElementById('image-preview-wrap');
+  const previewImg = document.getElementById('image-preview');
+  const sizeDiv = document.getElementById('image-size');
+  const uploadBtn = document.getElementById('btn-image-upload');
+
+  if (!fileInput.files || !fileInput.files[0]) {
+    previewWrap.style.display = 'none';
+    uploadBtn.disabled = true;
+    return;
+  }
+
+  const file = fileInput.files[0];
+
+  // Check file type
+  if (!file.type.match(/image\/jpe?g/)) {
+    showStatus('image-status', 'error', 'Only JPG files are supported');
+    previewWrap.style.display = 'none';
+    uploadBtn.disabled = true;
+    return;
+  }
+
+  // Check file size (100KB max)
+  if (file.size > 102400) {
+    showStatus('image-status', 'error', 'File too large (max 100KB). Current: ' + formatBytes(file.size));
+    previewWrap.style.display = 'none';
+    uploadBtn.disabled = true;
+    return;
+  }
+
+  // Show preview
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    previewImg.src = e.target.result;
+    previewWrap.style.display = 'block';
+    sizeDiv.textContent = formatBytes(file.size);
+  };
+  reader.readAsDataURL(file);
+
+  showStatus('image-status', 'success', 'Ready to upload');
+  uploadBtn.disabled = false;
+}
+
+async function uploadImage() {
+  const fileInput = document.getElementById('image-file');
+  if (!fileInput.files || !fileInput.files[0]) {
+    showStatus('image-status', 'error', 'No file selected');
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const formData = new FormData();
+  formData.append('file', file);
+
+  showStatus('image-status', 'success', 'Uploading...');
+  document.getElementById('btn-image-upload').disabled = true;
+
+  try {
+    const r = await fetch('/api/upload/image', {
+      method: 'POST',
+      body: formData
+    });
+    const result = await r.json();
+
+    if (result.success) {
+      // Add to carousel
+      carouselItems.push({ type: 4, dataIndex: result.index });
+      closeModal('image');
+      await loadImages();  // Refresh image list
+      renderCarousel();
+      showStatus('carousel-status', 'success', 'Image uploaded! Remember to save carousel.');
+    } else {
+      showStatus('image-status', 'error', result.message || 'Upload failed');
+      document.getElementById('btn-image-upload').disabled = false;
+    }
+  } catch (e) {
+    showStatus('image-status', 'error', 'Upload failed: ' + e.message);
+    document.getElementById('btn-image-upload').disabled = false;
+  }
+}
+
+async function deleteImage(index) {
+  if (!confirm('Delete this image?')) return;
+
+  try {
+    const formData = new FormData();
+    formData.append('index', index);
+
+    const r = await fetch('/api/images/delete', {
+      method: 'POST',
+      body: formData
+    });
+    const result = await r.json();
+
+    if (result.success) {
+      // Remove from carousel
+      carouselItems = carouselItems.filter(item => !(item.type === 4 && item.dataIndex === index));
+      // Adjust dataIndex for remaining image items
+      carouselItems.forEach(item => {
+        if (item.type === 4 && item.dataIndex > index) {
+          item.dataIndex--;
+        }
+      });
+      await loadImages();
+      renderCarousel();
+    } else {
+      alert(result.message || 'Delete failed');
+    }
+  } catch (e) {
+    alert('Delete failed: ' + e.message);
+  }
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
 loadData();
 loadYouTube();
+loadImages();
 initLocationSearch();
 setInterval(loadData, 60000);
 </script>

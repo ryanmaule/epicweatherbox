@@ -81,6 +81,15 @@ static unsigned long youtubeLastUpdateTime = 0;
 static bool youtubeInitialized = false;
 static const char* YOUTUBE_CONFIG_FILE = "/youtube_config.json";
 
+// Image screens
+static ImageScreenConfig imageScreens[MAX_IMAGE_SCREENS] = {
+    {"", false},
+    {"", false},
+    {"", false}
+};
+static uint8_t imageScreenCount = 0;
+static ImageScreenConfig emptyImageScreen = {"", false};
+
 // Timing
 static unsigned long lastUpdateTime = 0;
 static bool initialized = false;
@@ -1149,6 +1158,13 @@ bool saveWeatherConfig() {
         screen["footer"] = customScreens[i].footer;
     }
 
+    // Image screens
+    JsonArray imageArray = doc["imageScreens"].to<JsonArray>();
+    for (uint8_t i = 0; i < imageScreenCount; i++) {
+        JsonObject screen = imageArray.add<JsonObject>();
+        screen["filename"] = imageScreens[i].filename;
+    }
+
     File file = LittleFS.open(WEATHER_CONFIG_FILE, "w");
     if (!file) {
         Serial.println(F("[WEATHER] Failed to open config file for writing"));
@@ -1368,6 +1384,23 @@ bool loadWeatherConfig() {
             customScreenCount++;
         }
         Serial.printf("[WEATHER] Loaded %d custom screens\n", customScreenCount);
+    }
+
+    // Load image screens
+    if (doc["imageScreens"].is<JsonArray>()) {
+        JsonArray imageArray = doc["imageScreens"].as<JsonArray>();
+        imageScreenCount = 0;
+        for (JsonObject screen : imageArray) {
+            if (imageScreenCount >= MAX_IMAGE_SCREENS) break;
+            const char* fn = screen["filename"];
+            if (fn) {
+                strncpy(imageScreens[imageScreenCount].filename, fn, sizeof(imageScreens[imageScreenCount].filename) - 1);
+                imageScreens[imageScreenCount].filename[sizeof(imageScreens[imageScreenCount].filename) - 1] = '\0';
+                imageScreens[imageScreenCount].valid = LittleFS.exists(fn);
+            }
+            imageScreenCount++;
+        }
+        Serial.printf("[WEATHER] Loaded %d image screens\n", imageScreenCount);
     }
 
     // Log loaded locations
@@ -1745,4 +1778,109 @@ bool loadYouTubeConfig() {
     Serial.printf("[YOUTUBE] Config loaded (enabled=%d, channel=%s)\n",
                   youtubeConfig.enabled, youtubeConfig.channelHandle);
     return true;
+}
+
+// =============================================================================
+// IMAGE SCREENS
+// =============================================================================
+
+/**
+ * Get number of image screens
+ */
+uint8_t getImageScreenCount() {
+    return imageScreenCount;
+}
+
+/**
+ * Get image screen config by index
+ */
+const ImageScreenConfig& getImageScreenConfig(uint8_t index) {
+    if (index >= imageScreenCount) {
+        return emptyImageScreen;
+    }
+    return imageScreens[index];
+}
+
+/**
+ * Add image screen (when file uploaded)
+ * @return index of new screen, or -1 if at max capacity
+ */
+int addImageScreenConfig(const char* filename) {
+    if (imageScreenCount >= MAX_IMAGE_SCREENS) {
+        Serial.println(F("[IMAGE] Cannot add - at max capacity"));
+        return -1;
+    }
+    int idx = imageScreenCount;
+    if (filename) {
+        strncpy(imageScreens[idx].filename, filename, sizeof(imageScreens[idx].filename) - 1);
+        imageScreens[idx].filename[sizeof(imageScreens[idx].filename) - 1] = '\0';
+        imageScreens[idx].valid = LittleFS.exists(filename);
+    }
+    imageScreenCount++;
+    Serial.printf("[IMAGE] Added screen %d: %s\n", idx, filename);
+    return idx;
+}
+
+/**
+ * Remove image screen by index (also deletes file)
+ */
+bool removeImageScreenConfig(uint8_t index) {
+    if (index >= imageScreenCount) {
+        return false;
+    }
+
+    // Delete the file from LittleFS
+    if (strlen(imageScreens[index].filename) > 0) {
+        if (LittleFS.exists(imageScreens[index].filename)) {
+            LittleFS.remove(imageScreens[index].filename);
+            Serial.printf("[IMAGE] Deleted file: %s\n", imageScreens[index].filename);
+        }
+    }
+
+    // Shift items down
+    for (uint8_t i = index; i < imageScreenCount - 1; i++) {
+        imageScreens[i] = imageScreens[i + 1];
+    }
+    imageScreenCount--;
+
+    // Clear the last slot
+    imageScreens[imageScreenCount].filename[0] = '\0';
+    imageScreens[imageScreenCount].valid = false;
+
+    Serial.printf("[IMAGE] Removed screen at index %d, now %d screens\n", index, imageScreenCount);
+    return true;
+}
+
+/**
+ * Validate image file (check JPG header, size)
+ */
+bool validateImageFile(const char* filename) {
+    if (!filename || !LittleFS.exists(filename)) {
+        return false;
+    }
+
+    File f = LittleFS.open(filename, "r");
+    if (!f) return false;
+
+    // Check file size
+    size_t size = f.size();
+    if (size > MAX_IMAGE_FILE_SIZE || size < 100) {  // Too big or too small
+        f.close();
+        Serial.printf("[IMAGE] File size invalid: %u bytes\n", size);
+        return false;
+    }
+
+    // Check JPG magic bytes (0xFF 0xD8 0xFF)
+    uint8_t header[3];
+    if (f.read(header, 3) != 3) {
+        f.close();
+        return false;
+    }
+    f.close();
+
+    bool isJpeg = (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF);
+    if (!isJpeg) {
+        Serial.println(F("[IMAGE] Invalid JPG header"));
+    }
+    return isJpeg;
 }
