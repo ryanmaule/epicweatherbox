@@ -2870,27 +2870,67 @@ void setupWebServer() {
 
                 count++;
             }
+
+            // Clean up orphaned images and build index remap
+            // We need to: 1) delete unused images, 2) remap carousel indices
+            int indexRemap[MAX_IMAGE_SCREENS];  // old index -> new index
+            int newIdx = 0;
+            int imgCount = getImageScreenCount();
+
+            for (int i = 0; i < imgCount; i++) {
+                if (usedImages[i]) {
+                    indexRemap[i] = newIdx++;
+                } else {
+                    indexRemap[i] = -1;  // Will be deleted
+                }
+            }
+
+            // Delete orphaned images (iterate backwards to avoid index shifting issues)
+            // Note: removeImageScreenConfig already handles file deletion
+            for (int i = imgCount - 1; i >= 0; i--) {
+                if (!usedImages[i]) {
+                    Serial.printf("[API] Removing orphaned image at index %d\n", i);
+                    removeImageScreenConfig(i);
+                    yield();  // Let system breathe
+                }
+            }
+
+            // Update carousel items with remapped image indices
+            for (uint8_t i = 0; i < count; i++) {
+                if (items[i].type == CAROUSEL_IMAGE) {
+                    int oldIdx = items[i].dataIndex;
+                    if (oldIdx < MAX_IMAGE_SCREENS && indexRemap[oldIdx] >= 0) {
+                        items[i].dataIndex = indexRemap[oldIdx];
+                    }
+                }
+            }
+
             setCarousel(items, count);
             Serial.printf("[API] Updated carousel with %d items\n", count);
+        }
 
-            // Clean up orphaned images (images not in the carousel)
-            for (int i = getImageScreenCount() - 1; i >= 0; i--) {
-                if (!usedImages[i]) {
-                    const ImageScreenConfig& img = getImageScreenConfig(i);
-                    Serial.printf("[API] Removing orphaned image: %s\n", img.filename);
-                    if (LittleFS.exists(img.filename)) {
-                        LittleFS.remove(img.filename);
-                    }
-                    removeImageScreenConfig(i);
-                }
+        // Save config
+        saveWeatherConfig();
+
+        // Check if we have any location screens that need weather data
+        bool hasLocationScreens = false;
+        uint8_t carouselCount = getCarouselCount();
+        for (uint8_t i = 0; i < carouselCount; i++) {
+            if (getCarouselItem(i).type == CAROUSEL_LOCATION) {
+                hasLocationScreens = true;
+                break;
             }
         }
 
-        // Save and refresh weather
-        saveWeatherConfig();
-        forceWeatherUpdate();
-
+        // Send response first
         server.send(200, "application/json", "{\"success\":true,\"message\":\"Config saved\"}");
+
+        // Only refresh weather if we have location screens (saves memory/time)
+        if (hasLocationScreens) {
+            yield();
+            Serial.printf("[API] Refreshing weather, free heap: %d\n", ESP.getFreeHeap());
+            forceWeatherUpdate();
+        }
     });
 
     // Themes API - GET returns all themes, POST updates custom theme

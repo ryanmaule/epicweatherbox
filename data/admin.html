@@ -518,6 +518,7 @@ let currentScreen = 0;
 let currentWeatherLocationIdx = 0;
 let weatherData = null;
 let themeData = null;
+let initComplete = false;  // Flag to prevent early rendering during init
 
 // Edit mode tracking
 let editingItem = null; // {carouselIdx, type, dataIndex} when editing, null when adding
@@ -1271,7 +1272,7 @@ function updateConfig(c) {
   document.getElementById('night-brightness-val').textContent = (c.nightModeBrightness || 20) + '%';
   document.getElementById('night-mode-settings').style.display = (c.nightModeEnabled !== false) ? 'block' : 'none';
 
-  renderCarousel();
+  if (initComplete) renderCarousel();  // Only render after init completes
 }
 
 function drawPreview(data) {
@@ -1972,7 +1973,7 @@ async function loadYouTube() {
     const data = await r.json();
     youtubeData = data;  // Store for carousel display
     updateYouTubeUI(data);
-    renderCarousel();  // Re-render to update YouTube button visibility
+    if (initComplete) renderCarousel();  // Only re-render after init
   } catch (e) {
     console.error('Failed to load YouTube data:', e);
   }
@@ -2107,7 +2108,7 @@ async function loadImages() {
     const r = await fetch('/api/images');
     const data = await r.json();
     imageScreens = data.images || [];
-    renderCarousel();  // Re-render to update image info
+    if (initComplete) renderCarousel();  // Only re-render after init
   } catch (e) {
     console.error('Failed to load images:', e);
   }
@@ -2270,9 +2271,25 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
-loadData();
-loadYouTube();
-loadImages();
+// Initialize all data before rendering
+async function init() {
+  try {
+    // Load all data sources in parallel
+    await Promise.all([
+      loadData(),
+      loadYouTube(),
+      loadImages()
+    ]);
+    // Mark init complete and render carousel
+    initComplete = true;
+    renderCarousel();
+  } catch (e) {
+    console.error('Init error:', e);
+    initComplete = true;  // Still allow rendering on error
+  }
+}
+
+init();
 initLocationSearch();
 setInterval(loadData, 60000);
 </script>
