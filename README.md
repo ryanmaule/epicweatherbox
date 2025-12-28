@@ -4,13 +4,14 @@ Custom open-source firmware for the GeekMagic SmallTV-Ultra, transforming it int
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-ESP8266-orange.svg)
-![Version](https://img.shields.io/badge/version-1.8.1-green.svg)
+![Version](https://img.shields.io/badge/version-1.10.12-green.svg)
 
 ## Features
 
 - **7-Day Weather Forecast** - Extended forecast with high/low temps and precipitation probability
 - **Multi-Location Support** - Monitor up to 3 weather locations, cycling through each automatically
 - **YouTube Stats** - Display your channel's subscriber count, views, and video count
+- **Custom Image Screens** - Upload up to 3 JPG images to display in rotation
 - **Countdown Timers** - Track days until birthdays, holidays, or custom events
 - **Custom Text Screens** - Display custom messages in the rotation
 - **Unified Carousel** - Drag-and-drop reordering of all screen types with inline editing
@@ -216,6 +217,13 @@ epicweatherbox/
 - Upload working firmware via `/update`
 
 ## Version History
+
+### v1.10.12 (2025-12-28)
+- **Custom Image Screens** - Upload up to 3 JPG images to display in rotation
+- Header text for image screens (optional label in top-right)
+- Streaming JPEG decode for memory efficiency
+- Fixed admin panel initialization race condition
+- Orphaned image cleanup on carousel save
 
 ### v1.8.1 (2025-12-26)
 - **Enhanced Recovery Mode** - Captive portal with WiFi join option before flashing
