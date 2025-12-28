@@ -1965,10 +1965,14 @@ void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
     tft.setFreeFont(FSS9);
     tft.drawString(ampm, 10 + timeW, 12 + yOff, GFXFF);
 
-    // "Image" label on right (similar to custom screen)
+    // Get image config for header text
+    const ImageScreenConfig& config = getImageScreenConfig(imageIndex);
+
+    // Header label on right - use custom header or "Image" as fallback
     tft.setTextDatum(TR_DATUM);
     tft.setTextColor(grayColor);
-    tft.drawString("Image", 210, 8 + yOff, GFXFF);
+    const char* headerText = (config.header[0] != '\0') ? config.header : "Image";
+    tft.drawString(headerText, 210, 8 + yOff, GFXFF);
 
     // Star icon in top-right corner
     tft.setTextColor(cyanColor);
@@ -1978,8 +1982,6 @@ void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
     // Content area starts below header (y ~35) and ends above dots (y ~220)
     int contentY = 35 + yOff;
     int contentH = 185;  // Available height for image
-
-    const ImageScreenConfig& config = getImageScreenConfig(imageIndex);
 
     if (config.valid && config.filename[0] != '\0') {
         // Try to decode and display the JPEG
@@ -2852,14 +2854,36 @@ void setupWebServer() {
             JsonArray carouselArray = doc["carousel"].as<JsonArray>();
             CarouselItem items[MAX_CAROUSEL_ITEMS];
             uint8_t count = 0;
+
+            // Track which image indices are used in the new carousel
+            bool usedImages[MAX_IMAGE_SCREENS] = {false};
+
             for (JsonObject c : carouselArray) {
                 if (count >= MAX_CAROUSEL_ITEMS) break;
                 items[count].type = c["type"] | 0;
                 items[count].dataIndex = c["dataIndex"] | 0;
+
+                // Mark image indices that are in use
+                if (items[count].type == CAROUSEL_IMAGE && items[count].dataIndex < MAX_IMAGE_SCREENS) {
+                    usedImages[items[count].dataIndex] = true;
+                }
+
                 count++;
             }
             setCarousel(items, count);
             Serial.printf("[API] Updated carousel with %d items\n", count);
+
+            // Clean up orphaned images (images not in the carousel)
+            for (int i = getImageScreenCount() - 1; i >= 0; i--) {
+                if (!usedImages[i]) {
+                    const ImageScreenConfig& img = getImageScreenConfig(i);
+                    Serial.printf("[API] Removing orphaned image: %s\n", img.filename);
+                    if (LittleFS.exists(img.filename)) {
+                        LittleFS.remove(img.filename);
+                    }
+                    removeImageScreenConfig(i);
+                }
+            }
         }
 
         // Save and refresh weather
@@ -3119,6 +3143,7 @@ void setupWebServer() {
             JsonObject imgObj = images.add<JsonObject>();
             imgObj["index"] = i;
             imgObj["filename"] = img.filename;
+            imgObj["header"] = img.header;
             imgObj["valid"] = img.valid;
 
             // Get file size if valid
@@ -3161,13 +3186,44 @@ void setupWebServer() {
         }
     });
 
+    // POST /api/images/update - update image header (JSON body)
+    server.on("/api/images/update", HTTP_POST, []() {
+        if (!server.hasArg("plain")) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Missing body\"}");
+            return;
+        }
+
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, server.arg("plain"));
+        if (err) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
+            return;
+        }
+
+        int index = doc["index"] | -1;
+        if (index < 0 || index >= (int)getImageScreenCount()) {
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Invalid index\"}");
+            return;
+        }
+
+        const char* header = doc["header"] | "";
+        if (updateImageScreenHeader(index, header)) {
+            saveWeatherConfig();
+            server.send(200, "application/json", "{\"success\":true,\"message\":\"Header updated\"}");
+        } else {
+            server.send(500, "application/json", "{\"success\":false,\"message\":\"Failed to update header\"}");
+        }
+    });
+
     // POST /api/upload/image - upload a new image (multipart form)
     // Static variables for upload state
     static File uploadFile;
     static String uploadFilename;
+    static String uploadHeader;  // Header text from form
     static size_t uploadSize;
     static bool uploadError;
     static String uploadErrorMsg;
+    static int replaceIndex;  // -1 for new, >= 0 for replacing existing
 
     server.on("/api/upload/image", HTTP_POST,
         // Completion handler - called after upload finishes
@@ -3188,19 +3244,30 @@ void setupWebServer() {
                 return;
             }
 
-            // Add to config
-            int idx = addImageScreenConfig(uploadFilename.c_str());
-            if (idx < 0) {
-                LittleFS.remove(uploadFilename);
-                server.send(400, "application/json", "{\"success\":false,\"message\":\"Max images reached (3)\"}");
-                return;
+            int idx;
+            if (replaceIndex >= 0) {
+                // Replacing existing - just use the same index, update header
+                idx = replaceIndex;
+                updateImageScreenHeader(idx, uploadHeader.c_str());
+                Serial.printf("[IMAGE] Replaced %s (%u bytes) at index %d (header: %s)\n",
+                             uploadFilename.c_str(), uploadSize, idx, uploadHeader.c_str());
+            } else {
+                // Add to config with header
+                idx = addImageScreenConfig(uploadFilename.c_str(), uploadHeader.c_str());
+                if (idx < 0) {
+                    LittleFS.remove(uploadFilename);
+                    server.send(400, "application/json", "{\"success\":false,\"message\":\"Max images reached (3)\"}");
+                    return;
+                }
+                Serial.printf("[IMAGE] Uploaded %s (%u bytes) at index %d (header: %s)\n",
+                             uploadFilename.c_str(), uploadSize, idx, uploadHeader.c_str());
             }
 
             saveWeatherConfig();
 
             JsonDocument doc;
             doc["success"] = true;
-            doc["message"] = "Image uploaded";
+            doc["message"] = replaceIndex >= 0 ? "Image replaced" : "Image uploaded";
             doc["index"] = idx;
             doc["filename"] = uploadFilename;
             doc["size"] = uploadSize;
@@ -3208,9 +3275,6 @@ void setupWebServer() {
             String response;
             serializeJson(doc, response);
             server.send(200, "application/json", response);
-
-            Serial.printf("[IMAGE] Uploaded %s (%u bytes) at index %d\n",
-                         uploadFilename.c_str(), uploadSize, idx);
         },
         // Upload handler - called for each chunk of file data
         []() {
@@ -3221,9 +3285,32 @@ void setupWebServer() {
                 uploadError = false;
                 uploadErrorMsg = "";
                 uploadSize = 0;
+                replaceIndex = -1;
+                uploadHeader = "";
 
-                // Check if we can add more images
-                if (getImageScreenCount() >= MAX_IMAGE_SCREENS) {
+                // Get header text from form data
+                if (server.hasArg("header")) {
+                    uploadHeader = server.arg("header");
+                    // Truncate to max 16 chars
+                    if (uploadHeader.length() > 16) {
+                        uploadHeader = uploadHeader.substring(0, 16);
+                    }
+                }
+
+                // Check for replaceIndex in form data (for edit mode)
+                if (server.hasArg("replaceIndex")) {
+                    replaceIndex = server.arg("replaceIndex").toInt();
+                    if (replaceIndex >= 0 && replaceIndex < (int)getImageScreenCount()) {
+                        // Use existing filename
+                        const ImageScreenConfig& img = getImageScreenConfig(replaceIndex);
+                        uploadFilename = img.filename;
+                    } else {
+                        replaceIndex = -1;  // Invalid index, treat as new upload
+                    }
+                }
+
+                // If not replacing, check if we can add more images
+                if (replaceIndex < 0 && getImageScreenCount() >= MAX_IMAGE_SCREENS) {
                     uploadError = true;
                     uploadErrorMsg = "Max images reached (3)";
                     return;
@@ -3234,8 +3321,10 @@ void setupWebServer() {
                     LittleFS.mkdir("/images");
                 }
 
-                // Generate filename: /images/image_N.jpg
-                uploadFilename = "/images/image_" + String(getImageScreenCount()) + ".jpg";
+                // Generate filename for new uploads
+                if (replaceIndex < 0) {
+                    uploadFilename = "/images/image_" + String(getImageScreenCount()) + ".jpg";
+                }
 
                 uploadFile = LittleFS.open(uploadFilename, "w");
                 if (!uploadFile) {
@@ -3244,7 +3333,7 @@ void setupWebServer() {
                     return;
                 }
 
-                Serial.printf("[IMAGE] Upload start: %s\n", uploadFilename.c_str());
+                Serial.printf("[IMAGE] Upload start: %s (replace=%d)\n", uploadFilename.c_str(), replaceIndex);
 
             } else if (upload.status == UPLOAD_FILE_WRITE) {
                 if (uploadError) return;

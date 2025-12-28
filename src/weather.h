@@ -118,6 +118,7 @@ struct YouTubeConfig {
  */
 struct ImageScreenConfig {
     char filename[24];      // e.g., "/images/image_0.jpg"
+    char header[17];        // Header text (16 chars + null)
     bool valid;             // Is image file present?
 };
 
@@ -667,7 +668,12 @@ const ImageScreenConfig& getImageScreenConfig(uint8_t index);
  * Add image screen (when file uploaded)
  * @return index of new screen, or -1 if at max capacity
  */
-int addImageScreenConfig(const char* filename);
+int addImageScreenConfig(const char* filename, const char* header = "");
+
+/**
+ * Update image screen header
+ */
+bool updateImageScreenHeader(uint8_t index, const char* header);
 
 /**
  * Remove image screen by index (also deletes file)

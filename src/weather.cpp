@@ -1163,6 +1163,7 @@ bool saveWeatherConfig() {
     for (uint8_t i = 0; i < imageScreenCount; i++) {
         JsonObject screen = imageArray.add<JsonObject>();
         screen["filename"] = imageScreens[i].filename;
+        screen["header"] = imageScreens[i].header;
     }
 
     File file = LittleFS.open(WEATHER_CONFIG_FILE, "w");
@@ -1397,6 +1398,14 @@ bool loadWeatherConfig() {
                 strncpy(imageScreens[imageScreenCount].filename, fn, sizeof(imageScreens[imageScreenCount].filename) - 1);
                 imageScreens[imageScreenCount].filename[sizeof(imageScreens[imageScreenCount].filename) - 1] = '\0';
                 imageScreens[imageScreenCount].valid = LittleFS.exists(fn);
+            }
+            // Load header text
+            const char* hdr = screen["header"];
+            if (hdr) {
+                strncpy(imageScreens[imageScreenCount].header, hdr, sizeof(imageScreens[imageScreenCount].header) - 1);
+                imageScreens[imageScreenCount].header[sizeof(imageScreens[imageScreenCount].header) - 1] = '\0';
+            } else {
+                imageScreens[imageScreenCount].header[0] = '\0';
             }
             imageScreenCount++;
         }
@@ -1805,7 +1814,7 @@ const ImageScreenConfig& getImageScreenConfig(uint8_t index) {
  * Add image screen (when file uploaded)
  * @return index of new screen, or -1 if at max capacity
  */
-int addImageScreenConfig(const char* filename) {
+int addImageScreenConfig(const char* filename, const char* header) {
     if (imageScreenCount >= MAX_IMAGE_SCREENS) {
         Serial.println(F("[IMAGE] Cannot add - at max capacity"));
         return -1;
@@ -1816,9 +1825,33 @@ int addImageScreenConfig(const char* filename) {
         imageScreens[idx].filename[sizeof(imageScreens[idx].filename) - 1] = '\0';
         imageScreens[idx].valid = LittleFS.exists(filename);
     }
+    // Set header text
+    if (header) {
+        strncpy(imageScreens[idx].header, header, sizeof(imageScreens[idx].header) - 1);
+        imageScreens[idx].header[sizeof(imageScreens[idx].header) - 1] = '\0';
+    } else {
+        imageScreens[idx].header[0] = '\0';
+    }
     imageScreenCount++;
-    Serial.printf("[IMAGE] Added screen %d: %s\n", idx, filename);
+    Serial.printf("[IMAGE] Added screen %d: %s (header: %s)\n", idx, filename, header ? header : "");
     return idx;
+}
+
+/**
+ * Update image screen header text
+ */
+bool updateImageScreenHeader(uint8_t index, const char* header) {
+    if (index >= imageScreenCount) {
+        return false;
+    }
+    if (header) {
+        strncpy(imageScreens[index].header, header, sizeof(imageScreens[index].header) - 1);
+        imageScreens[index].header[sizeof(imageScreens[index].header) - 1] = '\0';
+    } else {
+        imageScreens[index].header[0] = '\0';
+    }
+    Serial.printf("[IMAGE] Updated screen %d header: %s\n", index, header ? header : "");
+    return true;
 }
 
 /**
