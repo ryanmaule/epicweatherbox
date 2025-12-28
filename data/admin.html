@@ -1056,6 +1056,12 @@ async function saveCarousel() {
     } else if (item.type === 3) { // YouTube
       // YouTube has no dataIndex array - just add type 3 with dataIndex 0
       newCarousel.push({ type: 3, dataIndex: 0 });
+    } else if (item.type === 4) { // Image
+      // Image screens are stored separately, just preserve the carousel entry
+      const img = imageScreens[item.dataIndex];
+      if (img) {
+        newCarousel.push({ type: 4, dataIndex: item.dataIndex });
+      }
     }
   });
 
