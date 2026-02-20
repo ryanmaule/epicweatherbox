@@ -6,11 +6,10 @@
  */
 
 #include "ota.h"
-#include <ESP8266mDNS.h>
 
 // State tracking
 static bool otaInProgress = false;
-static ESP8266HTTPUpdateServer httpUpdateServer;
+static PlatformHTTPUpdateServer httpUpdateServer;
 
 // Store HTML in PROGMEM to save RAM
 static const char OTA_UPDATE_HTML[] PROGMEM = R"rawliteral(
@@ -309,7 +308,7 @@ void initArduinoOTA(const char* hostname) {
 /**
  * Initialize web-based OTA update server
  */
-void initWebOTA(ESP8266WebServer* server) {
+void initWebOTA(PlatformWebServer* server) {
     // Serve the update page
     server->on(OTA_UPDATE_PATH, HTTP_GET, [server]() {
         server->send(200, "text/html", FPSTR(OTA_UPDATE_HTML));

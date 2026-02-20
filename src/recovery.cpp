@@ -10,6 +10,10 @@
  *
  * Use this to flash the full firmware when the stock firmware
  * doesn't have enough space for a direct OTA update.
+ *
+ * NOTE: This file intentionally uses ESP8266-specific APIs directly
+ * and does NOT include platform.h. Recovery firmware is inherently
+ * platform-specific — each target platform has its own recovery image.
  */
 
 #include <Arduino.h>

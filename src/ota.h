@@ -10,10 +10,8 @@
 #define OTA_H
 
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include "platform.h"
 #include <ArduinoOTA.h>
-#include <ESP8266HTTPUpdateServer.h>
 
 // OTA Configuration
 #define OTA_HOSTNAME "epicweatherbox"
@@ -38,9 +36,9 @@ void initArduinoOTA(const char* hostname = OTA_HOSTNAME);
  * Initialize web-based OTA update server
  * Adds /update endpoint to the provided web server
  *
- * @param server Pointer to ESP8266WebServer instance
+ * @param server Pointer to PlatformWebServer instance
  */
-void initWebOTA(ESP8266WebServer* server);
+void initWebOTA(PlatformWebServer* server);
 
 /**
  * Handle OTA in main loop

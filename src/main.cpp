@@ -17,22 +17,16 @@
  */
 
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
-#include <ESP8266HTTPClient.h>
+#include "platform.h"
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 
-// Enable hardware watchdog
-extern "C" {
-    #include <user_interface.h>
-}
-
 // Local includes
 #include "config.h"
+#include "display_layout.h"
 #include "ota.h"
 #include "weather.h"
 #include "themes.h"      // Theme system with color management
@@ -109,7 +103,7 @@ static int lastAppliedBrightness = -1;
 void applyBrightness(int brightness) {
     if (brightness != lastAppliedBrightness) {
         int pwmValue = 100 - constrain(brightness, 0, 100);  // Invert: 100% brightness = PWM 0
-        analogWrite(TFT_BL_PIN, pwmValue);
+        platformPwmWrite(TFT_BL_PIN, pwmValue);
         lastAppliedBrightness = brightness;
         Serial.printf("[TFT] Brightness set to %d%% (PWM: %d)\n", brightness, pwmValue);
     }
@@ -550,12 +544,12 @@ void initTftMinimal() {
 
     // Setup backlight pin FIRST
     pinMode(TFT_BL_PIN, OUTPUT);
-    analogWriteRange(100);
-    analogWriteFreq(1000);
+    platformPwmSetRange(100);
+    platformPwmSetFreq(1000);
     applyBrightness(getBrightness());
     Serial.println(F("[TFT] Backlight on"));
 
-    ESP.wdtFeed();
+    platformWdtFeed();
     yield();
 
     // Initialize TFT
@@ -564,7 +558,7 @@ void initTftMinimal() {
     tft.setRotation(0);
     Serial.println(F("[TFT] tft.init() complete"));
 
-    ESP.wdtFeed();
+    platformWdtFeed();
     yield();
 
     // Draw boot screen with smooth fonts
@@ -574,7 +568,7 @@ void initTftMinimal() {
 
     // Draw sun logo at top center (y=50, radius=22)
     // Colors: Yellow 0xFEE0, Orange 0xFBE0 (for face features)
-    int sunX = 120, sunY = 50, sunR = 22;
+    int sunX = SCREEN_CENTER_X, sunY = 50, sunR = 22;
     uint16_t sunYellow = 0xFEE0;  // Bright yellow
     uint16_t sunOrange = 0xFBE0;  // Orange for face
 
@@ -608,20 +602,20 @@ void initTftMinimal() {
     // "Epic" in bold 18pt cyan
     tft.setFreeFont(FSSB18);
     tft.setTextColor(0x07FF);  // Cyan
-    tft.drawString("Epic", 120, 100, GFXFF);
+    tft.drawString("Epic", SCREEN_CENTER_X, 100, GFXFF);
 
     // "WeatherBox" in bold 18pt white
     tft.setTextColor(0xFFFF);  // White
-    tft.drawString("WeatherBox", 120, 135, GFXFF);
+    tft.drawString("WeatherBox", SCREEN_CENTER_X, 135, GFXFF);
 
     // Version in small gray
     tft.setFreeFont(FSS9);
     tft.setTextColor(0x8410);  // Gray
-    tft.drawString("v" FIRMWARE_VERSION, 120, 170, GFXFF);
+    tft.drawString("v" FIRMWARE_VERSION, SCREEN_CENTER_X, 170, GFXFF);
 
-    // Status text at bottom (y=218 to match IP position - keeps 4+ pixels from bottom edge)
+    // Status text at bottom (y=BOOT_TEXT_Y keeps 4+ pixels from bottom edge)
     tft.setTextColor(0x4208);  // Dark gray
-    tft.drawString("Connecting...", 120, 218, GFXFF);
+    tft.drawString("Connecting...", SCREEN_CENTER_X, BOOT_TEXT_Y, GFXFF);
 
     Serial.println(F("[TFT] Boot screen displayed"));
     lastDisplayUpdate = millis();
@@ -629,34 +623,34 @@ void initTftMinimal() {
 
 // Update boot screen status text at bottom
 void updateBootScreenStatus(const char* status) {
-    // Clear the status area (y=195 to bottom) - hardcoded dark theme for boot
-    tft.fillRect(0, 195, 240, 45, 0x0841);  // Dark background
+    // Clear the status area (y=BOOT_STATUS_Y to bottom) - hardcoded dark theme for boot
+    tft.fillRect(0, BOOT_STATUS_Y, SCREEN_W, SCREEN_H - BOOT_STATUS_Y, 0x0841);  // Dark background
 
-    // Draw new status at y=218 (4+ pixels from bottom edge)
+    // Draw new status at y=BOOT_TEXT_Y (4+ pixels from bottom edge)
     tft.setTextDatum(MC_DATUM);
     tft.setFreeFont(FSS9);
     tft.setTextColor(0x8410);  // Gray
-    tft.drawString(status, 120, 218, GFXFF);
+    tft.drawString(status, SCREEN_CENTER_X, BOOT_TEXT_Y, GFXFF);
 }
 
 // Show IP address on boot screen (called after WiFi connects)
 // Shows IP in gray first, then transitions to cyan for emphasis
 void showBootScreenIP(const char* ip) {
     // Clear bottom area for IP display - hardcoded dark theme for boot
-    tft.fillRect(0, 195, 240, 45, 0x0841);  // Dark background
+    tft.fillRect(0, BOOT_STATUS_Y, SCREEN_W, SCREEN_H - BOOT_STATUS_Y, 0x0841);  // Dark background
 
     tft.setTextDatum(MC_DATUM);
     tft.setFreeFont(FSS9);
 
     // First: show IP in gray
     tft.setTextColor(0x8410);  // Gray
-    tft.drawString(ip, 120, 218, GFXFF);  // y=218 keeps text 4+ pixels from bottom edge
+    tft.drawString(ip, SCREEN_CENTER_X, BOOT_TEXT_Y, GFXFF);
 
     delay(400);
 
     // Then: redraw IP in cyan for emphasis (same position)
     tft.setTextColor(0x07FF);  // Cyan
-    tft.drawString(ip, 120, 218, GFXFF);
+    tft.drawString(ip, SCREEN_CENTER_X, BOOT_TEXT_Y, GFXFF);
 }
 
 // Theme functions are now in themes.cpp
@@ -688,11 +682,11 @@ void drawGifScreen() {
     tft.setTextDatum(MC_DATUM);
     tft.setFreeFont(FSS12);
     tft.setTextColor(getThemeGray());
-    tft.drawString("GIF Not Supported", 120, 110, GFXFF);
+    tft.drawString("GIF Not Supported", SCREEN_CENTER_X, 110, GFXFF);
 
     tft.setFreeFont(FSS9);
-    tft.drawString("ESP8266 memory too limited", 120, 140, GFXFF);
-    tft.drawString("for animated GIF playback", 120, 160, GFXFF);
+    tft.drawString("ESP8266 memory too limited", SCREEN_CENTER_X, 140, GFXFF);
+    tft.drawString("for animated GIF playback", SCREEN_CENTER_X, 160, GFXFF);
 }
 
 // Draw emergency safe mode screen
@@ -704,29 +698,29 @@ void drawSafeModeScreen() {
     tft.setTextColor(TFT_BLACK);
 
     // Warning icon (smaller triangle)
-    tft.fillTriangle(120, 10, 90, 55, 150, 55, TFT_BLACK);
-    tft.fillTriangle(120, 16, 96, 51, 144, 51, 0xFD20);
+    tft.fillTriangle(SCREEN_CENTER_X, 10, 90, 55, 150, 55, TFT_BLACK);
+    tft.fillTriangle(SCREEN_CENTER_X, 16, 96, 51, 144, 51, 0xFD20);
     tft.setFreeFont(FSSB12);
-    tft.drawString("!", 120, 28, GFXFF);
+    tft.drawString("!", SCREEN_CENTER_X, 28, GFXFF);
 
     // Title
     tft.setFreeFont(FSSB12);
-    tft.drawString("SAFE MODE", 120, 70, GFXFF);
+    tft.drawString("SAFE MODE", SCREEN_CENTER_X, 70, GFXFF);
 
     // Info (combined into one line)
     tft.setFreeFont(FSS9);
-    tft.drawString("Device paused - web active", 120, 100, GFXFF);
+    tft.drawString("Device paused - web active", SCREEN_CENTER_X, 100, GFXFF);
 
     // Instructions
-    tft.drawString("Visit IP for firmware update:", 120, 130, GFXFF);
+    tft.drawString("Visit IP for firmware update:", SCREEN_CENTER_X, 130, GFXFF);
 
     // IP address (larger, more prominent)
     tft.setFreeFont(FSSB12);
-    tft.drawString(WiFi.localIP().toString().c_str(), 120, 160, GFXFF);
+    tft.drawString(WiFi.localIP().toString().c_str(), SCREEN_CENTER_X, 160, GFXFF);
 
     // Additional info
     tft.setFreeFont(FSS9);
-    tft.drawString("or go to /update", 120, 190, GFXFF);
+    tft.drawString("or go to /update", SCREEN_CENTER_X, 190, GFXFF);
 }
 
 // Draw current weather screen (no sprites - direct to TFT)
@@ -794,7 +788,7 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
     int16_t ampmW = tft.textWidth(ampm, GFXFF);
     int timeSpacing = 4;
     int totalTimeW = timeNumW + timeSpacing + ampmW;
-    int timeStartX = 120 - totalTimeW / 2;
+    int timeStartX = SCREEN_CENTER_X - totalTimeW / 2;
 
     // Draw time numbers
     tft.setFreeFont(FSSB18);
@@ -879,13 +873,13 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
     tft.drawString(unitStr, tempStartX + tempW + tempSpacing, tempY + 5, GFXFF);
 
     // ========== Detail bar at bottom with rounded rectangle background ==========
-    int barY = 175 + yOff;
-    int barH = 36;
-    int barMargin = 8;
+    int barY = FOOTER_Y_OFFSET + yOff;
+    int barH = FOOTER_BAR_H;
+    int barMargin = FOOTER_BAR_MARGIN;
     uint16_t cardColor = getThemeCard();
 
     // Draw rounded rectangle background (same style as forecast cards)
-    tft.fillRoundRect(barMargin, barY, 240 - 2*barMargin, barH, 4, cardColor);
+    tft.fillRoundRect(barMargin, barY, SCREEN_W - 2*barMargin, barH, 4, cardColor);
 
     // Get theme-aware accent colors for the bar (use OnCard variants since inside card)
     uint16_t orangeOnCard = getThemeOrangeOnCard();
@@ -902,7 +896,7 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
         }
 
         // Three sections within the bar, evenly spaced
-        int sectionW = (240 - 2*barMargin) / 3;
+        int sectionW = (SCREEN_W - 2*barMargin) / 3;
         int section1X = barMargin;
         int section2X = barMargin + sectionW;
         int section3X = barMargin + 2*sectionW;
@@ -941,9 +935,9 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
     // Screen dots at bottom
     if (totalScreens > 1) {
         int dotSpacing = 10;
-        int startX = 120 - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = 230 + yOff;  // Apply nudge to dots too
-        if (dotY > 236) dotY = 236;  // Don't go off screen
+        int startX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = DOT_Y_BASE + yOff;  // Apply nudge to dots too
+        if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;  // Don't go off screen
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
             tft.fillCircle(startX + i * dotSpacing, dotY, 3, dotColor);
@@ -1001,17 +995,17 @@ void drawForecast(int startDay, int currentScreen, int totalScreens) {
     // Globe icon + Location name (right aligned, grey)
     tft.setFreeFont(FSS9);
     int16_t locW = tft.textWidth(location.name, GFXFF);
-    int locX = 232 - locW;
+    int locX = SCREEN_RIGHT - locW;
     drawGlobe(locX - 16, 8 + yOff, grayColor);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(grayColor);
     tft.drawString(location.name, locX, 8 + yOff, GFXFF);
 
     // Draw 3 forecast cards
-    int cardW = 75;
-    int cardH = 180;
+    int cardW = FORECAST_CARD_W;
+    int cardH = FORECAST_CARD_H;
     int gap = 5;
-    int cardStartX = (240 - 3 * cardW - 2 * gap) / 2;
+    int cardStartX = (SCREEN_W - 3 * cardW - 2 * gap) / 2;
 
     for (int i = 0; i < 3; i++) {
         int dayIdx = startDay + i;
@@ -1081,9 +1075,9 @@ void drawForecast(int startDay, int currentScreen, int totalScreens) {
     // Screen dots at bottom
     if (totalScreens > 1) {
         int dotSpacing = 10;
-        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = 230 + yOff;
-        if (dotY > 236) dotY = 236;  // Don't go off screen
+        int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = DOT_Y_BASE + yOff;
+        if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;  // Don't go off screen
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
             tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
@@ -1137,7 +1131,7 @@ void drawCustomScreen() {
         tft.setTextColor(grayColor);
 
         // Draw star icon to the left of the header text (same gray color as text)
-        int textX = 232 - headerW;  // Right edge of text
+        int textX = SCREEN_RIGHT - headerW;  // Right edge of text
         int starX = textX - 12;     // 12px gap left of text for star
         int starY = 14 + yOff;      // Center vertically with text
         int starSize = 4;           // Slightly smaller star
@@ -1242,7 +1236,7 @@ void drawCustomScreen() {
 
                 // Center the line
                 int16_t actualW = tft.textWidth(lineStart, GFXFF);
-                int centeredX = 120 - actualW / 2;
+                int centeredX = SCREEN_CENTER_X - actualW / 2;
                 tft.drawString(lineStart, centeredX, y, GFXFF);
 
                 *breakPoint = savedChar;
@@ -1256,24 +1250,24 @@ void drawCustomScreen() {
         // Draw remaining text
         if (*lineStart && y < maxY) {
             int16_t actualW = tft.textWidth(lineStart, GFXFF);
-            int centeredX = 120 - actualW / 2;
+            int centeredX = SCREEN_CENTER_X - actualW / 2;
             tft.drawString(lineStart, centeredX, y, GFXFF);
         }
     }
 
     // ========== Footer: Rounded rectangle with custom text ==========
     const char* footerText = getCustomScreenFooter();
-    int barY = 175 + yOff;
-    int barH = 36;
-    int barMargin = 8;
+    int barY = FOOTER_Y_OFFSET + yOff;
+    int barH = FOOTER_BAR_H;
+    int barMargin = FOOTER_BAR_MARGIN;
 
-    tft.fillRoundRect(barMargin, barY, 240 - 2*barMargin, barH, 4, cardColor);
+    tft.fillRoundRect(barMargin, barY, SCREEN_W - 2*barMargin, barH, 4, cardColor);
 
     if (strlen(footerText) > 0) {
         tft.setFreeFont(FSSB12);
         tft.setTextDatum(TC_DATUM);
         tft.setTextColor(cyanOnCard);  // Use OnCard color since inside card
-        tft.drawString(footerText, 120, barY + 10, GFXFF);
+        tft.drawString(footerText, SCREEN_CENTER_X, barY + 10, GFXFF);
     }
 
     // ========== Screen dots ==========
@@ -1287,9 +1281,9 @@ void drawCustomScreen() {
 
     if (totalScreens > 1) {
         int dotSpacing = 10;
-        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = 230 + yOff;
-        if (dotY > 236) dotY = 236;
+        int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = DOT_Y_BASE + yOff;
+        if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
             tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
@@ -1536,23 +1530,23 @@ void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScr
 
     tft.setTextDatum(TR_DATUM);
     tft.setTextColor(grayColor);
-    tft.drawString("Countdown", 232, 10 + yOff, GFXFF);
+    tft.drawString("Countdown", SCREEN_RIGHT, 10 + yOff, GFXFF);
 
     // Get target date and days until
     int targetYear, targetMonth, targetDay;
     getNextEventDate(event, year, month, day, &targetYear, &targetMonth, &targetDay);
     int daysLeft = daysUntil(targetYear, targetMonth, targetDay, year, month, day);
 
-    // Draw large icon (centered at 120, 75)
+    // Draw large icon (centered at SCREEN_CENTER_X, 75)
     // Pass targetDay for custom events to display on calendar icon
-    drawCountdownIcon(120, 75 + yOff, event.type, cyanColor, (uint8_t)targetDay);
+    drawCountdownIcon(SCREEN_CENTER_X, 75 + yOff, event.type, cyanColor, (uint8_t)targetDay);
 
     // Event title (smaller, below icon)
     const char* title = (strlen(event.title) > 0) ? event.title : getEventTypeName(event.type);
     tft.setFreeFont(FSSB12);
     tft.setTextDatum(MC_DATUM);
     tft.setTextColor(textColor);
-    tft.drawString(title, 120, 120 + yOff, GFXFF);
+    tft.drawString(title, SCREEN_CENTER_X, 120 + yOff, GFXFF);
 
     // Days remaining (large number)
     char daysStr[32];
@@ -1570,7 +1564,7 @@ void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScr
         tft.setTextColor(textColor);
     }
     tft.setFreeFont(FSSB18);
-    tft.drawString(daysStr, 120, 155 + yOff, GFXFF);
+    tft.drawString(daysStr, SCREEN_CENTER_X, 155 + yOff, GFXFF);
 
     // Target date with day of week
     const char* dayNames[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
@@ -1587,14 +1581,14 @@ void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScr
     snprintf(dateStr, sizeof(dateStr), "%s, %s %d", dayNames[dow], monthNames[targetMonth-1], targetDay);
     tft.setFreeFont(FSS9);
     tft.setTextColor(grayColor);
-    tft.drawString(dateStr, 120, 185 + yOff, GFXFF);
+    tft.drawString(dateStr, SCREEN_CENTER_X, 185 + yOff, GFXFF);
 
     // Draw navigation dots at bottom
     if (totalScreens > 1) {
         int dotSpacing = 12;
-        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = 230 + yOff;
-        if (dotY > 236) dotY = 236;
+        int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = DOT_Y_BASE + yOff;
+        if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
             tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
@@ -1643,7 +1637,7 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
     if (strlen(config.header) > 0) {
         tft.setFreeFont(FSS9);
         int16_t headerW = tft.textWidth(config.header, GFXFF);
-        int textX = 232 - headerW;
+        int textX = SCREEN_RIGHT - headerW;
         tft.setTextDatum(TL_DATUM);
         tft.setTextColor(grayColor);
         tft.drawString(config.header, textX, 10 + yOff, GFXFF);
@@ -1715,28 +1709,28 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
         int bodyStartY = 100 + yOff - totalHeight / 2 + lineHeight / 2;
 
         for (int i = 0; i < lineCount; i++) {
-            tft.drawString(lines[i].c_str(), 120, bodyStartY + i * lineHeight, GFXFF);
+            tft.drawString(lines[i].c_str(), SCREEN_CENTER_X, bodyStartY + i * lineHeight, GFXFF);
         }
     }
 
     // FOOTER - rounded bar at bottom (matches main weather screen footer)
     if (strlen(config.footer) > 0) {
-        int barY = 175 + yOff;
-        int barH = 36;
-        int barMargin = 8;
-        tft.fillRoundRect(barMargin, barY, 240 - 2*barMargin, barH, 4, cardColor);
+        int barY = FOOTER_Y_OFFSET + yOff;
+        int barH = FOOTER_BAR_H;
+        int barMargin = FOOTER_BAR_MARGIN;
+        tft.fillRoundRect(barMargin, barY, SCREEN_W - 2*barMargin, barH, 4, cardColor);
         tft.setFreeFont(FSSB12);
         tft.setTextDatum(TC_DATUM);
         tft.setTextColor(cyanOnCard);  // Use OnCard variant for text inside footer bar
-        tft.drawString(config.footer, 120, barY + 10, GFXFF);  // Text centered in bar
+        tft.drawString(config.footer, SCREEN_CENTER_X, barY + 10, GFXFF);  // Text centered in bar
     }
 
     // Navigation dots
     if (totalScreens > 1) {
         int dotSpacing = 12;
-        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = 230 + yOff;
-        if (dotY > 236) dotY = 236;
+        int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = DOT_Y_BASE + yOff;
+        if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
             tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
@@ -1780,7 +1774,7 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
     tft.drawString(ampm, 8 + timeW + 4, 10 + yOff, GFXFF);
 
     // Large centered YouTube logo (red rounded rect with play button)
-    int logoX = 120;  // Center
+    int logoX = SCREEN_CENTER_X;  // Center
     int logoY = 50 + yOff;
     int logoW = 56;
     int logoH = 38;
@@ -1799,7 +1793,7 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
     if (channelName.length() > 20) {
         channelName = channelName.substring(0, 19) + "...";
     }
-    tft.drawString(channelName.c_str(), 120, 88 + yOff, GFXFF);
+    tft.drawString(channelName.c_str(), SCREEN_CENTER_X, 88 + yOff, GFXFF);
 
     if (!data.valid) {
         // Show error or "not configured" message
@@ -1807,9 +1801,9 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
         tft.setTextDatum(MC_DATUM);
         tft.setTextColor(grayColor);
         if (strlen(data.lastError) > 0) {
-            tft.drawString(data.lastError, 120, 140 + yOff, GFXFF);
+            tft.drawString(data.lastError, SCREEN_CENTER_X, 140 + yOff, GFXFF);
         } else {
-            tft.drawString("Configure in Admin panel", 120, 140 + yOff, GFXFF);
+            tft.drawString("Configure in Admin panel", SCREEN_CENTER_X, 140 + yOff, GFXFF);
         }
     } else {
         // MAIN STATS DISPLAY
@@ -1828,12 +1822,12 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
         } else {
             snprintf(subsStr, sizeof(subsStr), "%u", data.subscribers);
         }
-        tft.drawString(subsStr, 120, 130 + yOff, GFXFF);
+        tft.drawString(subsStr, SCREEN_CENTER_X, 130 + yOff, GFXFF);
 
         // "subscribers" label
         tft.setFreeFont(FSS9);
         tft.setTextColor(grayColor);
-        tft.drawString("subscribers", 120, 155 + yOff, GFXFF);
+        tft.drawString("subscribers", SCREEN_CENTER_X, 155 + yOff, GFXFF);
 
         // Stats cards - Views and Videos side by side
         int cardY = 170 + yOff;
@@ -1862,7 +1856,7 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
         tft.drawString("views", cardMargin + cardW/2, cardY + 32, GFXFF);
 
         // Videos card (right)
-        int card2X = 240 - cardMargin - cardW;
+        int card2X = SCREEN_W - cardMargin - cardW;
         tft.fillRoundRect(card2X, cardY, cardW, cardH, 6, cardColor);
         tft.setFreeFont(FSSB12);
         tft.setTextDatum(MC_DATUM);
@@ -1880,9 +1874,9 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
     // Navigation dots
     if (totalScreens > 1) {
         int dotSpacing = 12;
-        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = 230 + yOff;
-        if (dotY > 236) dotY = 236;
+        int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = DOT_Y_BASE + yOff;
+        if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
             tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
@@ -1906,7 +1900,7 @@ void jpegRender(int xpos, int ypos) {
         // Feed watchdog every few blocks to prevent reset
         static int blockCount = 0;
         if (++blockCount % 20 == 0) {
-            ESP.wdtFeed();
+            platformWdtFeed();
             yield();
         }
 
@@ -1915,13 +1909,13 @@ void jpegRender(int xpos, int ypos) {
         int mcu_y = JpegDec.MCUy * mcu_h + ypos;
 
         // Check bounds
-        if (mcu_x + mcu_w <= 240 && mcu_y + mcu_h <= 240) {
+        if (mcu_x + mcu_w <= SCREEN_W && mcu_y + mcu_h <= SCREEN_H) {
             // Block fits entirely on screen
             tft.pushImage(mcu_x, mcu_y, mcu_w, mcu_h, pImg);
-        } else if (mcu_x < 240 && mcu_y < 240) {
+        } else if (mcu_x < SCREEN_W && mcu_y < SCREEN_H) {
             // Partial block - clip to screen
-            uint16_t draw_w = min((uint16_t)(240 - mcu_x), mcu_w);
-            uint16_t draw_h = min((uint16_t)(240 - mcu_y), mcu_h);
+            uint16_t draw_w = min((uint16_t)(SCREEN_W - mcu_x), mcu_w);
+            uint16_t draw_h = min((uint16_t)(SCREEN_H - mcu_y), mcu_h);
             tft.pushImage(mcu_x, mcu_y, draw_w, draw_h, pImg);
         }
     }
@@ -1997,7 +1991,7 @@ void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
                 int imgH = JpegDec.height;
 
                 // Center horizontally
-                int imgX = (240 - imgW) / 2;
+                int imgX = (SCREEN_W - imgW) / 2;
                 if (imgX < 0) imgX = 0;
 
                 // Center vertically in content area
@@ -2013,7 +2007,7 @@ void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
                 tft.setFreeFont(FSS9);
                 tft.setTextDatum(MC_DATUM);
                 tft.setTextColor(grayColor);
-                tft.drawString("Decode Error", 120, 120 + yOff, GFXFF);
+                tft.drawString("Decode Error", SCREEN_CENTER_X, 120 + yOff, GFXFF);
                 Serial.println("[IMAGE] JPEG decode failed");
             }
             imgFile.close();
@@ -2022,7 +2016,7 @@ void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
             tft.setFreeFont(FSS9);
             tft.setTextDatum(MC_DATUM);
             tft.setTextColor(grayColor);
-            tft.drawString("File Not Found", 120, 120 + yOff, GFXFF);
+            tft.drawString("File Not Found", SCREEN_CENTER_X, 120 + yOff, GFXFF);
             Serial.printf("[IMAGE] File not found: %s\n", config.filename);
         }
     } else {
@@ -2030,15 +2024,15 @@ void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
         tft.setFreeFont(FSS9);
         tft.setTextDatum(MC_DATUM);
         tft.setTextColor(grayColor);
-        tft.drawString("No Image", 120, 120 + yOff, GFXFF);
+        tft.drawString("No Image", SCREEN_CENTER_X, 120 + yOff, GFXFF);
     }
 
     // ===== NAVIGATION DOTS =====
     if (totalScreens > 1) {
         int dotSpacing = 12;
-        int dotStartX = 120 - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = 230 + yOff;
-        if (dotY > 236) dotY = 236;
+        int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
+        int dotY = DOT_Y_BASE + yOff;
+        if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
             tft.fillCircle(dotStartX + i * dotSpacing, dotY, 3, dotColor);
@@ -2116,7 +2110,7 @@ void updateTftDisplay() {
         }
 
         // Feed watchdog and yield
-        ESP.wdtFeed();
+        platformWdtFeed();
         yield();
 
         const CarouselItem& item = getCarouselItem(currentCarouselIndex);
@@ -2185,7 +2179,7 @@ void updateTftDisplay() {
 // Note: FIRMWARE_VERSION and DEVICE_NAME are defined in config.h
 
 // Objects
-ESP8266WebServer server(80);
+PlatformWebServer server(80);
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 0, 60000);
 
@@ -2239,7 +2233,7 @@ void provisionAdminHtml() {
         f.write(pgm_read_byte(&admin_html_gz[i]));
         // Feed watchdog every 1KB to prevent reset during long write
         if (i % 1024 == 0) {
-            ESP.wdtFeed();
+            platformWdtFeed();
             yield();
         }
     }
@@ -2277,10 +2271,8 @@ void setup() {
         // Continue anyway - we can still work without filesystem
     } else {
         Serial.println(F("OK"));
-        FSInfo fs_info;
-        LittleFS.info(fs_info);
         Serial.printf_P(PSTR("[BOOT] LittleFS: %u/%u bytes used\n"),
-                       fs_info.usedBytes, fs_info.totalBytes);
+                       (unsigned)platformGetFsUsed(), (unsigned)platformGetFsTotal());
 
         // Provision admin HTML from PROGMEM to LittleFS (if version changed)
         provisionAdminHtml();
@@ -2344,9 +2336,9 @@ void setup() {
     // Print startup summary
     Serial.println(F("================================================"));
     Serial.println(F("[BOOT] Initialization complete!"));
-    Serial.printf_P(PSTR("[BOOT] Free heap: %u bytes\n"), ESP.getFreeHeap());
-    Serial.printf_P(PSTR("[BOOT] Chip ID: %08X\n"), ESP.getChipId());
-    Serial.printf_P(PSTR("[BOOT] Flash size: %u bytes\n"), ESP.getFlashChipRealSize());
+    Serial.printf_P(PSTR("[BOOT] Free heap: %u bytes\n"), platformGetFreeHeap());
+    Serial.printf_P(PSTR("[BOOT] Chip ID: %08X\n"), platformGetChipId());
+    Serial.printf_P(PSTR("[BOOT] Flash size: %u bytes\n"), platformGetFlashSize());
 
     if (WiFi.status() == WL_CONNECTED) {
         Serial.printf_P(PSTR("[BOOT] IP Address: %s\n"), WiFi.localIP().toString().c_str());
@@ -2420,11 +2412,7 @@ void loop() {
  * This will reset the ESP if it hangs for too long
  */
 void setupWatchdog() {
-    // Disable software watchdog (we're using hardware)
-    ESP.wdtDisable();
-
-    // Enable hardware watchdog with 8-second timeout
-    ESP.wdtEnable(WDTO_8S);
+    platformWdtSetup();
 }
 
 /**
@@ -2432,7 +2420,7 @@ void setupWatchdog() {
  * Call this regularly in loop() to prevent reset
  */
 void feedWatchdog() {
-    ESP.wdtFeed();
+    platformWdtFeed();
     yield();  // Also yield to system tasks
 }
 
@@ -2493,7 +2481,7 @@ void setupWiFi() {
         Serial.println(F("[WIFI] Failed to connect and hit timeout"));
         Serial.println(F("[WIFI] Restarting in 3 seconds..."));
         delay(3000);
-        ESP.restart();
+        platformRestart();
     }
 
     Serial.println(F("[WIFI] Connected successfully!"));
@@ -2523,16 +2511,16 @@ void setupWebServer() {
         JsonDocument doc;
         doc["version"] = FIRMWARE_VERSION;
         doc["device"] = DEVICE_NAME;
-        doc["heap"] = ESP.getFreeHeap();
+        doc["heap"] = platformGetFreeHeap();
         doc["uptime"] = millis() / 1000;
         doc["ip"] = WiFi.localIP().toString();
         doc["rssi"] = WiFi.RSSI();
         doc["ssid"] = WiFi.SSID();
         doc["mac"] = WiFi.macAddress();
-        doc["chipId"] = String(ESP.getChipId(), HEX);
-        doc["flashSize"] = ESP.getFlashChipRealSize();
-        doc["sketchSize"] = ESP.getSketchSize();
-        doc["freeSketchSpace"] = ESP.getFreeSketchSpace();
+        doc["chipId"] = String(platformGetChipId(), HEX);
+        doc["flashSize"] = platformGetFlashSize();
+        doc["sketchSize"] = platformGetSketchSize();
+        doc["freeSketchSpace"] = platformGetFreeSketchSpace();
 
         String response;
         serializeJson(doc, response);
@@ -2928,7 +2916,7 @@ void setupWebServer() {
         // Only refresh weather if we have location screens (saves memory/time)
         if (hasLocationScreens) {
             yield();
-            Serial.printf("[API] Refreshing weather, free heap: %d\n", ESP.getFreeHeap());
+            Serial.printf("[API] Refreshing weather, free heap: %d\n", platformGetFreeHeap());
             forceWeatherUpdate();
         }
     });
@@ -3394,7 +3382,7 @@ void setupWebServer() {
                     // Feed watchdog every 1KB
                     static size_t lastFeed = 0;
                     if (uploadSize - lastFeed >= 1024) {
-                        ESP.wdtFeed();
+                        platformWdtFeed();
                         yield();
                         lastFeed = uploadSize;
                     }
@@ -3620,7 +3608,7 @@ void setupWebServer() {
               "</body></html>"));
 
         delay(500);
-        ESP.restart();
+        platformRestart();
     });
 
     // Reboot endpoint
@@ -3635,7 +3623,7 @@ void setupWebServer() {
               "<script>setTimeout(function(){location.href='/';},10000);</script>"
               "</div></body></html>"));
         delay(500);
-        ESP.restart();
+        platformRestart();
     });
 
     // Reset WiFi settings endpoint
@@ -3654,7 +3642,7 @@ void setupWebServer() {
         // Clear WiFi credentials
         WiFi.disconnect(true);
         delay(1000);
-        ESP.restart();
+        platformRestart();
     });
 
     // Not found handler

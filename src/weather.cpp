@@ -7,9 +7,7 @@
 
 #include "weather.h"
 #include "config.h"
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-#include <WiFiClientSecure.h>
+#include "platform.h"
 #include <LittleFS.h>
 
 // =============================================================================
@@ -1489,7 +1487,7 @@ static bool fetchYouTubeStats() {
     }
 
     // Check free heap before attempting HTTPS (BearSSL needs ~15-20KB)
-    uint32_t freeHeap = ESP.getFreeHeap();
+    uint32_t freeHeap = platformGetFreeHeap();
     Serial.printf("[YOUTUBE] Free heap before HTTPS: %u bytes\n", freeHeap);
 
     if (freeHeap < 20000) {
@@ -1509,7 +1507,7 @@ static bool fetchYouTubeStats() {
     // Use WiFiClientSecure for HTTPS
     WiFiClientSecure client;
     client.setInsecure();  // Skip certificate validation (OK for non-sensitive API calls)
-    client.setBufferSizes(512, 512);  // Reduce buffer sizes to save memory (default is 16KB each!)
+    platformSetSSLBufferSizes(client, 512, 512);  // Reduce buffer sizes to save memory (default is 16KB each!)
 
     HTTPClient http;
     http.setTimeout(20000);  // 20 second timeout (HTTPS on ESP8266 is slow)
@@ -1524,7 +1522,7 @@ static bool fetchYouTubeStats() {
         return false;
     }
 
-    Serial.printf("[YOUTUBE] Free heap during request: %u bytes\n", ESP.getFreeHeap());
+    Serial.printf("[YOUTUBE] Free heap during request: %u bytes\n", platformGetFreeHeap());
 
     int httpCode = http.GET();
 
