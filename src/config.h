@@ -18,25 +18,30 @@
 // =============================================================================
 // DISPLAY CONFIGURATION
 // =============================================================================
-// Display resolution (based on image size requirements from original firmware)
+// UI content area (same on both platforms)
 #define DISPLAY_WIDTH 240
 #define DISPLAY_HEIGHT 240
 
-// Display type - ST7789T3 (1.54" 240x240 IPS TFT)
-#define DISPLAY_ST7789
-
-// Display pins - Confirmed from hardware reverse engineering
-// Source: https://www.elektroda.com/news/news4113933.html
-#define TFT_CS   4   // Chip select (GPIO4)
-#define TFT_DC   0   // Data/Command (GPIO0)
-#define TFT_RST  2   // Reset (GPIO2)
-#define TFT_BL   5   // Backlight PWM (GPIO5)
-#define TFT_MOSI 13  // SPI MOSI (GPIO13)
-#define TFT_SCLK 14  // SPI Clock (GPIO14)
-// Note: MISO not used
-
-// ST7789 requires SPI Mode 3
-#define TFT_SPI_MODE SPI_MODE3
+// Platform-specific display settings
+#if defined(ESP32)
+  // CYD: ILI9341 240x320, rotation 3 with swapped TFT_WIDTH/HEIGHT
+  // gives _width=240 (columns), _height=320 (rows) — matching physical panel
+  // Y_OFFSET=40 centers 240px UI vertically in 320px height
+  #define DISPLAY_PANEL_HEIGHT 320
+  #define DISPLAY_X_OFFSET     0
+  #define DISPLAY_Y_OFFSET     40    // Center 240px UI in 320px physical height
+  #define TFT_BL_PIN           21    // CYD backlight GPIO
+  #define TFT_BL_INVERTED      0     // HIGH = bright
+  #define TFT_ROTATION         3     // Portrait, USB-C at bottom
+#else
+  // SmallTV-Ultra: ST7789 240x240
+  #define DISPLAY_PANEL_HEIGHT 240
+  #define DISPLAY_X_OFFSET     0
+  #define DISPLAY_Y_OFFSET     0
+  #define TFT_BL_PIN           5     // SmallTV backlight GPIO
+  #define TFT_BL_INVERTED      1     // LOW = bright (inverted PWM)
+  #define TFT_ROTATION         0     // Portrait
+#endif
 
 // =============================================================================
 // WIFI CONFIGURATION

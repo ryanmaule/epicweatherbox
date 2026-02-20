@@ -15,7 +15,11 @@
 
 // OTA Configuration
 #define OTA_HOSTNAME "epicweatherbox"
-#define OTA_PORT 8266
+#if PLATFORM_ESP8266
+  #define OTA_PORT 8266
+#elif PLATFORM_ESP32
+  #define OTA_PORT 3232
+#endif
 // Leave password empty for easier development, set in production
 #define OTA_PASSWORD ""
 

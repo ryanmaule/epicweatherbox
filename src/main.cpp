@@ -72,7 +72,7 @@ extern const GFXfont FreeSansBold24pt7b;
 #define GFXFF 1  // GFX Free Font render mode
 
 static TFT_eSPI tft = TFT_eSPI();
-#define TFT_BL_PIN 5  // Backlight PWM pin
+// TFT_BL_PIN is defined in config.h (platform-specific)
 
 // GIF support disabled due to memory constraints
 // static AnimatedGIF gif;
@@ -102,7 +102,9 @@ static int lastAppliedBrightness = -1;
  */
 void applyBrightness(int brightness) {
     if (brightness != lastAppliedBrightness) {
-        int pwmValue = 100 - constrain(brightness, 0, 100);  // Invert: 100% brightness = PWM 0
+        int constrained = constrain(brightness, 0, 100);
+        // SmallTV: inverted PWM (0=bright). CYD: normal PWM (100=bright).
+        int pwmValue = TFT_BL_INVERTED ? (100 - constrained) : constrained;
         platformPwmWrite(TFT_BL_PIN, pwmValue);
         lastAppliedBrightness = brightness;
         Serial.printf("[TFT] Brightness set to %d%% (PWM: %d)\n", brightness, pwmValue);
@@ -555,7 +557,8 @@ void initTftMinimal() {
     // Initialize TFT
     Serial.println(F("[TFT] Calling tft.init()..."));
     tft.init();
-    tft.setRotation(0);
+    tft.setRotation(TFT_ROTATION);
+    tft.fillScreen(TFT_BLACK);  // Clear entire panel to kill remnants from old firmware
     Serial.println(F("[TFT] tft.init() complete"));
 
     platformWdtFeed();
@@ -566,9 +569,9 @@ void initTftMinimal() {
     tft.fillScreen(0x0841);  // Dark background
     tft.setTextDatum(MC_DATUM);  // Middle center
 
-    // Draw sun logo at top center (y=50, radius=22)
+    // Draw sun logo at top center (radius=22)
     // Colors: Yellow 0xFEE0, Orange 0xFBE0 (for face features)
-    int sunX = SCREEN_CENTER_X, sunY = 50, sunR = 22;
+    int sunX = SCREEN_CENTER_X, sunY = Y_OFFSET + 50, sunR = 22;
     uint16_t sunYellow = 0xFEE0;  // Bright yellow
     uint16_t sunOrange = 0xFBE0;  // Orange for face
 
@@ -602,16 +605,16 @@ void initTftMinimal() {
     // "Epic" in bold 18pt cyan
     tft.setFreeFont(FSSB18);
     tft.setTextColor(0x07FF);  // Cyan
-    tft.drawString("Epic", SCREEN_CENTER_X, 100, GFXFF);
+    tft.drawString("Epic", SCREEN_CENTER_X, Y_OFFSET + 100, GFXFF);
 
     // "WeatherBox" in bold 18pt white
     tft.setTextColor(0xFFFF);  // White
-    tft.drawString("WeatherBox", SCREEN_CENTER_X, 135, GFXFF);
+    tft.drawString("WeatherBox", SCREEN_CENTER_X, Y_OFFSET + 135, GFXFF);
 
     // Version in small gray
     tft.setFreeFont(FSS9);
     tft.setTextColor(0x8410);  // Gray
-    tft.drawString("v" FIRMWARE_VERSION, SCREEN_CENTER_X, 170, GFXFF);
+    tft.drawString("v" FIRMWARE_VERSION, SCREEN_CENTER_X, Y_OFFSET + 170, GFXFF);
 
     // Status text at bottom (y=BOOT_TEXT_Y keeps 4+ pixels from bottom edge)
     tft.setTextColor(0x4208);  // Dark gray
@@ -624,7 +627,7 @@ void initTftMinimal() {
 // Update boot screen status text at bottom
 void updateBootScreenStatus(const char* status) {
     // Clear the status area (y=BOOT_STATUS_Y to bottom) - hardcoded dark theme for boot
-    tft.fillRect(0, BOOT_STATUS_Y, SCREEN_W, SCREEN_H - BOOT_STATUS_Y, 0x0841);  // Dark background
+    tft.fillRect(X_OFFSET, BOOT_STATUS_Y, SCREEN_W, DISPLAY_PANEL_HEIGHT - BOOT_STATUS_Y, 0x0841);
 
     // Draw new status at y=BOOT_TEXT_Y (4+ pixels from bottom edge)
     tft.setTextDatum(MC_DATUM);
@@ -637,7 +640,7 @@ void updateBootScreenStatus(const char* status) {
 // Shows IP in gray first, then transitions to cyan for emphasis
 void showBootScreenIP(const char* ip) {
     // Clear bottom area for IP display - hardcoded dark theme for boot
-    tft.fillRect(0, BOOT_STATUS_Y, SCREEN_W, SCREEN_H - BOOT_STATUS_Y, 0x0841);  // Dark background
+    tft.fillRect(X_OFFSET, BOOT_STATUS_Y, SCREEN_W, DISPLAY_PANEL_HEIGHT - BOOT_STATUS_Y, 0x0841);
 
     tft.setTextDatum(MC_DATUM);
     tft.setFreeFont(FSS9);
@@ -682,11 +685,11 @@ void drawGifScreen() {
     tft.setTextDatum(MC_DATUM);
     tft.setFreeFont(FSS12);
     tft.setTextColor(getThemeGray());
-    tft.drawString("GIF Not Supported", SCREEN_CENTER_X, 110, GFXFF);
+    tft.drawString("GIF Not Supported", SCREEN_CENTER_X, Y_OFFSET + 110, GFXFF);
 
     tft.setFreeFont(FSS9);
-    tft.drawString("ESP8266 memory too limited", SCREEN_CENTER_X, 140, GFXFF);
-    tft.drawString("for animated GIF playback", SCREEN_CENTER_X, 160, GFXFF);
+    tft.drawString("ESP8266 memory too limited", SCREEN_CENTER_X, Y_OFFSET + 140, GFXFF);
+    tft.drawString("for animated GIF playback", SCREEN_CENTER_X, Y_OFFSET + 160, GFXFF);
 }
 
 // Draw emergency safe mode screen
@@ -698,29 +701,29 @@ void drawSafeModeScreen() {
     tft.setTextColor(TFT_BLACK);
 
     // Warning icon (smaller triangle)
-    tft.fillTriangle(SCREEN_CENTER_X, 10, 90, 55, 150, 55, TFT_BLACK);
-    tft.fillTriangle(SCREEN_CENTER_X, 16, 96, 51, 144, 51, 0xFD20);
+    tft.fillTriangle(SCREEN_CENTER_X, Y_OFFSET + 10, SCREEN_CENTER_X - 30, Y_OFFSET + 55, SCREEN_CENTER_X + 30, Y_OFFSET + 55, TFT_BLACK);
+    tft.fillTriangle(SCREEN_CENTER_X, Y_OFFSET + 16, SCREEN_CENTER_X - 24, Y_OFFSET + 51, SCREEN_CENTER_X + 24, Y_OFFSET + 51, 0xFD20);
     tft.setFreeFont(FSSB12);
-    tft.drawString("!", SCREEN_CENTER_X, 28, GFXFF);
+    tft.drawString("!", SCREEN_CENTER_X, Y_OFFSET + 28, GFXFF);
 
     // Title
     tft.setFreeFont(FSSB12);
-    tft.drawString("SAFE MODE", SCREEN_CENTER_X, 70, GFXFF);
+    tft.drawString("SAFE MODE", SCREEN_CENTER_X, Y_OFFSET + 70, GFXFF);
 
     // Info (combined into one line)
     tft.setFreeFont(FSS9);
-    tft.drawString("Device paused - web active", SCREEN_CENTER_X, 100, GFXFF);
+    tft.drawString("Device paused - web active", SCREEN_CENTER_X, Y_OFFSET + 100, GFXFF);
 
     // Instructions
-    tft.drawString("Visit IP for firmware update:", SCREEN_CENTER_X, 130, GFXFF);
+    tft.drawString("Visit IP for firmware update:", SCREEN_CENTER_X, Y_OFFSET + 130, GFXFF);
 
     // IP address (larger, more prominent)
     tft.setFreeFont(FSSB12);
-    tft.drawString(WiFi.localIP().toString().c_str(), SCREEN_CENTER_X, 160, GFXFF);
+    tft.drawString(WiFi.localIP().toString().c_str(), SCREEN_CENTER_X, Y_OFFSET + 160, GFXFF);
 
     // Additional info
     tft.setFreeFont(FSS9);
-    tft.drawString("or go to /update", SCREEN_CENTER_X, 190, GFXFF);
+    tft.drawString("or go to /update", SCREEN_CENTER_X, Y_OFFSET + 190, GFXFF);
 }
 
 // Draw current weather screen (no sprites - direct to TFT)
@@ -729,8 +732,8 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
     const WeatherLocation& location = getLocation(currentDisplayLocation);
     bool useCelsius = getUseCelsius();
 
-    // UI nudge - positive moves content up, negative moves down
-    int yOff = -getUiNudgeY();  // Negate because we subtract from Y coords
+    // Y_OFFSET centers 240px UI on taller displays; nudge adjusts per user pref
+    int yOff = Y_OFFSET - getUiNudgeY();
 
     // Background - use theme color based on day/night
     uint16_t bgColor = getThemeBg();
@@ -803,17 +806,17 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
     int infoY = 42 + yOff;  // More space below time
 
     // Globe icon + Location name (left side)
-    drawGlobe(15, infoY, grayColor);
+    drawGlobe(X_OFFSET + 15, infoY, grayColor);
     tft.setFreeFont(FSS9);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(grayColor);
-    tft.drawString(location.name, 32, infoY, GFXFF);
+    tft.drawString(location.name, X_OFFSET + 32, infoY, GFXFF);
 
     // Calendar icon + Date (right side)
     char dateStr[12];
     snprintf(dateStr, sizeof(dateStr), "%s %d", monthNames[month], day);
     int16_t dateW = tft.textWidth(dateStr, GFXFF);
-    int dateX = 225 - dateW;
+    int dateX = X_OFFSET + 225 - dateW;
     drawCalendar(dateX - 16, infoY, grayColor);
     tft.setTextDatum(TL_DATUM);
     tft.drawString(dateStr, dateX, infoY, GFXFF);
@@ -823,8 +826,8 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
     // Right column (120-239): Large temperature
 
     int mainY = 58 + yOff;
-    int leftColCenter = 60;   // Center of left column
-    int rightColCenter = 180; // Center of right column
+    int leftColCenter = X_OFFSET + 60;   // Center of left column
+    int rightColCenter = X_OFFSET + 180; // Center of right column
 
     // Weather icon (64x64) centered in left column
     int iconX = leftColCenter - 32;
@@ -873,13 +876,13 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
     tft.drawString(unitStr, tempStartX + tempW + tempSpacing, tempY + 5, GFXFF);
 
     // ========== Detail bar at bottom with rounded rectangle background ==========
-    int barY = FOOTER_Y_OFFSET + yOff;
+    int barY = FOOTER_Y_OFFSET - getUiNudgeY();
     int barH = FOOTER_BAR_H;
     int barMargin = FOOTER_BAR_MARGIN;
     uint16_t cardColor = getThemeCard();
 
     // Draw rounded rectangle background (same style as forecast cards)
-    tft.fillRoundRect(barMargin, barY, SCREEN_W - 2*barMargin, barH, 4, cardColor);
+    tft.fillRoundRect(X_OFFSET + barMargin, barY, SCREEN_W - 2*barMargin, barH, 4, cardColor);
 
     // Get theme-aware accent colors for the bar (use OnCard variants since inside card)
     uint16_t orangeOnCard = getThemeOrangeOnCard();
@@ -897,9 +900,9 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
 
         // Three sections within the bar, evenly spaced
         int sectionW = (SCREEN_W - 2*barMargin) / 3;
-        int section1X = barMargin;
-        int section2X = barMargin + sectionW;
-        int section3X = barMargin + 2*sectionW;
+        int section1X = X_OFFSET + barMargin;
+        int section2X = X_OFFSET + barMargin + sectionW;
+        int section3X = X_OFFSET + barMargin + 2*sectionW;
         int contentY = barY + 10;
 
         tft.setFreeFont(FSSB12);
@@ -936,7 +939,7 @@ void drawCurrentWeather(int currentScreen, int totalScreens) {
     if (totalScreens > 1) {
         int dotSpacing = 10;
         int startX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = DOT_Y_BASE + yOff;  // Apply nudge to dots too
+        int dotY = DOT_Y_BASE - getUiNudgeY();  // Apply nudge to dots too
         if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;  // Don't go off screen
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
@@ -951,8 +954,7 @@ void drawForecast(int startDay, int currentScreen, int totalScreens) {
     const WeatherLocation& location = getLocation(currentDisplayLocation);
     bool useCelsius = getUseCelsius();
 
-    // UI nudge - positive moves content up, negative moves down
-    int yOff = -getUiNudgeY();
+    int yOff = Y_OFFSET - getUiNudgeY();
 
     // Background - use theme color based on day/night
     uint16_t bgColor = getThemeBg();
@@ -985,12 +987,12 @@ void drawForecast(int startDay, int currentScreen, int totalScreens) {
     tft.setFreeFont(FSSB12);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(cyanColor);
-    tft.drawString(timeNumStr, 8, 8 + yOff, GFXFF);
+    tft.drawString(timeNumStr, X_OFFSET + 8, 8 + yOff, GFXFF);
 
     // Draw AM/PM smaller, top-aligned with time
     int16_t timeNumW = tft.textWidth(timeNumStr, GFXFF);
     tft.setFreeFont(FSS9);
-    tft.drawString(ampm, 8 + timeNumW + 4, 8 + yOff, GFXFF);
+    tft.drawString(ampm, X_OFFSET + 8 + timeNumW + 4, 8 + yOff, GFXFF);
 
     // Globe icon + Location name (right aligned, grey)
     tft.setFreeFont(FSS9);
@@ -1005,7 +1007,7 @@ void drawForecast(int startDay, int currentScreen, int totalScreens) {
     int cardW = FORECAST_CARD_W;
     int cardH = FORECAST_CARD_H;
     int gap = 5;
-    int cardStartX = (SCREEN_W - 3 * cardW - 2 * gap) / 2;
+    int cardStartX = X_OFFSET + (SCREEN_W - 3 * cardW - 2 * gap) / 2;
 
     for (int i = 0; i < 3; i++) {
         int dayIdx = startDay + i;
@@ -1076,7 +1078,7 @@ void drawForecast(int startDay, int currentScreen, int totalScreens) {
     if (totalScreens > 1) {
         int dotSpacing = 10;
         int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = DOT_Y_BASE + yOff;
+        int dotY = DOT_Y_BASE - getUiNudgeY();
         if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;  // Don't go off screen
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
@@ -1088,7 +1090,7 @@ void drawForecast(int startDay, int currentScreen, int totalScreens) {
 // Draw custom text screen
 void drawCustomScreen() {
     // Get theme-aware colors
-    int yOff = -getUiNudgeY();
+    int yOff = Y_OFFSET - getUiNudgeY();
     uint16_t bgColor = getThemeBg();
     uint16_t cardColor = getThemeCard();
     // Colors for text on background
@@ -1116,11 +1118,11 @@ void drawCustomScreen() {
     tft.setFreeFont(FSSB12);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(cyanColor);
-    tft.drawString(timeNumStr, 8, 8 + yOff, GFXFF);
+    tft.drawString(timeNumStr, X_OFFSET + 8, 8 + yOff, GFXFF);
 
     int16_t timeNumW = tft.textWidth(timeNumStr, GFXFF);
     tft.setFreeFont(FSS9);
-    tft.drawString(ampm, 8 + timeNumW + 4, 8 + yOff, GFXFF);
+    tft.drawString(ampm, X_OFFSET + 8 + timeNumW + 4, 8 + yOff, GFXFF);
 
     // Custom header text (right aligned, gray) with star icon
     const char* headerText = getCustomScreenHeader();
@@ -1257,11 +1259,11 @@ void drawCustomScreen() {
 
     // ========== Footer: Rounded rectangle with custom text ==========
     const char* footerText = getCustomScreenFooter();
-    int barY = FOOTER_Y_OFFSET + yOff;
+    int barY = FOOTER_Y_OFFSET - getUiNudgeY();
     int barH = FOOTER_BAR_H;
     int barMargin = FOOTER_BAR_MARGIN;
 
-    tft.fillRoundRect(barMargin, barY, SCREEN_W - 2*barMargin, barH, 4, cardColor);
+    tft.fillRoundRect(X_OFFSET + barMargin, barY, SCREEN_W - 2*barMargin, barH, 4, cardColor);
 
     if (strlen(footerText) > 0) {
         tft.setFreeFont(FSSB12);
@@ -1282,7 +1284,7 @@ void drawCustomScreen() {
     if (totalScreens > 1) {
         int dotSpacing = 10;
         int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = DOT_Y_BASE + yOff;
+        int dotY = DOT_Y_BASE - getUiNudgeY();
         if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
@@ -1483,7 +1485,7 @@ void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScr
     const CountdownEvent& event = getCountdown(countdownIndex);
 
     // Get theme colors
-    int yOff = -getUiNudgeY();
+    int yOff = Y_OFFSET - getUiNudgeY();
     uint16_t bgColor = getThemeBg();
     uint16_t cyanColor = getThemeCyan();
     uint16_t grayColor = getThemeGray();
@@ -1522,11 +1524,11 @@ void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScr
     tft.setFreeFont(FSSB12);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(cyanColor);
-    tft.drawString(timeStr, 8, 8 + yOff, GFXFF);
+    tft.drawString(timeStr, X_OFFSET + 8, 8 + yOff, GFXFF);
 
     int16_t timeW = tft.textWidth(timeStr, GFXFF);
     tft.setFreeFont(FSS9);
-    tft.drawString(ampm, 8 + timeW + 4, 10 + yOff, GFXFF);
+    tft.drawString(ampm, X_OFFSET + 8 + timeW + 4, 10 + yOff, GFXFF);
 
     tft.setTextDatum(TR_DATUM);
     tft.setTextColor(grayColor);
@@ -1587,7 +1589,7 @@ void drawCountdownScreen(uint8_t countdownIndex, int currentScreen, int totalScr
     if (totalScreens > 1) {
         int dotSpacing = 12;
         int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = DOT_Y_BASE + yOff;
+        int dotY = DOT_Y_BASE - getUiNudgeY();
         if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
@@ -1601,7 +1603,7 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
     const CustomScreenConfig& config = getCustomScreenConfig(customIndex);
 
     // Get theme colors
-    int yOff = -getUiNudgeY();
+    int yOff = Y_OFFSET - getUiNudgeY();
     uint16_t bgColor = getThemeBg();
     uint16_t cardColor = getThemeCard();
     uint16_t cyanColor = getThemeCyan();
@@ -1627,11 +1629,11 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
     tft.setFreeFont(FSSB12);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(cyanColor);
-    tft.drawString(timeStr, 8, 8 + yOff, GFXFF);
+    tft.drawString(timeStr, X_OFFSET + 8, 8 + yOff, GFXFF);
 
     int16_t timeW = tft.textWidth(timeStr, GFXFF);
     tft.setFreeFont(FSS9);
-    tft.drawString(ampm, 8 + timeW + 4, 10 + yOff, GFXFF);
+    tft.drawString(ampm, X_OFFSET + 8 + timeW + 4, 10 + yOff, GFXFF);
 
     // Header text (right side) with star icon
     if (strlen(config.header) > 0) {
@@ -1650,7 +1652,7 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
         tft.fillTriangle(starX - starSize, starY - 1, starX + starSize, starY - 1, starX, starY + 3, grayColor);
     } else {
         // No header, just draw star in corner
-        int starX = 224;
+        int starX = X_OFFSET + 224;
         int starY = 14 + yOff;
         int starSize = 4;
         tft.fillTriangle(starX, starY - starSize, starX - 3, starY + 2, starX + 3, starY + 2, grayColor);
@@ -1715,10 +1717,10 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
 
     // FOOTER - rounded bar at bottom (matches main weather screen footer)
     if (strlen(config.footer) > 0) {
-        int barY = FOOTER_Y_OFFSET + yOff;
+        int barY = FOOTER_Y_OFFSET - getUiNudgeY();
         int barH = FOOTER_BAR_H;
         int barMargin = FOOTER_BAR_MARGIN;
-        tft.fillRoundRect(barMargin, barY, SCREEN_W - 2*barMargin, barH, 4, cardColor);
+        tft.fillRoundRect(X_OFFSET + barMargin, barY, SCREEN_W - 2*barMargin, barH, 4, cardColor);
         tft.setFreeFont(FSSB12);
         tft.setTextDatum(TC_DATUM);
         tft.setTextColor(cyanOnCard);  // Use OnCard variant for text inside footer bar
@@ -1729,7 +1731,7 @@ void drawCustomScreenByIndex(uint8_t customIndex, int currentScreen, int totalSc
     if (totalScreens > 1) {
         int dotSpacing = 12;
         int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = DOT_Y_BASE + yOff;
+        int dotY = DOT_Y_BASE - getUiNudgeY();
         if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
@@ -1743,7 +1745,7 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
     const YouTubeData& data = getYouTubeData();
 
     // Get theme colors
-    int yOff = -getUiNudgeY();
+    int yOff = Y_OFFSET - getUiNudgeY();
     uint16_t bgColor = getThemeBg();
     uint16_t cardColor = getThemeCard();
     uint16_t cyanColor = getThemeCyan();
@@ -1767,11 +1769,11 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
     tft.setFreeFont(FSSB12);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(cyanColor);
-    tft.drawString(timeStr, 8, 8 + yOff, GFXFF);
+    tft.drawString(timeStr, X_OFFSET + 8, 8 + yOff, GFXFF);
 
     int16_t timeW = tft.textWidth(timeStr, GFXFF);
     tft.setFreeFont(FSS9);
-    tft.drawString(ampm, 8 + timeW + 4, 10 + yOff, GFXFF);
+    tft.drawString(ampm, X_OFFSET + 8 + timeW + 4, 10 + yOff, GFXFF);
 
     // Large centered YouTube logo (red rounded rect with play button)
     int logoX = SCREEN_CENTER_X;  // Center
@@ -1833,7 +1835,7 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
         int cardY = 170 + yOff;
         int cardH = 42;
         int cardW = 100;
-        int cardMargin = 12;
+        int cardMargin = X_OFFSET + 12;
 
         // Views card (left)
         tft.fillRoundRect(cardMargin, cardY, cardW, cardH, 6, cardColor);
@@ -1856,7 +1858,7 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
         tft.drawString("views", cardMargin + cardW/2, cardY + 32, GFXFF);
 
         // Videos card (right)
-        int card2X = SCREEN_W - cardMargin - cardW;
+        int card2X = X_OFFSET + SCREEN_W - 12 - cardW;
         tft.fillRoundRect(card2X, cardY, cardW, cardH, 6, cardColor);
         tft.setFreeFont(FSSB12);
         tft.setTextDatum(MC_DATUM);
@@ -1875,7 +1877,7 @@ void drawYouTubeScreen(int currentScreen, int totalScreens) {
     if (totalScreens > 1) {
         int dotSpacing = 12;
         int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = DOT_Y_BASE + yOff;
+        int dotY = DOT_Y_BASE - getUiNudgeY();
         if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
@@ -1908,13 +1910,14 @@ void jpegRender(int xpos, int ypos) {
         int mcu_x = JpegDec.MCUx * mcu_w + xpos;
         int mcu_y = JpegDec.MCUy * mcu_h + ypos;
 
-        // Check bounds
-        if (mcu_x + mcu_w <= SCREEN_W && mcu_y + mcu_h <= SCREEN_H) {
+        // Check bounds (X_OFFSET + SCREEN_W = right edge of UI area)
+        int rightEdge = X_OFFSET + SCREEN_W;
+        if (mcu_x + (int)mcu_w <= rightEdge && mcu_y + (int)mcu_h <= SCREEN_H) {
             // Block fits entirely on screen
             tft.pushImage(mcu_x, mcu_y, mcu_w, mcu_h, pImg);
-        } else if (mcu_x < SCREEN_W && mcu_y < SCREEN_H) {
+        } else if (mcu_x < rightEdge && mcu_y < SCREEN_H) {
             // Partial block - clip to screen
-            uint16_t draw_w = min((uint16_t)(SCREEN_W - mcu_x), mcu_w);
+            uint16_t draw_w = min((uint16_t)(rightEdge - mcu_x), mcu_w);
             uint16_t draw_h = min((uint16_t)(SCREEN_H - mcu_y), mcu_h);
             tft.pushImage(mcu_x, mcu_y, draw_w, draw_h, pImg);
         }
@@ -1932,7 +1935,7 @@ void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
     uint16_t cyanColor = getThemeCyan();
     uint16_t grayColor = getThemeGray();
     uint16_t cardColor = getThemeCard();
-    int yOff = getUiNudgeY();
+    int yOff = Y_OFFSET - getUiNudgeY();  // Fixed: was missing negation
 
     // Fill background
     tft.fillScreen(bgColor);
@@ -1953,11 +1956,11 @@ void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
     tft.setFreeFont(FSSB12);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(cyanColor);
-    tft.drawString(timeStr, 8, 8 + yOff, GFXFF);
+    tft.drawString(timeStr, X_OFFSET + 8, 8 + yOff, GFXFF);
 
     int16_t timeW = tft.textWidth(timeStr, GFXFF);
     tft.setFreeFont(FSS9);
-    tft.drawString(ampm, 10 + timeW, 12 + yOff, GFXFF);
+    tft.drawString(ampm, X_OFFSET + 10 + timeW, 12 + yOff, GFXFF);
 
     // Get image config for header text
     const ImageScreenConfig& config = getImageScreenConfig(imageIndex);
@@ -1966,11 +1969,11 @@ void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
     tft.setTextDatum(TR_DATUM);
     tft.setTextColor(grayColor);
     const char* headerText = (config.header[0] != '\0') ? config.header : "Image";
-    tft.drawString(headerText, 210, 8 + yOff, GFXFF);
+    tft.drawString(headerText, X_OFFSET + 210, 8 + yOff, GFXFF);
 
     // Star icon in top-right corner
     tft.setTextColor(cyanColor);
-    tft.drawString("*", 228, 6 + yOff, GFXFF);
+    tft.drawString("*", X_OFFSET + 228, 6 + yOff, GFXFF);
 
     // ===== IMAGE CONTENT =====
     // Content area starts below header (y ~35) and ends above dots (y ~220)
@@ -1990,9 +1993,9 @@ void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
                 int imgW = JpegDec.width;
                 int imgH = JpegDec.height;
 
-                // Center horizontally
-                int imgX = (SCREEN_W - imgW) / 2;
-                if (imgX < 0) imgX = 0;
+                // Center horizontally within UI area
+                int imgX = X_OFFSET + (SCREEN_W - imgW) / 2;
+                if (imgX < X_OFFSET) imgX = X_OFFSET;
 
                 // Center vertically in content area
                 int imgY = contentY + (contentH - imgH) / 2;
@@ -2031,7 +2034,7 @@ void drawImageScreen(uint8_t imageIndex, int currentScreen, int totalScreens) {
     if (totalScreens > 1) {
         int dotSpacing = 12;
         int dotStartX = SCREEN_CENTER_X - (totalScreens - 1) * dotSpacing / 2;
-        int dotY = DOT_Y_BASE + yOff;
+        int dotY = DOT_Y_BASE - getUiNudgeY();
         if (dotY > DOT_Y_MAX) dotY = DOT_Y_MAX;
         for (int i = 0; i < totalScreens; i++) {
             uint16_t dotColor = (i == currentScreen) ? cyanColor : grayColor;
@@ -2266,7 +2269,11 @@ void setup() {
 
     // Initialize LittleFS (SPIFFS is deprecated)
     Serial.print(F("[BOOT] Mounting LittleFS... "));
+#if PLATFORM_ESP32
+    if (!LittleFS.begin(true)) {  // true = format on first use
+#else
     if (!LittleFS.begin()) {
+#endif
         Serial.println(F("FAILED!"));
         // Continue anyway - we can still work without filesystem
     } else {

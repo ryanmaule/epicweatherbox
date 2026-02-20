@@ -2,10 +2,9 @@
  * EpicWeatherBox - Platform Abstraction Layer
  *
  * Wraps platform-specific APIs behind a common interface.
- * All source files should include this instead of ESP8266-specific headers.
+ * All source files should include this instead of platform-specific headers.
  *
- * Currently supports: ESP8266
- * Future: ESP32 (CYD)
+ * Supports: ESP8266 (SmallTV-Ultra), ESP32 (CYD)
  */
 
 #ifndef PLATFORM_H
@@ -38,6 +37,12 @@
     extern "C" {
         #include <user_interface.h>
     }
+#elif PLATFORM_ESP32
+    #include <WiFi.h>
+    #include <WebServer.h>
+    #include <HTTPClient.h>
+    #include <HTTPUpdateServer.h>
+    #include <ESPmDNS.h>
 #endif
 
 // =============================================================================
@@ -47,6 +52,9 @@
 #if PLATFORM_ESP8266
     using PlatformWebServer        = ESP8266WebServer;
     using PlatformHTTPUpdateServer = ESP8266HTTPUpdateServer;
+#elif PLATFORM_ESP32
+    using PlatformWebServer        = WebServer;
+    using PlatformHTTPUpdateServer = HTTPUpdateServer;
 #endif
 
 // =============================================================================
@@ -67,7 +75,22 @@ inline void platformWdtFeed() {
     ESP.wdtFeed();
 }
 
-#endif // PLATFORM_ESP8266
+#elif PLATFORM_ESP32
+
+#include <esp_task_wdt.h>
+
+/** Configure task watchdog timer (8 s timeout). */
+inline void platformWdtSetup() {
+    esp_task_wdt_init(8, true);
+    esp_task_wdt_add(NULL);  // Add current task
+}
+
+/** Feed the watchdog timer — call during long-running loops. */
+inline void platformWdtFeed() {
+    esp_task_wdt_reset();
+}
+
+#endif
 
 // =============================================================================
 // PWM API
@@ -90,7 +113,38 @@ inline void platformPwmWrite(uint8_t pin, uint32_t value) {
     analogWrite(pin, value);
 }
 
-#endif // PLATFORM_ESP8266
+#elif PLATFORM_ESP32
+
+// ESP32 uses LEDC peripheral for PWM. We use channel 0, 8-bit resolution.
+// platformPwmSetRange/SetFreq are no-ops; LEDC is configured on first write.
+
+static bool _ledcInitialized = false;
+static uint8_t _ledcPin = 0;
+
+inline void platformPwmSetRange(uint32_t range) {
+    // No-op on ESP32 — LEDC uses fixed 8-bit resolution (0-255)
+    (void)range;
+}
+
+inline void platformPwmSetFreq(uint32_t freq) {
+    // No-op on ESP32 — frequency set during LEDC setup
+    (void)freq;
+}
+
+/** Write a PWM value to a pin. Lazy-inits LEDC channel 0 on first call. */
+inline void platformPwmWrite(uint8_t pin, uint32_t value) {
+    if (!_ledcInitialized || _ledcPin != pin) {
+        ledcSetup(0, 1000, 8);    // Channel 0, 1kHz, 8-bit
+        ledcAttachPin(pin, 0);
+        _ledcPin = pin;
+        _ledcInitialized = true;
+    }
+    // Scale 0-100 input to 0-255 for 8-bit LEDC
+    uint32_t scaled = (value * 255) / 100;
+    ledcWrite(0, scaled);
+}
+
+#endif
 
 // =============================================================================
 // SYSTEM INFO
@@ -118,7 +172,31 @@ inline uint32_t platformGetFreeSketchSpace() {
     return ESP.getFreeSketchSpace();
 }
 
-#endif // PLATFORM_ESP8266
+#elif PLATFORM_ESP32
+
+inline uint32_t platformGetFreeHeap() {
+    return ESP.getFreeHeap();
+}
+
+inline uint32_t platformGetChipId() {
+    // Derive a 32-bit ID from the lower bytes of the MAC address
+    uint64_t mac = ESP.getEfuseMac();
+    return (uint32_t)(mac >> 24);
+}
+
+inline uint32_t platformGetFlashSize() {
+    return ESP.getFlashChipSize();
+}
+
+inline uint32_t platformGetSketchSize() {
+    return ESP.getSketchSize();
+}
+
+inline uint32_t platformGetFreeSketchSpace() {
+    return ESP.getFreeSketchSpace();
+}
+
+#endif
 
 // =============================================================================
 // SSL BUFFER SIZING
@@ -136,7 +214,18 @@ inline void platformSetSSLBufferSizes(WiFiClientSecure& client,
     client.setBufferSizes(recv, send);
 }
 
-#endif // PLATFORM_ESP8266
+#elif PLATFORM_ESP32
+#include <WiFiClientSecure.h>
+
+/**
+ * No-op on ESP32 — mbedTLS manages buffer sizes automatically.
+ */
+inline void platformSetSSLBufferSizes(WiFiClientSecure& client,
+                                       uint16_t recv, uint16_t send) {
+    (void)client; (void)recv; (void)send;
+}
+
+#endif
 
 // =============================================================================
 // FILESYSTEM INFO
@@ -159,7 +248,20 @@ inline size_t platformGetFsTotal() {
     return info.totalBytes;
 }
 
-#endif // PLATFORM_ESP8266
+#elif PLATFORM_ESP32
+#include <LittleFS.h>
+
+/** Return bytes used on LittleFS. */
+inline size_t platformGetFsUsed() {
+    return LittleFS.usedBytes();
+}
+
+/** Return total bytes available on LittleFS. */
+inline size_t platformGetFsTotal() {
+    return LittleFS.totalBytes();
+}
+
+#endif
 
 // =============================================================================
 // SYSTEM CONTROL
@@ -172,6 +274,13 @@ inline void platformRestart() {
     ESP.restart();
 }
 
-#endif // PLATFORM_ESP8266
+#elif PLATFORM_ESP32
+
+/** Restart the device. */
+inline void platformRestart() {
+    ESP.restart();
+}
+
+#endif
 
 #endif // PLATFORM_H
