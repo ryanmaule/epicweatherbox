@@ -595,7 +595,7 @@ void initTftMinimal() {
     // Draw smile (arc using short line segments)
     for (int i = -6; i <= 6; i++) {
         int sx = sunX + i;
-        int sy = sunY + 6 + (i * i) / 12;  // Parabola for smile curve
+        int sy = sunY + 9 - (i * i) / 12;  // Parabola for smile curve (subtract to curve upward)
         tft.fillCircle(sx, sy, 1, sunOrange);
     }
 
@@ -3448,12 +3448,12 @@ void setupWebServer() {
         }
 
         // Build Open-Meteo geocoding URL
-        // Request 20 results from API to include international cities (Canada, etc.)
+        // Request 20 from API (stream-parsed, low RAM), return top 8 by population
         String url = "http://geocoding-api.open-meteo.com/v1/search?name=";
         url += encodedQuery;
         url += "&count=20&language=en&format=json";
 
-        Serial.printf("[GEOCODE] Searching: %s\n", query.c_str());
+        Serial.printf("[GEOCODE] Searching: %s, free heap: %u\n", query.c_str(), platformGetFreeHeap());
 
         WiFiClient client;
         HTTPClient http;
@@ -3471,47 +3471,79 @@ void setupWebServer() {
             return;
         }
 
-        String payload = http.getString();
+        // Stream-parse directly from HTTP response to avoid buffering entire payload
+        WiFiClient* stream = http.getStreamPtr();
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, *stream);
         http.end();
 
-        // Parse and simplify the response
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, payload);
         if (error) {
             server.send(500, "application/json", "{\"error\":\"JSON parse failed\"}");
             return;
         }
 
-        // Build simplified response
-        JsonDocument response;
-        JsonArray results = response["results"].to<JsonArray>();
-
+        // Sort results by population (descending) so major cities appear first,
+        // then return top 8. The API sorts US-biased, so Aurora ON (pop 55k)
+        // would otherwise be buried behind Aurora KS (pop 59).
         JsonArray apiResults = doc["results"];
+        const int MAX_RESULTS = 8;
+
+        // Collect indices sorted by population
+        struct ResultEntry { int idx; int pop; };
+        ResultEntry sorted[20];
+        int total = 0;
         if (apiResults) {
             for (JsonObject r : apiResults) {
-                JsonObject item = results.add<JsonObject>();
-                item["name"] = r["name"];
-                item["lat"] = r["latitude"];
-                item["lon"] = r["longitude"];
-
-                // Build display string: "City, State, Country"
-                String display = r["name"].as<String>();
-                if (r.containsKey("admin1") && !r["admin1"].isNull()) {
-                    display += ", ";
-                    display += r["admin1"].as<String>();
+                if (total < 20) {
+                    sorted[total] = { total, r["population"] | 0 };
+                    total++;
                 }
-                if (r.containsKey("country") && !r["country"].isNull()) {
-                    display += ", ";
-                    display += r["country"].as<String>();
+            }
+            // Simple insertion sort (max 20 items)
+            for (int i = 1; i < total; i++) {
+                ResultEntry key = sorted[i];
+                int j = i - 1;
+                while (j >= 0 && sorted[j].pop < key.pop) {
+                    sorted[j + 1] = sorted[j];
+                    j--;
                 }
-                item["display"] = display;
+                sorted[j + 1] = key;
             }
         }
 
-        response["count"] = results.size();
+        // Build simplified response — top results by population
+        String responseStr = "{\"results\":[";
+        int count = 0;
+        int limit = (total < MAX_RESULTS) ? total : MAX_RESULTS;
 
-        String responseStr;
-        serializeJson(response, responseStr);
+        for (int s = 0; s < limit; s++) {
+            JsonObject r = apiResults[sorted[s].idx];
+            if (count > 0) responseStr += ',';
+
+            const char* name = r["name"] | "";
+            const char* admin1 = r["admin1"] | (const char*)NULL;
+            const char* country = r["country"] | (const char*)NULL;
+
+            responseStr += "{\"name\":\"";
+            responseStr += name;
+            responseStr += "\",\"lat\":";
+            responseStr += String(r["latitude"].as<float>(), 4);
+            responseStr += ",\"lon\":";
+            responseStr += String(r["longitude"].as<float>(), 4);
+            responseStr += ",\"display\":\"";
+            responseStr += name;
+            if (admin1) { responseStr += ", "; responseStr += admin1; }
+            if (country) { responseStr += ", "; responseStr += country; }
+            responseStr += "\"}";
+            count++;
+        }
+        // Free the parsed doc before sending response
+        doc.clear();
+
+        responseStr += "],\"count\":";
+        responseStr += String(count);
+        responseStr += "}";
+
         server.send(200, "application/json", responseStr);
     });
 
