@@ -1,10 +1,10 @@
 # EpicWeatherBox
 
-Custom open-source firmware for the GeekMagic SmallTV-Ultra, transforming it into a sleek dedicated weather station with 7-day forecasts, multi-location support, and YouTube stats.
+Custom open-source firmware for the GeekMagic SmallTV-Ultra and ESP32-2432S028 (CYD), transforming them into sleek dedicated weather stations with 7-day forecasts, multi-location support, and YouTube stats.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Platform](https://img.shields.io/badge/platform-ESP8266-orange.svg)
-![Version](https://img.shields.io/badge/version-1.10.12-green.svg)
+![Platform](https://img.shields.io/badge/platform-ESP8266%20%7C%20ESP32-orange.svg)
+![Version](https://img.shields.io/badge/version-1.10.15-green.svg)
 
 ## Features
 
@@ -48,18 +48,31 @@ The display cycles through screens in your configured carousel order:
 - Subscriber count prominently displayed
 - Views and videos in side-by-side cards
 
-## Hardware
+## Supported Hardware
+
+### SmallTV-Ultra (ESP8266)
 
 - **Device**: [GeekMagic SmallTV-Ultra](https://geekmagicclock.com/)
 - **MCU**: ESP8266 (ESP-12E) @ 160MHz
 - **Display**: 1.54" 240x240 IPS TFT (ST7789)
 - **Connectivity**: WiFi 802.11 b/g/n
+- **Programming**: WiFi OTA only (USB-C is power-only)
 
-> **Note**: The USB-C port is power-only; all programming is done via WiFi OTA.
+### CYD — ESP32-2432S028 (ESP32)
+
+- **Device**: ESP32-2432S028 ("Cheap Yellow Display")
+- **MCU**: ESP32 @ 240MHz
+- **Display**: 2.8" 240x320 IPS TFT (ILI9341)
+- **Connectivity**: WiFi 802.11 b/g/n
+- **Programming**: USB serial (CH340) or WiFi OTA
+
+> The 240x240 UI is centered vertically on the CYD's 240x320 panel with 40px top/bottom borders.
 
 ## Quick Start
 
-### Option 1: Flash Pre-built Firmware (Easiest)
+### SmallTV-Ultra (ESP8266)
+
+#### Option 1: Flash Pre-built Firmware (Easiest)
 
 1. Download the latest `firmware.bin` from [Releases](https://github.com/ryanmaule/epicweatherbox/releases)
 2. If your device has stock firmware, go to `http://<device-ip>/update`
@@ -68,7 +81,7 @@ The display cycles through screens in your configured carousel order:
 5. Configure your home WiFi through the captive portal
 6. Access the admin panel at `http://<new-device-ip>/admin`
 
-### Upgrading from Stock SmallTV-Ultra Firmware
+#### Upgrading from Stock SmallTV-Ultra Firmware
 
 If you get a "Not Enough Space" error when flashing from stock GeekMagic firmware, you'll need to use the **recovery firmware** first:
 
@@ -83,20 +96,54 @@ If you get a "Not Enough Space" error when flashing from stock GeekMagic firmwar
 
 > **Why is this needed?** The stock firmware uses more flash space than our recovery firmware. The recovery image is minimal (~350KB) and clears the filesystem, making room for the full EpicWeatherBox firmware (~670KB).
 
-### Option 2: Build from Source
+### CYD — ESP32-2432S028 (ESP32)
+
+The CYD is flashed via USB since it has a CH340 serial chip.
+
+#### Prerequisites
+
+- [PlatformIO](https://platformio.org/) installed
+- USB cable connected to the CYD
+
+#### Flash Steps
 
 ```bash
 # Clone the repository
 git clone https://github.com/ryanmaule/epicweatherbox.git
 cd epicweatherbox
 
-# Build firmware (requires PlatformIO)
-pio run
+# Build and flash the CYD firmware via USB
+pio run -e cyd --target upload
 
-# The firmware binary will be at:
-# .pio/build/esp8266/firmware.bin
+# Upload the LittleFS filesystem (for admin panel)
+pio run -e cyd --target uploadfs
+```
 
-# Upload via web interface at http://<device-ip>/update
+After flashing:
+
+1. Connect to the `EpicWeatherBox` WiFi network
+2. Configure your home WiFi through the captive portal
+3. Access the admin panel at `http://<device-ip>/admin`
+4. Subsequent updates can be done via WiFi OTA at `http://<device-ip>/update`
+
+> **Note**: The CYD requires a one-time patch to the TFT_eSPI library after installing dependencies. Add `#ifndef TFT_WIDTH` / `#ifndef TFT_HEIGHT` guards around the defines in `.pio/libdeps/cyd/TFT_eSPI/TFT_Drivers/ILI9341_Defines.h`. Without this, the display dimensions won't be set correctly. See `CLAUDE.md` for details.
+
+### Build from Source (Either Platform)
+
+```bash
+# Clone the repository
+git clone https://github.com/ryanmaule/epicweatherbox.git
+cd epicweatherbox
+
+# Build for SmallTV-Ultra (ESP8266) — default
+pio run -e esp8266
+
+# Build for CYD (ESP32)
+pio run -e cyd
+
+# Firmware binaries:
+# .pio/build/esp8266/firmware.bin  (SmallTV-Ultra)
+# .pio/build/cyd/firmware.bin      (CYD)
 ```
 
 ## Configuration
@@ -172,26 +219,30 @@ This freezes the display and allows firmware upload via `/update`.
 
 ### Display Specifications
 
-- **Resolution**: 240x240 pixels
-- **Controller**: ST7789
-- **Color Format**: RGB565
-- **Backlight**: PWM controlled
+| | SmallTV-Ultra | CYD |
+|--|--|--|
+| **Resolution** | 240x240 | 240x320 (240x240 UI area) |
+| **Controller** | ST7789 | ILI9341 |
+| **Color Format** | RGB565 | RGB565 |
+| **Backlight** | PWM (GPIO5, inverted) | PWM (GPIO21) |
 
 ## Project Structure
 
 ```
 epicweatherbox/
 ├── src/
-│   ├── main.cpp        # Main firmware (web server, display, setup/loop)
-│   ├── weather.cpp/h   # Weather API & config management
-│   ├── themes.cpp/h    # Theme system with built-in and custom themes
-│   ├── ota.cpp/h       # Over-the-air update handling
-│   ├── config.h        # Configuration constants
-│   └── admin_html.h    # Compressed admin panel HTML
+│   ├── main.cpp          # Main firmware (web server, display, setup/loop)
+│   ├── weather.cpp/h     # Weather API & config management
+│   ├── themes.cpp/h      # Theme system with built-in and custom themes
+│   ├── ota.cpp/h         # Over-the-air update handling
+│   ├── config.h          # Configuration constants & platform defines
+│   ├── platform.h        # Platform abstraction (ESP8266/ESP32)
+│   ├── display_layout.h  # Layout constants derived from config
+│   └── admin_html.h      # Compressed admin panel HTML
 ├── data/
-│   └── admin.html      # Admin panel source
-├── platformio.ini      # Build configuration
-└── README.md           # This file
+│   └── admin.html        # Admin panel source
+├── platformio.ini        # Build config (esp8266 + cyd environments)
+└── README.md             # This file
 ```
 
 ## Troubleshooting
