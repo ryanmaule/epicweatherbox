@@ -66,8 +66,6 @@ The display cycles through screens in your configured carousel order:
 - **Connectivity**: WiFi 802.11 b/g/n
 - **Programming**: USB serial (CH340) or WiFi OTA
 
-> The 240x240 UI is centered vertically on the CYD's 240x320 panel with 40px top/bottom borders.
-
 ## Quick Start
 
 ### SmallTV-Ultra (ESP8266)
@@ -268,6 +266,12 @@ epicweatherbox/
 - Upload working firmware via `/update`
 
 ## Version History
+
+### v1.10.15 (2026-02-21)
+- **CYD (ESP32-2432S028) Support** - Second hardware platform with ILI9341 240x320 display
+- Platform abstraction layer for ESP8266/ESP32 (WiFi, PWM, watchdog, filesystem)
+- Display layout constants with configurable X/Y offsets for different panel sizes
+- Fixed boot screen smile rendering and geocode search crash/ranking
 
 ### v1.10.12 (2025-12-28)
 - **Custom Image Screens** - Upload up to 3 JPG images to display in rotation
